@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Solution: Mini Settings Page</title>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <settings-app></settings-app>
+
+  <script type="module">
+    import {LitElement, html, css} from
+        'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+
+    // Fake proxy (same as exercise)
+    class FakeBrowserProxy {
+      _settings = {
+        theme: 'light', fontSize: 14, notifications: true,
+        darkMode: false, language: 'en', searchEngine: 'google',
+      };
+      _listeners = [];
+      getSettings() {
+        return new Promise(r => setTimeout(() => r({settings: {...this._settings}}), 500));
+      }
+      setSetting(key, value) {
+        return new Promise(r => setTimeout(() => {
+          this._settings[key] = value;
+          this._listeners.forEach(fn => fn({...this._settings}));
+          r({success: true});
+        }, 100));
+      }
+      resetToDefaults() {
+        return new Promise(r => setTimeout(() => {
+          this._settings = {theme:'light',fontSize:14,notifications:true,darkMode:false,language:'en',searchEngine:'google'};
+          this._listeners.forEach(fn => fn({...this._settings}));
+          r({});
+        }, 200));
+      }
+      onSettingsChanged = {
+        addListener: fn => { this._listeners.push(fn); return this._listeners.length - 1; },
+        removeListener: id => { this._listeners.splice(id, 1); }
+      };
+    }
+    const proxy = new FakeBrowserProxy();
+
+    // SettingsToggle (same)
+    class SettingsToggle extends LitElement {
+      static properties = { label:{type:String}, sublabel:{type:String}, checked:{type:Boolean,reflect:true}, disabled:{type:Boolean,reflect:true} };
+      static styles = css`
+        :host { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid #e0e0e0; cursor:pointer; }
+        :host([disabled]) { opacity:0.4; pointer-events:none; }
+        .text { flex:1; }
+        .label { font-size:14px; color:#202124; }
+        .sublabel { font-size:12px; color:#5f6368; margin-top:2px; }
+        .toggle-track { width:36px; height:20px; background:#ccc; border-radius:10px; position:relative; transition:background .2s; flex-shrink:0; }
+        :host([checked]) .toggle-track { background:#1a73e8; }
+        .toggle-thumb { width:16px; height:16px; background:white; border-radius:50%; position:absolute; top:2px; left:2px; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+        :host([checked]) .toggle-thumb { transform:translateX(16px); }
+      `;
+      constructor() { super(); this.label=''; this.sublabel=''; this.checked=false; this.disabled=false; }
+      render() {
+        return html`
+          <div class="text">
+            <div class="label">${this.label}</div>
+            ${this.sublabel ? html`<div class="sublabel">${this.sublabel}</div>` : ''}
+          </div>
+          <div class="toggle-track" @click=${this._toggle}>
+            <div class="toggle-thumb"></div>
+          </div>
+        `;
+      }
+      _toggle() {
+        this.checked = !this.checked;
+        this.dispatchEvent(new CustomEvent('change', {detail:{checked:this.checked}, bubbles:true, composed:true}));
+      }
+    }
+    customElements.define('settings-toggle', SettingsToggle);
+
+    // SettingsSection (same)
+    class SettingsSection extends LitElement {
+      static properties = { title: {type: String} };
+      static styles = css`
+        :host { display:block; margin-bottom:16px; }
+        .section-title { font-size:11px; font-weight:600; text-transform:uppercase; color:#1a73e8; letter-spacing:.8px; padding:0 16px; margin-bottom:4px; }
+        .section-content { background:white; border-radius:8px; padding:0 16px; box-shadow:0 1px 2px rgba(0,0,0,.1); }
+      `;
+      constructor() { super(); this.title = ''; }
+      render() { return html`<div class="section-title">${this.title}</div><div class="section-content"><slot></slot></div>`; }
+    }
+    customElements.define('settings-section', SettingsSection);
+
+    // SettingsApp — SOLUTION
+    class SettingsApp extends LitElement {
+      static properties = {
+        settings_: {state: true},
+        loading_:  {state: true},
+        saving_:   {state: true},
+      };
+
+      static styles = css`
+        :host { display:block; max-width:600px; margin:0 auto; padding:20px; }
+        h1 { font-size:22px; font-weight:400; color:#202124; margin-bottom:20px; }
+        .loading { text-align:center; color:#5f6368; padding:40px; font-size:14px; }
+        .reset-btn { margin-top:16px; padding:8px 16px; background:white; color:#ea4335; border:1px solid #ea4335; border-radius:4px; font-size:14px; cursor:pointer; }
+        .reset-btn:hover { background:#fce8e6; }
+        .saving-indicator { font-size:12px; color:#5f6368; text-align:right; margin-top:8px; }
+      `;
+
+      constructor() {
+        super();
+        this.settings_ = null;
+        this.loading_ = true;
+        this.saving_ = false;
+        this._listenerId = null;
+      }
+
+      // ✅ SOLUTION: connectedCallback
+      connectedCallback() {
+        super.connectedCallback();
+
+        // Subscribe to C++ push notifications (giả lập)
+        this._listenerId = proxy.onSettingsChanged.addListener(settings => {
+          this.settings_ = settings;
+        });
+
+        this._loadSettings();
+      }
+
+      // ✅ SOLUTION: disconnectedCallback
+      disconnectedCallback() {
+        super.disconnectedCallback();
+        // Cleanup để tránh memory leak
+        if (this._listenerId !== null) {
+          proxy.onSettingsChanged.removeListener(this._listenerId);
+          this._listenerId = null;
+        }
+      }
+
+      // ✅ SOLUTION: loadSettings
+      async _loadSettings() {
+        try {
+          const {settings} = await proxy.getSettings();
+          this.settings_ = settings;
+        } catch (e) {
+          console.error('Failed to load settings:', e);
+        } finally {
+          this.loading_ = false;
+        }
+      }
+
+      // ✅ SOLUTION: optimistic update
+      async _onToggleChange(key, e) {
+        const newValue = e.detail.checked;
+        const prevSettings = this.settings_;
+
+        // Optimistic update — update UI ngay
+        this.settings_ = {...this.settings_, [key]: newValue};
+        this.saving_ = true;
+
+        try {
+          const {success} = await proxy.setSetting(key, newValue);
+          if (!success) throw new Error('Server rejected');
+        } catch (err) {
+          // Rollback nếu fail
+          console.error('Failed to save:', err);
+          this.settings_ = prevSettings;
+        } finally {
+          this.saving_ = false;
+        }
+      }
+
+      // ✅ SOLUTION: reset
+      async _onReset() {
+        this.saving_ = true;
+        try {
+          await proxy.resetToDefaults();
+          // onSettingsChanged listener sẽ tự update settings_
+        } finally {
+          this.saving_ = false;
+        }
+      }
+
+      render() {
+        return html`
+          <h1>⚙ Settings</h1>
+          ${this.loading_ ? html`<div class="loading">Loading settings...</div>` : html`
+            <settings-section title="Display">
+              <settings-toggle
+                label="Dark Mode"
+                sublabel="Use dark color scheme"
+                .checked=${this.settings_?.darkMode ?? false}
+                @change=${(e) => this._onToggleChange('darkMode', e)}>
+              </settings-toggle>
+            </settings-section>
+
+            <settings-section title="Privacy & Notifications">
+              <settings-toggle
+                label="Notifications"
+                sublabel="Allow browser notifications"
+                .checked=${this.settings_?.notifications ?? false}
+                @change=${(e) => this._onToggleChange('notifications', e)}>
+              </settings-toggle>
+            </settings-section>
+
+            ${this.saving_ ? html`<div class="saving-indicator">Saving...</div>` : ''}
+
+            <button class="reset-btn" @click=${this._onReset}>Reset to Defaults</button>
+
+            <details style="margin-top:20px; font-size:12px; color:#5f6368">
+              <summary>Current State (debug)</summary>
+              <pre>${JSON.stringify(this.settings_, null, 2)}</pre>
+            </details>
+          `}
+        `;
+      }
+    }
+    customElements.define('settings-app', SettingsApp);
+  </script>
+</body>
+</html>

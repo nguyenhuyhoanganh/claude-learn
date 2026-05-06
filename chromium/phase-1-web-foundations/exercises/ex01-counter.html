@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Exercise 1: Click Counter Component</title>
+  <style>
+    body { font-family: sans-serif; padding: 32px; background: #f5f5f5; }
+    h1 { font-size: 20px; margin-bottom: 24px; }
+    .hint { background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 24px; font-size: 14px; }
+    .test-output { margin-top: 24px; background: #e8f5e9; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<h1>Exercise 1: Custom Element — Click Counter</h1>
+
+<div class="hint">
+  <strong>Yêu cầu:</strong> Implement <code>&lt;click-counter&gt;</code> element bên dưới.<br>
+  - Hiển thị số đếm bắt đầu từ <code>start</code> attribute (mặc định 0)<br>
+  - Có nút "+" và "−"<br>
+  - Khi số thay đổi, dispatch event <code>count-changed</code> với <code>detail.count</code><br>
+  - Khi count = 0, nút "−" bị disable
+</div>
+
+<!-- Test usage -->
+<click-counter start="5"></click-counter>
+<click-counter></click-counter>
+
+<div class="test-output" id="log">Events sẽ hiện ở đây...</div>
+
+<script>
+  // ============================================================
+  // IMPLEMENT YOUR SOLUTION HERE
+  // ============================================================
+
+  class ClickCounter extends HTMLElement {
+    // TODO: implement this
+
+    static get observedAttributes() {
+      return ['start'];
+    }
+
+    constructor() {
+      super();
+      // TODO
+    }
+
+    connectedCallback() {
+      // TODO: render UI và add event listeners
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+      // TODO
+    }
+  }
+
+  customElements.define('click-counter', ClickCounter);
+
+  // ============================================================
+  // TEST CODE — Đừng chỉnh phần này
+  // ============================================================
+  const log = document.getElementById('log');
+
+  document.querySelectorAll('click-counter').forEach((el, i) => {
+    el.addEventListener('count-changed', (e) => {
+      log.innerHTML += `<div>Counter ${i + 1}: count-changed → ${e.detail.count}</div>`;
+    });
+  });
+</script>
+
+<!--
+HƯỚNG DẪN (nếu bị kẹt):
+
+1. Trong constructor(): khởi tạo this._count = parseInt(this.getAttribute('start')) || 0;
+2. Trong connectedCallback(): render HTML và gán event listeners cho buttons
+3. Trong attributeChangedCallback(): cập nhật this._count khi attribute 'start' thay đổi
+
+Template HTML để render:
+  <div style="display:flex; align-items:center; gap:8px; margin:8px 0">
+    <button class="decrement">−</button>
+    <span class="count">0</span>
+    <button class="increment">+</button>
+  </div>
+-->
+
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Exercise 2: Shadow DOM — User Card</title>
+  <style>
+    body { font-family: sans-serif; padding: 32px; background: #f5f5f5; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    .hint { background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 24px; font-size: 14px; }
+
+    /* CSS này KHÔNG nên ảnh hưởng vào bên trong shadow DOM */
+    div { color: red; }
+    img { border: 10px solid purple; }
+    span { font-size: 48px; }
+
+    /* Customize avatar từ bên ngoài qua ::part() */
+    user-card::part(avatar) {
+      border-radius: 50%;
+      border: 3px solid #1a73e8;
+    }
+
+    /* Dùng CSS variable để customize */
+    user-card.highlight {
+      --card-bg: #e8f0fe;
+      --name-color: #1a73e8;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Exercise 2: Shadow DOM — User Card</h1>
+
+<div class="hint">
+  <strong>Yêu cầu:</strong> Implement <code>&lt;user-card&gt;</code> với Shadow DOM.<br>
+  - CSS bên ngoài (div color red, img border purple) KHÔNG được ảnh hưởng vào bên trong<br>
+  - Nhận <code>name</code>, <code>role</code>, <code>avatar-url</code> qua attributes<br>
+  - Dùng <code>&lt;slot&gt;</code> cho phần description<br>
+  - Expose <code>::part(avatar)</code> để style avatar từ ngoài<br>
+  - Support CSS variables: <code>--card-bg</code>, <code>--name-color</code>
+</div>
+
+<user-card
+  name="Hoanganh"
+  role="WebUI Developer"
+  avatar-url="https://api.dicebear.com/7.x/initials/svg?seed=HA">
+  <p>Working on Samsung Browser WebUI with Polymer and Mojo IPC.</p>
+</user-card>
+
+<br>
+
+<user-card
+  class="highlight"
+  name="Samsung"
+  role="Company"
+  avatar-url="https://api.dicebear.com/7.x/initials/svg?seed=SA">
+  <p>Building next-generation browser experience.</p>
+</user-card>
+
+<script>
+  // ============================================================
+  // IMPLEMENT YOUR SOLUTION HERE
+  // ============================================================
+
+  const template = document.createElement('template');
+  template.innerHTML = `
+    <style>
+      /* TODO: Viết styles ở đây — sẽ được cô lập trong shadow DOM */
+
+      :host {
+        display: block;
+        /* TODO: dùng CSS variable với fallback */
+      }
+
+      .card {
+        /* TODO */
+      }
+
+      .avatar {
+        width: 64px;
+        height: 64px;
+        /* TODO: object-fit, border-radius */
+      }
+    </style>
+
+    <!-- TODO: Viết HTML structure -->
+    <!-- Nhớ: thêm part="avatar" vào img để expose cho ::part() selector -->
+    <!-- Nhớ: thêm <slot> cho description -->
+  `;
+
+  class UserCard extends HTMLElement {
+    static get observedAttributes() {
+      return ['name', 'role', 'avatar-url'];
+    }
+
+    constructor() {
+      super();
+      const shadow = this.attachShadow({ mode: 'open' });
+      shadow.appendChild(template.content.cloneNode(true));
+
+      // TODO: Lưu references đến các elements
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+      // TODO: Cập nhật UI khi attributes thay đổi
+    }
+  }
+
+  customElements.define('user-card', UserCard);
+
+  // ============================================================
+  // VERIFICATION — Chạy sau khi implement xong
+  // ============================================================
+  window.addEventListener('DOMContentLoaded', () => {
+    const card = document.querySelector('user-card');
+    const shadow = card.shadowRoot;
+
+    const tests = [
+      {
+        name: 'Shadow root tồn tại',
+        pass: shadow !== null,
+      },
+      {
+        name: 'Có element với part="avatar"',
+        pass: shadow?.querySelector('[part="avatar"]') !== null,
+      },
+      {
+        name: 'Có <slot> element',
+        pass: shadow?.querySelector('slot') !== null,
+      },
+      {
+        name: 'Name attribute được hiển thị',
+        pass: shadow?.textContent?.includes('Hoanganh'),
+      },
+    ];
+
+    const results = tests.map(t =>
+      `${t.pass ? '✅' : '❌'} ${t.name}`
+    ).join('<br>');
+
+    const output = document.createElement('div');
+    output.style.cssText = 'margin-top:24px; background:#f0f4ff; padding:12px; border-radius:4px; font-family:monospace; font-size:13px;';
+    output.innerHTML = '<strong>Test Results:</strong><br>' + results;
+    document.body.appendChild(output);
+  });
+</script>
+
+</body>
+</html>

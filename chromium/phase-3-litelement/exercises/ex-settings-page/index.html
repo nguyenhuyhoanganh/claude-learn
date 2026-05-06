@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Exercise: Mini Settings Page với LitElement</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+    }
+  </style>
+</head>
+<body>
+  <!-- Root component -->
+  <settings-app></settings-app>
+
+  <script type="module">
+    // ============================================================
+    // MINI LITELEMENT IMPLEMENTATION (không cần npm/build)
+    // Sử dụng Lit từ CDN để học
+    // ============================================================
+    import {LitElement, html, css} from
+        'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+
+    // ============================================================
+    // FAKE BROWSER PROXY (thay thế cho Mojo IPC)
+    // Trong thực tế đây là Mojo call sang C++ native
+    // ============================================================
+    class FakeBrowserProxy {
+      _settings = {
+        theme: 'light',
+        fontSize: 14,
+        notifications: true,
+        darkMode: false,
+        language: 'en',
+        searchEngine: 'google',
+      };
+
+      _listeners = [];
+
+      // Giả lập Mojo: getSettings() → Promise (như Mojo async call)
+      getSettings() {
+        return new Promise(resolve => {
+          setTimeout(() => {
+            resolve({settings: {...this._settings}});
+          }, 500); // Giả lập network latency
+        });
+      }
+
+      // Giả lập Mojo: setSetting()
+      setSetting(key, value) {
+        return new Promise(resolve => {
+          setTimeout(() => {
+            this._settings[key] = value;
+            // Simulate C++ pushing update xuống tất cả listeners
+            this._listeners.forEach(fn => fn({...this._settings}));
+            resolve({success: true});
+          }, 100);
+        });
+      }
+
+      resetToDefaults() {
+        return new Promise(resolve => {
+          setTimeout(() => {
+            this._settings = {
+              theme: 'light', fontSize: 14, notifications: true,
+              darkMode: false, language: 'en', searchEngine: 'google',
+            };
+            this._listeners.forEach(fn => fn({...this._settings}));
+            resolve({});
+          }, 200);
+        });
+      }
+
+      // Giả lập Mojo CallbackRouter
+      onSettingsChanged = {
+        addListener: (fn) => {
+          this._listeners.push(fn);
+          return this._listeners.length - 1;
+        },
+        removeListener: (id) => {
+          this._listeners.splice(id, 1);
+        }
+      };
+    }
+
+    const proxy = new FakeBrowserProxy();
+
+    // ============================================================
+    // TODO: Implement các components bên dưới
+    // ============================================================
+
+    // ------ Component 1: settings-toggle ------
+    // Properties: label (String), sublabel (String), checked (Boolean), disabled (Boolean)
+    // Events: dispatch 'change' với detail.checked khi toggle
+    class SettingsToggle extends LitElement {
+      static properties = {
+        label:    {type: String},
+        sublabel: {type: String},
+        checked:  {type: Boolean, reflect: true},
+        disabled: {type: Boolean, reflect: true},
+      };
+
+      static styles = css`
+        :host {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 14px 0;
+          border-bottom: 1px solid #e0e0e0;
+          cursor: pointer;
+        }
+        :host([disabled]) { opacity: 0.4; pointer-events: none; }
+        .text { flex: 1; }
+        .label { font-size: 14px; color: #202124; }
+        .sublabel { font-size: 12px; color: #5f6368; margin-top: 2px; }
+        .toggle-track {
+          width: 36px; height: 20px;
+          background: #ccc;
+          border-radius: 10px;
+          position: relative;
+          transition: background 0.2s;
+          flex-shrink: 0;
+        }
+        :host([checked]) .toggle-track { background: #1a73e8; }
+        .toggle-thumb {
+          width: 16px; height: 16px;
+          background: white;
+          border-radius: 50%;
+          position: absolute;
+          top: 2px; left: 2px;
+          transition: transform 0.2s;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+        :host([checked]) .toggle-thumb { transform: translateX(16px); }
+      `;
+
+      constructor() {
+        super();
+        this.label = '';
+        this.sublabel = '';
+        this.checked = false;
+        this.disabled = false;
+      }
+
+      render() {
+        return html`
+          <div class="text">
+            <div class="label">${this.label}</div>
+            ${this.sublabel ? html`<div class="sublabel">${this.sublabel}</div>` : ''}
+          </div>
+          <div class="toggle-track" @click=${this._toggle}>
+            <div class="toggle-thumb"></div>
+          </div>
+        `;
+      }
+
+      _toggle() {
+        this.checked = !this.checked;
+        this.dispatchEvent(new CustomEvent('change', {
+          detail: {checked: this.checked},
+          bubbles: true, composed: true,
+        }));
+      }
+    }
+    customElements.define('settings-toggle', SettingsToggle);
+
+
+    // ------ Component 2: settings-section ------
+    // Properties: title (String)
+    // Dùng <slot> để nhận content
+    class SettingsSection extends LitElement {
+      static properties = {
+        title: {type: String},
+      };
+
+      static styles = css`
+        :host { display: block; margin-bottom: 16px; }
+        .section-title {
+          font-size: 11px; font-weight: 600;
+          text-transform: uppercase;
+          color: #1a73e8;
+          letter-spacing: 0.8px;
+          padding: 0 16px;
+          margin-bottom: 4px;
+        }
+        .section-content {
+          background: white;
+          border-radius: 8px;
+          padding: 0 16px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+      `;
+
+      constructor() {
+        super();
+        this.title = '';
+      }
+
+      render() {
+        return html`
+          <div class="section-title">${this.title}</div>
+          <div class="section-content">
+            <slot></slot>
+          </div>
+        `;
+      }
+    }
+    customElements.define('settings-section', SettingsSection);
+
+
+    // ------ Component 3: settings-app (ROOT — TODO) ------
+    // Đây là component bạn cần implement!
+    //
+    // Yêu cầu:
+    // 1. Load settings từ proxy.getSettings() trong connectedCallback
+    // 2. Subscribe to proxy.onSettingsChanged trong connectedCallback
+    // 3. Cleanup listener trong disconnectedCallback
+    // 4. Show loading state khi đang fetch
+    // 5. Render settings với settings-toggle và settings-section
+    // 6. Khi toggle thay đổi, gọi proxy.setSetting(key, value)
+    // 7. Dùng optimistic update (update UI trước, rollback nếu fail)
+    // 8. Nút "Reset to Defaults" gọi proxy.resetToDefaults()
+
+    class SettingsApp extends LitElement {
+      static properties = {
+        settings_: {state: true},
+        loading_: {state: true},
+        saving_: {state: true},
+      };
+
+      static styles = css`
+        :host { display: block; max-width: 600px; margin: 0 auto; padding: 20px; }
+        h1 {
+          font-size: 22px; font-weight: 400;
+          color: #202124; margin-bottom: 20px;
+        }
+        .loading {
+          text-align: center; color: #5f6368;
+          padding: 40px; font-size: 14px;
+        }
+        .loading::before {
+          content: '⏳ ';
+        }
+        .reset-btn {
+          margin-top: 16px;
+          padding: 8px 16px;
+          background: white; color: #ea4335;
+          border: 1px solid #ea4335;
+          border-radius: 4px;
+          font-size: 14px; cursor: pointer;
+        }
+        .reset-btn:hover { background: #fce8e6; }
+        .saving-indicator {
+          font-size: 12px; color: #5f6368;
+          text-align: right; margin-top: 8px;
+        }
+      `;
+
+      constructor() {
+        super();
+        this.settings_ = null;
+        this.loading_ = true;
+        this.saving_ = false;
+        this._listenerId = null;
+      }
+
+      // TODO: Implement connectedCallback
+      // 1. Gọi super.connectedCallback()
+      // 2. Subscribe to proxy.onSettingsChanged
+      // 3. Load initial settings
+      connectedCallback() {
+        super.connectedCallback();
+
+        // TODO: Implement
+        // Hint:
+        // this._listenerId = proxy.onSettingsChanged.addListener(settings => {
+        //   this.settings_ = settings;
+        // });
+        // this._loadSettings();
+      }
+
+      // TODO: Implement disconnectedCallback
+      disconnectedCallback() {
+        super.disconnectedCallback();
+        // TODO: cleanup listener
+      }
+
+      // TODO: Implement _loadSettings
+      async _loadSettings() {
+        // TODO: gọi proxy.getSettings(), update this.settings_ và this.loading_
+      }
+
+      // TODO: Implement _onToggleChange(key, e)
+      // Dùng optimistic update
+      async _onToggleChange(key, e) {
+        // TODO
+      }
+
+      // TODO: Implement _onReset
+      async _onReset() {
+        // TODO
+      }
+
+      render() {
+        return html`
+          <h1>⚙ Settings</h1>
+
+          ${this.loading_ ? html`
+            <div class="loading">Loading settings...</div>
+          ` : html`
+
+            <settings-section title="Display">
+              <settings-toggle
+                label="Dark Mode"
+                sublabel="Use dark color scheme"
+                .checked=${this.settings_?.darkMode ?? false}
+                @change=${(e) => this._onToggleChange('darkMode', e)}>
+              </settings-toggle>
+            </settings-section>
+
+            <settings-section title="Privacy & Notifications">
+              <settings-toggle
+                label="Notifications"
+                sublabel="Allow browser notifications"
+                .checked=${this.settings_?.notifications ?? false}
+                @change=${(e) => this._onToggleChange('notifications', e)}>
+              </settings-toggle>
+            </settings-section>
+
+            ${this.saving_ ? html`
+              <div class="saving-indicator">Saving...</div>
+            ` : ''}
+
+            <button class="reset-btn" @click=${this._onReset}>
+              Reset to Defaults
+            </button>
+
+            <!-- Debug panel -->
+            <details style="margin-top:20px; font-size:12px; color:#5f6368">
+              <summary>Current State (debug)</summary>
+              <pre>${JSON.stringify(this.settings_, null, 2)}</pre>
+            </details>
+          `}
+        `;
+      }
+    }
+    customElements.define('settings-app', SettingsApp);
+
+  </script>
+</body>
+</html>
