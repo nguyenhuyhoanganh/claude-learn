@@ -1,0 +1,3 @@
+# Database Sharding Section Summary
+
+Summary, what do we discuss? We discuss sharding, we discuss charting the meaning of Shati, Spread Your Tables and to multiple Arabic's instances, we discuss consistent hashing consistently hash data into multiple entries. We discuss horizontal partitioning versus four versus charting the difference between the little bit. We talked about the advantages that of those we went through code guys was long code, right. And the code is available there. So we essentially wrote a new URL shortener kind of thing that shortens your land and expand those URLs. Right. And then finally we get talked. We talked about pros and cons. Hope you enjoyed this video. You're going to see on the next one. Guys. You guys stay awesome.

@@ -1,0 +1,3 @@
+# Interpreter - Comparison with Visitor
+
+[No English transcript available]

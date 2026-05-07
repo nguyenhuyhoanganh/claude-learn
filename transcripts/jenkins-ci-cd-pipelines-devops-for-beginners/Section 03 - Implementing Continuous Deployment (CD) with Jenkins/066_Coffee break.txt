@@ -1,0 +1,3 @@
+# Coffee break
+
+Well, it was a lot to take in in this section. We did not only deploy our small application, but we have also learned about different CLI tools defining variables, working with secrets, adding manual approval steps, and also got into more theoretical things like understanding the difference between continuous delivery and continuous deployment. On top of this, we have also learned a few useful Linux commands and ways of creating more complex scripts. So let's all take a break. Let this new information sink in, and I'll see you in the next section.

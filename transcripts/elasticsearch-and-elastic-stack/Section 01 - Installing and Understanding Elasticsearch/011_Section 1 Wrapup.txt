@@ -1,0 +1,3 @@
+# Section 1 Wrapup
+
+We've accomplished a lot together in a short period of time. We've installed an Ubuntu virtual machine and got a elastic search up and running on it, and we've covered the basics of what elastic search is for and how it works. You've already learned some valuable information, so congratulations on reaching this point. But, we've only scratched the surface of what elastic search can do. In the remaining sections of this course, we're going to focus on hands on activities to show you how to import, search and analyze your big data with elastic search, in many different ways. Keep on going, I've got a lot left to show you.

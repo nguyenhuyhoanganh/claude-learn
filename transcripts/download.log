@@ -1,0 +1,236 @@
+Resolving course ID for 'docker-kubernetes-the-practical-guide'...
+Course ID: 3490000
+Fetching curriculum...
+Found 229 video lectures
+
+[  1/229] skip  Welcome to the Course
+[  2/229] skip  What Is Docker?
+[  3/229] skip  Why Docker & Containers?
+[  4/229] skip  Virtual Machines vs Docker Containers
+[  5/229] skip  Docker Setup - Overview
+[  6/229] skip  Docker Setup - macOS
+[  7/229] skip  Docker Setup - Windows
+[  8/229] skip  Docker Setup - Docker Toolbox for Older Systems
+[  9/229] skip  An Overview of the Docker Tools
+[ 10/229] skip  Installing & Configuring an IDE
+[ 11/229] skip  Getting Our Hands Dirty!
+[ 12/229] skip  Course Outline
+[ 13/229] skip  How To Get The Most Out Of This Course
+[ 14/229] skip  Module Introduction
+[ 15/229] skip  Images & Containers: What and Why?
+[ 16/229] skip  Using & Running External (Pre-Built) Images
+[ 17/229] Our Goal: A NodeJS App — 4,975 chars
+[ 18/229] Building our own Image with a Dockerfile — 8,707 chars
+[ 19/229] Running a Container based on our own Image — 6,035 chars
+[ 20/229] Images are Read-Only! — 4,512 chars
+[ 21/229] Understanding Image Layers — 6,563 chars
+[ 22/229] A First Summary — 2,558 chars
+[ 23/229] Managing Images & Containers — 1,594 chars
+[ 24/229] Stopping & Restarting Containers — 3,630 chars
+[ 25/229] Understanding Attached & Detached Containers — 5,815 chars
+[ 26/229] Entering Interactive Mode — 8,229 chars
+[ 27/229] Deleting Images & Containers — 5,307 chars
+[ 28/229] Removing Stopped Containers Automatically — 2,653 chars
+[ 29/229] A Look Behind the Scenes: Inspecting Images — 3,458 chars
+[ 30/229] Copying Files Into & From A Container — 4,212 chars
+[ 31/229] Naming & Tagging Containers and Images — 7,162 chars
+[ 32/229] Sharing Images - Overview — 5,416 chars
+[ 33/229] Pushing Images to DockerHub — 8,589 chars
+[ 34/229] Pulling & Using Shared Images — 3,702 chars
+[ 35/229] Module Summary — 4,168 chars
+[ 36/229] Module Introduction — 1,146 chars
+[ 37/229] Understanding Data Categories / Different Kinds of Data — 6,236 chars
+[ 38/229] Analyzing a Real App — 2,479 chars
+[ 39/229] Building & Understanding the Demo App — 6,767 chars
+[ 40/229] Understanding the Problem — 4,552 chars
+[ 41/229] Introducing Volumes — 2,250 chars
+[ 42/229] A First, Unsuccessful Try — 5,772 chars
+[ 43/229] Named Volumes To The Rescue! — 6,924 chars
+[ 44/229] Getting Started With Bind Mounts (Code Sharing) — 8,881 chars
+[ 45/229] Combining & Merging Different Volumes — 6,411 chars
+[ 46/229] A NodeJS-specific Adjustment: Using Nodemon in a Container — 5,449 chars
+[ 47/229] Volumes & Bind Mounts: Summary — 4,974 chars
+[ 48/229] A Look at Read-Only Volumes — 4,676 chars
+[ 49/229] Managing Docker Volumes — 6,715 chars
+[ 50/229] Using "COPY" vs Bind Mounts — 2,645 chars
+[ 51/229] Don't COPY Everything: Using "dockerignore" Files — 2,124 chars
+[ 52/229] Working with Environment Variables & ".env" Files — 7,428 chars
+[ 53/229] Using Build Arguments (ARG) — 4,285 chars
+[ 54/229] Module Summary — 4,636 chars
+[ 55/229] Module Introduction — 1,010 chars
+[ 56/229] Case 1: Container to WWW Communication — 2,946 chars
+[ 57/229] Case 2: Container to Local Host Machine Communication — 1,765 chars
+[ 58/229] Case 3: Container to Container Communication — 2,252 chars
+[ 59/229] Analyzing the Demo App — 6,086 chars
+[ 60/229] Creating a Container & Communicating to the Web (WWW) — 5,532 chars
+[ 61/229] Making Container to Host Communication Work — 3,688 chars
+[ 62/229] Container to Container Communication: A Basic Solution — 5,810 chars
+[ 63/229] Introducing Docker Networks: Elegant Container to Container Communication — 8,023 chars
+[ 64/229] How Docker Resolves IP Addresses — 1,913 chars
+[ 65/229] Module Summary — 1,119 chars
+[ 66/229] Module Introduction — 1,705 chars
+[ 67/229] Our Target App & Setup — 9,146 chars
+[ 68/229] Dockerizing the MongoDB Service — 3,525 chars
+[ 69/229] Dockerizing the Node App — 6,036 chars
+[ 70/229] Moving the React SPA into a Container — 6,866 chars
+[ 71/229] Adding Docker Networks for Efficient Cross-Container Communication — 9,685 chars
+[ 72/229] Adding Data Persistence to MongoDB with Volumes — 6,381 chars
+[ 73/229] Volumes, Bind Mounts & Polishing for the NodeJS Container — 12,272 chars
+[ 74/229] Live Source Code Updates for the React Container (with Bind Mounts) — 5,446 chars
+[ 75/229] Module Summary — 4,189 chars
+[ 76/229] Module Introduction — 2,613 chars
+[ 77/229] Docker-Compose: What & Why? — 3,971 chars
+[ 78/229] Creating a Compose File — 5,201 chars
+[ 79/229] Diving into the Compose File Configuration — 9,405 chars
+[ 80/229] Docker Compose Up & Down — 2,977 chars
+[ 81/229] Working with Multiple Containers — 11,776 chars
+[ 82/229] Adding Another Container — 4,806 chars
+[ 83/229] Building Images & Understanding Container Names — 4,413 chars
+[ 84/229] Module Summary — 2,131 chars
+[ 85/229] Module Introduction & What are "Utility Containers"? — 2,157 chars
+[ 86/229] Utility Containers: Why would you use them? — 2,483 chars
+[ 87/229] Different Ways of Running Commands in Containers — 5,015 chars
+[ 88/229] Building a First Utility Container — 3,946 chars
+[ 89/229] Utilizing ENTRYPOINT — 4,578 chars
+[ 90/229] Using Docker Compose — 5,269 chars
+[ 91/229] Module Summary — 1,288 chars
+[ 92/229] Module Introduction — 2,049 chars
+[ 93/229] The Target Setup — 5,959 chars
+[ 94/229] Adding a Nginx (Web Server) Container — 6,781 chars
+[ 95/229] Adding a PHP Container — 8,861 chars
+[ 96/229] Adding a MySQL Container — 2,694 chars
+[ 97/229] Adding a Composer Utility Container — 3,222 chars
+[ 98/229] Creating a Laravel App via the Composer Utility Container — 2,978 chars
+[ 99/229] Launching Only Some Docker Compose Services — 9,294 chars
+[100/229] Adding More Utility Containers — 5,424 chars
+[101/229] Docker Compose with and without Dockerfiles — 3,539 chars
+[102/229] Bind Mounts and COPY: When To Use What — 11,686 chars
+[103/229] Module Introduction — 3,072 chars
+[104/229] From Development To Production — 6,018 chars
+[105/229] Deployment Process & Providers — 5,522 chars
+[106/229] Getting Started With An Example — 3,207 chars
+[107/229] Bind Mounts In Production — 4,366 chars
+[108/229] Introducing AWS & EC2 — 2,198 chars
+[109/229] Connecting to an EC2 Instance — 6,663 chars
+[110/229] Installing Docker on a Virtual Machine — 1,459 chars
+[111/229] Pushing our local Image to the Cloud — 4,170 chars
+[112/229] Running & Publishing the App (on EC2) — 7,917 chars
+[113/229] Managing & Updating the Container / Image — 4,500 chars
+[114/229] Disadvantages of our Current Approach — 3,991 chars
+[115/229] From Manual Deployment to Managed Services — 4,802 chars
+[116/229] Deploying with AWS ECS: A Managed Docker Container Service — 11,630 chars
+[117/229] More on AWS — 3,441 chars
+[118/229] Updating Managed Containers — 2,706 chars
+[119/229] Preparing a Multi-Container App — 8,678 chars
+[120/229] Configuring the NodeJS Backend Container — 7,936 chars
+[121/229] Deploying a Second Container & A Load Balancer — 7,196 chars
+[122/229] Using a Load Balancer for a Stable Domain — 4,054 chars
+[123/229] Using EFS Volumes with ECS — 14,484 chars
+[124/229] Our Current Architecture — 1,463 chars
+[125/229] Databases & Containers: An Important Consideration — 4,241 chars
+[126/229] Moving to MongoDB Atlas — 11,409 chars
+[127/229] Using MongoDB Atlas in Production — 5,887 chars
+[128/229] Our Updated & Target Architecture — 1,855 chars
+[129/229] Understanding a Common Problem — 4,415 chars
+[130/229] Creating a "build-only" Container — 3,761 chars
+[131/229] Introducing Multi-Stage Builds — 5,984 chars
+[132/229] Building a Multi-Stage Image — 4,911 chars
+[133/229] Deploying a Standalone Frontend App — 12,140 chars
+[134/229] Development vs Production: Differences — 3,238 chars
+[135/229] Understanding Multi-Stage Build Targets — 1,963 chars
+[136/229] Beyond AWS — 1,609 chars
+[137/229] Module Summary — 5,795 chars
+[138/229] Module Introduction — 791 chars
+[139/229] Images & Containers — 2,918 chars
+[140/229] Key Commands — 1,992 chars
+[141/229] Data, Volumes & Networking — 3,050 chars
+[142/229] Docker Compose — 1,040 chars
+[143/229] Local vs Remote — 2,370 chars
+[144/229] Deployment — 4,082 chars
+[145/229] Module Introduction — 1,801 chars
+[146/229] More Problems with Manual Deployment — 6,555 chars
+[147/229] Why Kubernetes? — 4,032 chars
+[148/229] What Is Kubernetes Exactly? — 5,682 chars
+[149/229] Kubernetes: Architecture & Core Concepts — 5,977 chars
+[150/229] Kubernetes will NOT manage your Infrastructure! — 3,315 chars
+[151/229] A Closer Look at the Worker Nodes — 3,824 chars
+[152/229] A Closer Look at the Master Node — 2,294 chars
+[153/229] Important Terms & Concepts — 2,581 chars
+[154/229] Module Introduction — 1,111 chars
+[155/229] Kubernetes does NOT manage your Infrastructure — 7,335 chars
+[156/229] Kubernetes: Required Setup & Installation Steps — 5,337 chars
+[157/229] macOS Setup — 5,656 chars
+[158/229] Windows Setup — 9,486 chars
+[159/229] Understanding Kubernetes Objects (Resources) — 7,167 chars
+[160/229] The "Deployment" Object (Resource) — 3,273 chars
+[161/229] A First Deployment - Using the Imperative Approach — 10,420 chars
+[162/229] kubectl: Behind The Scenes — 1,814 chars
+[163/229] The "Service" Object (Resource) — 2,141 chars
+[164/229] Exposing a Deployment with a Service — 5,054 chars
+[165/229] Restarting Containers — 2,047 chars
+[166/229] Scaling in Action — 2,218 chars
+[167/229] Updating Deployments — 4,856 chars
+[168/229] Deployment Rollbacks & History — 4,584 chars
+[169/229] The Imperative vs The Declarative Approach — 3,368 chars
+[170/229] Creating a Deployment Configuration File (Declarative Approach) — 5,543 chars
+[171/229] Adding Pod and Container Specs — 7,387 chars
+[172/229] Working with Labels & Selectors — 3,641 chars
+[173/229] Creating a Service Declaratively — 7,699 chars
+[174/229] Updating & Deleting Resources — 3,102 chars
+[175/229] Multiple vs Single Config Files — 2,970 chars
+[176/229] More on Labels & Selectors — 6,429 chars
+[177/229] Liveness Probes — 3,344 chars
+[178/229] A Closer Look at the Configuration Options — 4,539 chars
+[179/229] Summary — 3,745 chars
+[180/229] Module Introduction — 1,808 chars
+[181/229] Starting Project & What We Know Already — 3,637 chars
+[182/229] Kubernetes & Volumes - More Than Docker Volumes — 2,878 chars
+[183/229] Kubernetes Volumes: Theory & Docker Comparison — 5,029 chars
+[184/229] Creating a New Deployment & Service — 7,250 chars
+[185/229] Getting Started with Kubernetes Volumes — 3,028 chars
+[186/229] A First Volume: The "emptyDir" Type — 7,958 chars
+[187/229] A Second Volume: The "hostPath" Type — 6,148 chars
+[188/229] Understanding the "CSI" Volume Type — 3,019 chars
+[189/229] From Volumes to Persistent Volumes — 7,176 chars
+[190/229] Defining a Persistent Volume — 7,277 chars
+[191/229] Creating a Persistent Volume Claim — 6,634 chars
+[192/229] Using a Claim in a Pod — 5,246 chars
+[193/229] Volumes vs Persistent Volumes — 5,405 chars
+[194/229] Using Environment Variables — 3,634 chars
+[195/229] Environment Variables & ConfigMaps — 4,699 chars
+[196/229] Module Summary — 2,425 chars
+[197/229] Module Introduction — 1,089 chars
+[198/229] Starting Project & Our Goal — 4,933 chars
+[199/229] Creating a First Deployment — 5,314 chars
+[200/229] Another Look at Services — 7,730 chars
+[201/229] Multiple Containers in One Pod — 6,583 chars
+[202/229] Pod-internal Communication — 3,534 chars
+[203/229] Creating Multiple Deployments — 4,602 chars
+[204/229] Pod-to-Pod Communication with IP Addresses & Environment Variables — 5,703 chars
+[205/229] Using DNS for Pod-to-Pod Communication — 4,299 chars
+[206/229] Which Approach Is Best? And a Challenge! — 2,671 chars
+[207/229] Challenge Solution — 7,794 chars
+[208/229] Adding a Containerized Frontend — 11,164 chars
+[209/229] Deploying the Frontend with Kubernetes — 6,016 chars
+[210/229] Using a Reverse Proxy for the Frontend — 10,574 chars
+[211/229] Module Summary — 1,456 chars
+[212/229] Module Introduction — 1,352 chars
+[213/229] Deployment Options & Steps — 4,568 chars
+[214/229] AWS EKS vs AWS ECS — 2,081 chars
+[215/229] Preparing the Starting Project — 6,084 chars
+[216/229] Diving Into AWS — 2,557 chars
+[217/229] Creating & Configuring the Kubernetes Cluster with EKS — 11,965 chars
+[218/229] Adding Worker Nodes — 6,744 chars
+[219/229] Applying Our Kubernetes Config — 5,859 chars
+[220/229] Getting Started with Volumes — 3,924 chars
+[221/229] Adding EFS as a Volume (with the CSI Volume Type) — 3,207 chars
+[222/229] Creating a Persistent Volume for EFS — 6,162 chars
+[223/229] Using the EFS Volume — 6,333 chars
+[224/229] A Challenge! — 2,637 chars
+[225/229] Challenge Solution — 10,834 chars
+[226/229] You Learned A Lot! — 2,671 chars
+[227/229] Related Topics You Could Explore — 5,604 chars
+[228/229] Next Steps! — 2,587 chars
+[229/229] Course Roundup — 849 chars
+
+Done!

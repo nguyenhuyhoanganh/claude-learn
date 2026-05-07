@@ -1,0 +1,3 @@
+# Understanding Conditional Steps & Jobs
+
+Now let's dive right in and let's start with executing jobs and steps conditionally. And we have two main tools for that. For one, there is the if field that can be added to both jobs and steps to add a condition to a job or a step, and only if that condition is met, that job or step will be executed. Steps also have a second field that can be added. The continue-on-error field, which allows you to specify that the other steps of the job should still execute even if a single step fails. And for both the if fields as well as the continue-on-error field, you can add your own conditions with help of Expressions, but that's exactly what we'll explore in practice over the next lectures.

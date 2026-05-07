@@ -1,0 +1,3 @@
+# Assignment: Add a manual approval step
+
+It is now time for an assignment and for you to get some hands on practice. Now that you know how to add an approval step to a very simple pipeline, I want you to end an approval step to this pipeline. And I want this approval step to be right here after deploy staging, but before deploying to production. The following quiz will take you through this assignment step by step.

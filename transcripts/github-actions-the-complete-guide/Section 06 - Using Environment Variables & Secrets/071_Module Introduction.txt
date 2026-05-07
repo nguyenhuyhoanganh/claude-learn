@@ -1,0 +1,3 @@
+# Module Introduction
+
+In this course section, we're going to dive even deeper into GitHub Actions, and we're going to explore how we can use Environment Variables and Secrets in our GitHub Action workflows. For that, we will first of all analyze what exactly Environment Variables are, why we need them, and then of course, also see how we can use them and work with them in our GitHub Actions workflows. We'll also explore the idea behind Secrets, what exactly that is and how it can be used and we'll dive into GitHub Actions Environments and understand which possible problem this feature solves. Somehow that feature may be used in our workflows.

@@ -1,0 +1,3 @@
+# Section 3 Intro
+
+In this next section we'll focus on search. I mean, that's kind of what elastic search was made for. There are so many ways to use elastic search to help your customers find the data that they need quickly. We'll cover different search interfaces you can use, how to sort, pageant, and filter your search results, how to conduct fuzzy queries and partial matches, and even how to implement those 'search as you type' features that you see on many big web sites these days. There's a lot of interesting, useful, and valuable information in this section, and as before, it's all hands on; let's get started.

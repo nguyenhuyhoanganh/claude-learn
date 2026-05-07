@@ -1,0 +1,3 @@
+# Section 3 Wrapup
+
+If your aim is to use elastic search for what it was originally intended for, searching, you've got all the basics you need to become productive, right now. I hope you're feeling more and more confident about elastic search, and how it works at this point, believe it or not, we're hardly halfway through covering everything elastic search can do. Stay with me, elastic search has many more tricks up its sleeve for us to explore.

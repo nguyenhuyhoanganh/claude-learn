@@ -1,0 +1,3 @@
+# Module Introduction
+
+With this course section, we're going to dive even deeper into GitHub Actions, and we're going to focus on working with data in our jobs and steps and producing and using outputs by and with our jobs. To be precise, we'll explore how we can work with artifacts, and what exactly artifacts are to begin with, before we'll then dive into job outputs and learn how they are different from artifacts and explore the concept of dependency caching, another key concept you should know when working with GitHub Actions.
