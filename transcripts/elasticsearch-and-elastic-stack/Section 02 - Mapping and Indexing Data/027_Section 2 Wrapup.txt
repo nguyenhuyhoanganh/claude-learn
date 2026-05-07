@@ -1,0 +1,3 @@
+# Section 2 Wrapup
+
+Congrats! We've covered the basics of using elastic search, importing data through Json and REST, and inserting, updating and deleting documents. We've also covered a few more advanced subjects, like dealing with concurrency, analyzers, tokenizers and data modeling. Keep going! You've learned a lot, but there's still more essential information you need in order to put elastic search to work for you, or for your organization. See you in the next section.

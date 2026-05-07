@@ -1,0 +1,3 @@
+# Section 6 Intro
+
+This next section is about Kibana, a powerful web UI that sits on top of elastic search. Kibana lets you analyze your data interactively without having to construct json requests. Well, unless you really want to. It really opens up the data inside your indices to the analysis by pretty much anyone. It also is really fun to work with, so let's just dive in, and see how it works with some real examples.

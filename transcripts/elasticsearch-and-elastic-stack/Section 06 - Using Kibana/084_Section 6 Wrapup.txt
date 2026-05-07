@@ -1,0 +1,3 @@
+# Section 6 Wrapup
+
+See why I think Kibana is so cool? It's very powerful, and pretty, and it's easy to use, and that makes it easy to gain insights from your data that may have been prohibitive to obtain otherwise. Kibana is just one piece of the elastic stack. However, in the next section, we'll examine filebeat and how it can help you stream log data in a massive scale into your elastic search cluster, in a reliable manner.

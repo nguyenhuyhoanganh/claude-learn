@@ -1,0 +1,3 @@
+# Section 7 Wrapup
+
+Now you know about most of the elastic stack, not just the elk stack of elastic search, logstash, and kibana, but also the newer Beats framework that works with logstash. A system like this can often take the place of Hadoop and Kafka or similar systems, but as much simpler faster and easier to setup. So far in this course we've been learning on a single virtual machine, but at some point we need to talk about what's involved in managing an entire cluster of elastic search hosts. That time is now; continue to the next section and we'll talk about operations with elastic search.

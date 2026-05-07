@@ -1,0 +1,3 @@
+# Section 4 Wrapup
+
+You just got through one of the most challenging sections of this course... Congratulations! Not so much because it's hard, but because we probably touched on some systems or programming languages you weren't familiar with before. That's okay... The purpose of the section was to expose you to ways to import data from a variety of systems you might encounter in your career, and as long as you keep it in the back of your head that these things are possible, you can always refer back to these lessons later on. In the next section, we'll introduce elastic search's powerful aggregation capabilities, and you'll see that elastic search isn't just for search anymore. Keep going... It's just about to start getting really exciting!

@@ -1,0 +1,3 @@
+# Section 2 Intro
+
+This next section is about mapping and indexing your data. To make things interesting, we'll import a real world data set of movies and movie ratings. I'll cover the basics of what we're doing in slides so you'll have them for reference, but you're going to follow along with me and actually import this data into elastic search yourself. Then we'll go over how to insert, update, and delete individual documents in your index, and some of the complexities that can arise when doing this on a busy cluster. We'll also cover different ways elastic search can analyze and tokenize your text data, and talk about data modeling when you're dealing with relational structured data in elastic search. There's a lot to cover, so let's get started.

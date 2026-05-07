@@ -1,0 +1,3 @@
+# Simple Factory - Pitfalls
+
+All right, now let's look at the pitfalls of simple factory. The only pitfall in simple fact is that the criteria that is used by simple factory to decide which object is to ensure it can get more convoluted and complex over time. And typically, when you find yourself in such a situation, then that is a good indication that you need to use factory method design better. So you would often see in your goal that you start with a simple factory which then evolves to a factory method design, better implementation. All right. So this is the only pitfall for simple factory.

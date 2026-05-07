@@ -1,0 +1,3 @@
+# Strategy - Pitfalls
+
+All right, Now let's discuss pitfalls of strategy, design pattern. And there is only one significant pitfall to this design pattern, and that is since our client code typically configures our context object with appropriate strategy object, our client now knows about all implementations of our strategy that are available, and it will use some logic in order to choose one of those implementations and configure our context. So that means, first of all, there is a tight coupling between our client code and implementations of strategies. Second problem is that if we add a new algorithm, that is, we create a new implementation of our strategy, then our client code needs changes. All right. So this is the only pitfall for strategy design pattern.

@@ -1,0 +1,3 @@
+# Section 8 Wrapup
+
+Congratulations on making it this far; we're almost at the end. You've already learned the most important things to know about elastic search itself, and we've learned how to set up and maintain your own elastic search cluster. But sometimes, you don't want to deal with provisioning hardware and setting it all up, you'd rather focus on building applications or analyzing your data. The good news is, you don't have to maintain your own cluster. You can rent elastic search clusters in the cloud, at very reasonable rates. Continue on, and we'll see how that works.
