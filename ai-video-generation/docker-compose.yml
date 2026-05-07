@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+
+  worker_image:
+    build: .
+    command: celery -A app.pipeline.tasks worker -Q image_queue -c 4 --loglevel=info
+    env_file: .env
+    depends_on: [db, redis]
+
+  worker_video:
+    build: .
+    command: celery -A app.pipeline.tasks worker -Q video_queue -c 6 --loglevel=info
+    env_file: .env
+    depends_on: [db, redis]
+
+  worker_audio:
+    build: .
+    command: celery -A app.pipeline.tasks worker -Q audio_queue -c 2 --loglevel=info
+    env_file: .env
+    depends_on: [db, redis]
+
+  worker_assembly:
+    build: .
+    command: celery -A app.pipeline.tasks worker -Q assembly_queue -c 2 --loglevel=info
+    env_file: .env
+    depends_on: [db, redis]
+
+  flower:
+    build: .
+    command: celery -A app.pipeline.tasks flower --port=5555
+    ports:
+      - "5555:5555"
+    env_file: .env
+    depends_on: [redis]
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: videogen
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d videogen"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
