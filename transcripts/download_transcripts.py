@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 
-COURSE_SLUG = "github-actions-the-complete-guide"
+COURSE_SLUG = "aws-certified-solutions-architect-associate-saa-c03"
 OUTPUT_DIR = Path(__file__).parent
 COOKIES_FILE = OUTPUT_DIR / "cookies.json"
 PREFERRED_LOCALE = "en_US"
