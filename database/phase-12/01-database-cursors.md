@@ -427,4 +427,4 @@ $$ LANGUAGE plpgsql;
 
 ---
 
-**Tiếp theo:** Phase 13 - NoSQL Architecture →
+**Tiếp theo:** 02-cursor-nang-cao-va-use-cases.md →
