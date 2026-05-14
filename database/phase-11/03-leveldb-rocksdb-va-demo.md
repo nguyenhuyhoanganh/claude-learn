@@ -373,4 +373,4 @@ Pure performance với LSM:
 
 ---
 
-**Tiếp theo:** Phase 12 - Database Cursors →
+**Tiếp theo:** 04-xtradb-sqlite-aria.md →

@@ -280,4 +280,4 @@ System tables:
 
 ---
 
-**Tiếp theo:** 04-leveldb-rocksdb-lsm.md →
+**Tiếp theo:** 05-berkeleydb-va-tong-ket-engines.md →
