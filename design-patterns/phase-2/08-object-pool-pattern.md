@@ -228,6 +228,8 @@ public void queryDatabase() {
 | **Thread safety** | Dùng `BlockingQueue` hoặc `ConcurrentLinkedQueue` |
 | **Timeout** | Quyết định block mãi hay throw exception khi pool rỗng |
 | **Validation** | Kiểm tra object còn valid trước khi cấp (VD: connection bị đứt) |
+| **Long-lived objects** | Không pool objects mà client dùng lâu → pool cạn mãi |
+| **Reset ngoài sync** | Nếu reset tốn kém, thực hiện ngoài synchronized block để tránh block pool |
 
 ## So sánh Object Pool vs Prototype
 
