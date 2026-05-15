@@ -283,6 +283,15 @@ DataProcessor descending = new DataProcessor(list -> {
 | **Algorithm** | Toàn bộ algorithm khác nhau | Skeleton giống nhau, vài steps khác |
 | **Khi dùng** | Cần đổi algorithm động | Subclasses chỉ khác một vài bước |
 
+## Design Considerations
+
+| Điểm | Giải thích |
+|------|-----------|
+| **Default strategy** | Context có thể có default strategy → client không cần cung cấp nếu muốn dùng mặc định |
+| **Stateless strategy** | Strategy không có mutable state → có thể share giữa nhiều Context (dùng Flyweight) |
+| **Interface cho data** | Nếu strategy cần nhiều data → context implement interface cung cấp data cho strategy |
+| **Strategy inheritance** | Các strategy có code chung → tạo base class Strategy để tái sử dụng |
+
 ## Pitfalls (Nhược điểm)
 
 1. **Over-engineering:** Nếu chỉ có 1-2 algorithm và không đổi → không cần Strategy

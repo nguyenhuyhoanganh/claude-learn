@@ -261,6 +261,15 @@ public class FastMigration extends DataMigration {
 | **Code reuse** | Base class có common code | Ít code reuse hơn |
 | **OCP** | Mở rộng qua subclass | Mở rộng qua interface |
 
+## Design Considerations
+
+| Điểm | Giải thích |
+|------|-----------|
+| **Granularity balance** | Quá nhiều steps → tedious to implement. Quá ít steps → mất kiểm soát algorithm |
+| **final template method** | Đánh dấu `final` để ngăn subclass override toàn bộ algorithm |
+| **Subclass inheritance** | Subclasses có thể kế thừa lẫn nhau để tái sử dụng step implementations |
+| **Factory Method** | Factory Method pattern thường sử dụng Template Method để định nghĩa factory workflow |
+
 ## Pitfalls (Nhược điểm)
 
 1. **Inheritance coupling:** Subclass phụ thuộc vào base class → khó test riêng lẻ
