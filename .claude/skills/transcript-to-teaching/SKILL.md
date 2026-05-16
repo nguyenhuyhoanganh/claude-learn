@@ -1,223 +1,295 @@
 ---
 name: transcript-to-teaching
-description: Use when user provides a course transcript folder (auto-transcribed video lessons) and asks to convert it into Vietnamese teaching content organized by phases, mirroring the existing pattern in /github-action and /redis folders of this workspace
+description: Use when user provides a course transcript folder (auto-transcribed video lessons) and asks to convert it into Vietnamese teaching content organized by phases. Default reference for style, depth, and structure is the /redis/ folder of this workspace.
 ---
 
-# Transcript-to-Teaching Conversion
+# Transcript-to-Teaching
 
 ## Overview
 
-Convert auto-transcribed video lesson folders into structured Vietnamese teaching content. Output is deeper than the transcript (adds advanced/production knowledge, terminology, trade-offs) and follows the existing pattern in `/github-action/` and `/redis/`.
+Convert auto-transcribed video lesson folders into a **deep, production-grade Vietnamese teaching curriculum** organized into phases. Output must be significantly deeper than the transcript — the goal is "learner masters and applies in real work", not "transcript translated".
 
-**Core principle:** Each transcript section (e.g. `Section 01 - Get Started Here!/`) becomes a phase folder (`phase-1/`). Each phase contains multiple short MD files. Content depth > transcript; goal is "learner can master and apply", not "summary".
+**Reference standard**: every output emulates the depth, structure, and voice of `/redis/` in this workspace. Before writing the first file, ALWAYS read 2-3 files from `/redis/` to anchor style.
+
+**Iron Law: content quality is the metric.** Don't be efficient at the cost of depth. Don't produce shallow files just to finish faster.
 
 ## When to Use
 
-- User points at a `/transcripts/<course-slug>/` folder with section subfolders containing `.txt` transcripts.
-- User asks to create a sibling folder with teaching content (e.g. `redis/`, `nginx/`, `kafka/`).
-- User references the existing `/github-action` or `/redis` pattern explicitly.
+- User says "dùng skill này cho transcript ở `<folder-A>`, viết vào folder `<folder-B>`" (or similar).
+- User points at a transcript folder under `/transcripts/<course-slug>/` containing section subfolders with `.txt` lessons.
 
 **Don't use when:**
-- User wants a summary, blog post, or single document — this skill produces multi-file teaching curriculum.
-- Source is well-written documentation (not raw auto-transcript) — different editorial needs.
+- User asks for a summary, blog post, or single document.
+- Source is already polished documentation (not raw auto-transcript).
 
-## Mandatory Pre-Work Checklist
+## Default Inputs (Ask If Missing)
 
-Before touching any file, gather these answers (use AskUserQuestion if ambiguous):
+- **Transcript path**: e.g. `/transcripts/<course-slug>/`
+- **Output folder**: e.g. `/<course-name>/` at workspace root
+- **Scope this session**: how many sections (1-3 typical, full course is many sessions)
 
-| Decision | Default if user says "as before" |
+Everything else has sensible defaults — don't pile up questions.
+
+## Mandatory First Steps (Every Session)
+
+```
+1. List transcript folder → count sections, note gaps in numbering.
+2. READ at least 3 files from /redis/ as style anchor:
+   - /redis/phase-1/01-redis-la-gi.md          (concept intro pattern)
+   - /redis/phase-2/03-set-options.md          (deep API/option file)
+   - /redis/phase-3/03-redis-design-methodology.md  (methodology file)
+3. Read 1-2 transcript files from target section to understand source quality.
+4. Map sections → phases (continuous numbering, skip gaps in transcript).
+5. Plan file split for each phase before writing (file count, topics).
+```
+
+These steps are not optional. Skipping them produces shallow, inconsistent content.
+
+## Section → Phase Mapping
+
+- Transcripts may have gaps (e.g. no Section 04). Use **continuous numbering**: phase-1 = first existing section, phase-2 = next, etc.
+- Each phase folder: `phase-N/` at output root.
+- Note any skipped source section in the phase intro file (transparency).
+
+## File Naming
+
+- Format: `NN-kebab-case-vietnamese-slug.md`
+- Examples: `01-redis-la-gi.md`, `03-cac-loai-deployment.md`, `06-string-ranges-bitops.md`.
+- Number prefix `NN` = order within phase, padded to 2 digits.
+- Slug: meaningful Vietnamese, not transliteration of English.
+
+## Files Per Phase
+
+| Transcript section size | Suggested file count |
 |---|---|
-| Scope (how many sections this session) | Ask — task is too big for one session, usually 1-3 sections |
-| Section numbering with gaps | **Continuous numbering** (phase-N = nth existing section, skip missing) |
-| Git: branch strategy | New branch named after course (`redis`, `nginx`...) from main |
-| Git: branches to delete | Push unbacked-up branches to remote first, then `git branch -D` only ones with remote backup |
-| Git: dirty WT handling | Commit script/transcript changes together with new content in single commit on new branch |
+| 3-4 lessons (small section) | 3-5 files (combine intros) |
+| 5-8 lessons (medium) | 5-7 files |
+| 10-14 lessons (large) | 7-10 files (group by sub-theme) |
 
-## Phase Folder Conventions
+Don't blindly map 1 lesson → 1 file. **Combine when lessons are tiny intros; split when one lesson covers many concepts.**
 
-- **Folder name**: `phase-1`, `phase-2`, ... continuous.
-- **File name**: `NN-kebab-case-vietnamese-slug.md` (e.g. `01-redis-la-gi.md`, `03-cac-loai-deployment.md`).
-- **File count per phase**: 3-8 typically. Combine when transcript lessons are tiny intros; split when one lesson has many concepts.
-- **Line count per file**: 150-350 lines (sâu hơn nhiều so với github-action ~50-100 line mẫu).
+## File Length Target
 
-## File Structure Template
+- **150-350 lines per file**. Anything under 100 lines is suspect — likely combined wrong or too shallow.
+- Match depth of `/redis/` files (avg ~255 lines). Going shorter = lower quality.
 
-Each MD file follows this Vietnamese teaching template:
+## Content Depth Requirements (Non-Negotiable)
+
+Every file MUST include:
+
+1. **Hook**: motivational opener (real problem the lesson solves, or provocative question).
+2. **Concepts** với term Anh kèm VN — KHÔNG assume reader biết thuật ngữ. Mỗi technical term được giải thích lần đầu xuất hiện.
+3. **ASCII diagrams** cho data flow, structure, request/response, comparisons. Vẽ bằng `text` code block.
+4. **Comparison tables** cho mọi list có > 3 option/case.
+5. **Production-grade code** (Python / JS / Java / Go tuỳ ngữ cảnh) — không chỉ CLI snippets.
+6. **Trade-off section**: "khi nào KHÔNG dùng / hạn chế / mặt trái". Transcript hiếm khi có; bạn phải tự thêm.
+7. **Real-world use case** kèm pseudo-code production pattern.
+8. **Bẫy thường gặp / anti-patterns** — bảng "sai vs đúng" hoặc list ngắn có giải thích.
+9. **Internal mechanism / why it works that way** — append lazy expiration, single-thread event loop, listpack encoding, etc. Đào sâu để người học hiểu, không chỉ học vẹt.
+10. **Performance numbers** kèm con số thực (latency, throughput, memory).
+11. **Tóm tắt cuối bài**: 3-5 bullet take-away.
+12. **Link "Bài kế tiếp"** ở dòng cuối → bài tiếp theo. Phá vỡ chain = lỗi nghiêm trọng.
+
+Each file should feel **complete in itself** — a learner can read just one file and gain a coherent piece of knowledge.
+
+## Bonus Content (Beyond Transcript)
+
+Actively add when relevant:
+- **History**: vì sao công nghệ được thiết kế như vậy.
+- **Production cluster / scale**: dù transcript nói single-instance.
+- **Security gotchas**: với mọi tool dùng mạng/auth.
+- **Cross-comparison**: so với SQL, so với competitor (Memcached, ElasticSearch...).
+- **Internal data structure**: cách lib/server thực thi lệnh.
+- **Modern alternatives / module ecosystem**.
+
+## Voice & Style
+
+- **Tone**: vietnamese, viết như đang giải thích cho đồng nghiệp mới — không kiểu "giáo trình khô khan", không kiểu "blog đại trà".
+- **Câu ngắn, ý tập trung**. Bullet và bảng nhiều, không lan man.
+- **Đậm/nghiêng** dùng tiết kiệm cho điểm quan trọng.
+- **Code block** có comment **chỉ khi giải thích why**, không comment what (well-named identifier đã rõ).
+- **Tránh emoji** (trừ khi user xin).
+- **Không sao chép câu chữ transcript** — auto-dịch hay sai. Đọc, hiểu, viết lại bằng kiến trúc của mình.
+
+## File Template (Copy-Paste Friendly)
 
 ```markdown
-# Bài N: [Tiêu đề ngắn gọn, motivational]
+# Bài N: [Tiêu đề ngắn gọn, motivational, không generic]
 
-## [Hook: vấn đề thực tế / câu hỏi gợi tò mò]
-1-2 đoạn dẫn vào.
+[1-2 đoạn hook — vấn đề thực tế / câu hỏi gợi tò mò, KHÔNG kiểu "trong bài này chúng ta sẽ học..."]
 
-## [Khái niệm cốt lõi]
-- Định nghĩa term Anh — VN.
-- Bảng so sánh nếu cần.
-- Diagram ASCII nếu phù hợp.
+## [Khái niệm cốt lõi — heading mô tả nội dung, không generic]
+
+[Định nghĩa term Anh — VN. Có thể có sub-section ## phân nhỏ.]
+
+[Bảng so sánh / diagram ASCII nếu phù hợp.]
 
 ## [Cú pháp / API / Cách dùng]
-Code block ngắn + output thực tế.
 
-## [Đào sâu / Why does it work]
-Trade-off, edge case, internal mechanism (lazy expiration, single-thread, etc.)
+```text
+# Code block với output thực tế
+LỆNH key value
+→ kết quả
+```
+
+[Giải thích từng phần, return code, complexity, edge case.]
+
+## [Đào sâu — internal mechanism / why]
+
+[Trade-off, edge case, cách lib/server thực sự xử lý.]
 
 ## [Use case thực tế trong production]
-Pattern phổ biến + pseudo-code.
+
+[Pattern kèm pseudo-code ngôn ngữ phù hợp.]
 
 ## [Bẫy thường gặp / Anti-pattern]
-Bảng "sai vs đúng" hoặc list ngắn.
+
+| Bẫy | Tránh bằng cách |
+|---|---|
+| ... | ... |
 
 ## Tóm tắt bài N
+
 - 3-5 bullet take-away cốt lõi.
 
 **Bài kế tiếp** → [Bài N+1: ...](NN+1-slug.md)
 ```
 
-## Content Depth Rules
+## Style Anchors — Files To Re-Read Every Session
 
-**Always include:**
-- Giải thích **mọi thuật ngữ** (term Anh kèm VN, không assume biết).
-- **Trade-off** + "khi nào KHÔNG dùng" (transcript hiếm khi đề cập).
-- **So sánh với cách làm SQL/khác** khi áp dụng (giúp người mới có anchor).
-- **Diagram ASCII** cho concepts có dòng chảy (request flow, data structure).
-- **Bảng** cho mọi cái có > 3 option/case.
-- **Pseudo-code production** ở ngôn ngữ phù hợp (Python/JS/Go), không chỉ CLI.
-- **Liên kết bài trước/sau** ở cuối file (`→ [Bài N+1](NN+1-slug.md)`).
+Before writing, read these to calibrate depth/voice:
 
-**Bổ sung ngoài transcript:**
-- Lịch sử ngắn của công nghệ (để hiểu vì sao thiết kế vậy).
-- Mặt trái / what could go wrong in production.
-- Hiệu năng kỳ vọng kèm số thực (benchmark, p50/p99).
-- Cluster / scale considerations dù transcript không đề cập.
-- Security gotchas (đặc biệt với DB/network tool).
+| File | Pattern type to absorb |
+|---|---|
+| `/redis/phase-1/01-redis-la-gi.md` | Concept intro + comparison + history + use case map |
+| `/redis/phase-1/02-vi-sao-redis-nhanh.md` | "Why" deep-dive với reasoning chain |
+| `/redis/phase-2/03-set-options.md` | API option-by-option deep-dive |
+| `/redis/phase-2/07-lam-viec-voi-so.md` | Race condition explanation với ASCII diagram |
+| `/redis/phase-3/03-redis-design-methodology.md` | Methodology / mental model file |
+| `/redis/phase-3/05-implement-page-caching.md` | Code-along implementation file |
+| `/redis/phase-4/01-hash-la-gi.md` | Data type introduction file |
+| `/redis/phase-5/02-hgetall-empty-object.md` | Gotcha deep-dive file |
 
-**Tránh:**
-- Sao chép câu chữ transcript (do auto-dịch hay sai).
-- Bỏ qua thuật ngữ vì "ai cũng biết" — viết cho người mới hoàn toàn.
-- File quá ngắn (< 100 dòng) — gộp với file kế tiếp.
-- Comment dư trong code block.
+If output looks shallower than these, **rewrite — don't ship**.
+
+## Git Workflow (Output Persistence)
+
+```bash
+# 1. From main, create a new branch named after the course
+git checkout main
+git checkout -b <course-name>     # e.g. kafka, grpc, nginx-deep
+
+# 2. After writing content for the session, single commit
+git add <output-folder>/ transcripts/<transcript-folder>/
+git commit -m "Add <Course> learning content - phase-N, phase-N+1 (topics)"
+
+# 3. Push branch to remote
+git push -u origin <course-name>
+```
+
+**Each session = at minimum one commit + push**. If session covers multiple phases, can also commit per phase if logical chunks emerge.
+
+**If branch already exists** (continuing prior session): checkout it, add new phases, commit, push.
 
 ## Process Flow
 
 ```dot
 digraph workflow {
-    "Hỏi scope + git decisions" [shape=box];
-    "Đọc 1-2 transcript mẫu để hiểu phong cách" [shape=box];
-    "Verify reference (/github-action /redis)" [shape=box];
-    "Map sections → phases continuous" [shape=box];
-    "Plan file split cho từng phase" [shape=box];
-    "Show design + get approval" [shape=diamond];
-    "Setup git (branch, delete)" [shape=box];
-    "Tạo folder structure" [shape=box];
-    "Đọc toàn bộ transcript section N" [shape=box];
-    "Viết các file MD phase-N" [shape=box];
-    "Còn phase?" [shape=diamond];
-    "Commit tất cả lên branch mới" [shape=box];
+    "Receive: transcript path + output path" [shape=box];
+    "List sections + count files" [shape=box];
+    "READ 3+ /redis/ anchor files" [shape=box];
+    "Read 1-2 sample transcripts" [shape=box];
+    "Map sections to phases (continuous)" [shape=box];
+    "Plan file split per phase" [shape=box];
+    "Create branch + folders" [shape=box];
+    "Read transcript section N fully" [shape=box];
+    "Write phase-N files sequentially" [shape=box];
+    "Self-check: depth >= /redis/?" [shape=diamond];
+    "Rewrite weak file" [shape=box];
+    "More phases this session?" [shape=diamond];
+    "Commit + push" [shape=box];
 
-    "Hỏi scope + git decisions" -> "Đọc 1-2 transcript mẫu để hiểu phong cách";
-    "Đọc 1-2 transcript mẫu để hiểu phong cách" -> "Verify reference (/github-action /redis)";
-    "Verify reference (/github-action /redis)" -> "Map sections → phases continuous";
-    "Map sections → phases continuous" -> "Plan file split cho từng phase";
-    "Plan file split cho từng phase" -> "Show design + get approval";
-    "Show design + get approval" -> "Plan file split cho từng phase" [label="reject"];
-    "Show design + get approval" -> "Setup git (branch, delete)" [label="approve"];
-    "Setup git (branch, delete)" -> "Tạo folder structure";
-    "Tạo folder structure" -> "Đọc toàn bộ transcript section N";
-    "Đọc toàn bộ transcript section N" -> "Viết các file MD phase-N";
-    "Viết các file MD phase-N" -> "Còn phase?";
-    "Còn phase?" -> "Đọc toàn bộ transcript section N" [label="yes"];
-    "Còn phase?" -> "Commit tất cả lên branch mới" [label="no"];
+    "Receive: transcript path + output path" -> "List sections + count files";
+    "List sections + count files" -> "READ 3+ /redis/ anchor files";
+    "READ 3+ /redis/ anchor files" -> "Read 1-2 sample transcripts";
+    "Read 1-2 sample transcripts" -> "Map sections to phases (continuous)";
+    "Map sections to phases (continuous)" -> "Plan file split per phase";
+    "Plan file split per phase" -> "Create branch + folders";
+    "Create branch + folders" -> "Read transcript section N fully";
+    "Read transcript section N fully" -> "Write phase-N files sequentially";
+    "Write phase-N files sequentially" -> "Self-check: depth >= /redis/?";
+    "Self-check: depth >= /redis/?" -> "Rewrite weak file" [label="no"];
+    "Rewrite weak file" -> "Self-check: depth >= /redis/?";
+    "Self-check: depth >= /redis/?" -> "More phases this session?" [label="yes"];
+    "More phases this session?" -> "Read transcript section N fully" [label="yes"];
+    "More phases this session?" -> "Commit + push" [label="no"];
 }
 ```
 
-## Git Workflow
+## Execution Mode — Sequential Only
 
-```bash
-# 1. Verify clean / understand dirty WT
-git status
+**Always write phase-by-phase yourself**. No parallel subagents.
 
-# 2. Check local branches that need deleting — for each, verify remote backup
-git log main..<branch> --oneline
-git branch -a | grep <branch>     # check if remote exists
+Reasons:
+- Consistent voice across files.
+- "Bài kế tiếp" chains stay correct (depend on next file existing with expected slug).
+- Cross-references between phases stay accurate.
+- Quality > speed.
 
-# 3. If branch has unique commits and NO remote backup → push first
-git push -u origin <branch>
+If session is too big for available context, do fewer phases per session — don't parallelize.
 
-# 4. Create new branch from main + delete others
-git checkout -b <course-name>     # e.g. redis, nginx
-git branch -D <old-branch-1> <old-branch-2>
+## Quick Reference — Common Decisions
 
-# 5. After writing all content, single commit
-git add <course-folder>/ transcripts/<course-slug>/ <any-script-changes>
-git commit -m "Add <Course> learning content - phase-1, phase-2, phase-3 (...)"
-```
-
-**Safety:** never `git branch -D` a branch that has unique commits not on remote. Always push first.
-
-## Execution Mode — Sequential by Default
-
-**Default mode is sequential** — write phase-by-phase yourself. Reason: user prefers consistent voice, depth, and cross-references across phases. Subagent dispatch produces inconsistent results and breaks "bài kế tiếp" chains.
-
-**Only consider parallel subagents when:**
-- User explicitly requests speed over consistency.
-- Sections are independent (no concept building forward).
-- Context budget tight and remaining work > 10 phases.
-
-If using parallel anyway: each subagent must get path to an existing finished phase (`/redis/phase-1/`) as style anchor, explicit file count, and the full template above.
-
-## Quick Reference — Mappings
-
-| Transcript signal | Your action |
+| Situation | Action |
 |---|---|
-| Section title generic ("Get Started") | Phase intro: setup + motivation + tools |
-| Section has 3-5 short lessons | Maybe combine into 3-4 files |
-| Section has 10+ lessons | Split into 6-9 files, group by sub-theme |
-| Lesson says "Don't skip this" | Important context — keep it in your file |
-| Transcript mentions only CLI | Add code example in mainstream language (Python/JS) |
-| Transcript uses contrived example | Replace with production pattern |
-| Section absent from numbering (e.g. no Section 04) | Use continuous numbering, document the gap |
-| Auto-transcribe garble ("read us" → Redis) | Silently correct, never quote verbatim |
+| Transcript has 1-2 sentence intro lesson | Don't create a dedicated file; fold into next file's hook |
+| Transcript has 10+ lesson section | Plan 7-9 files grouped by sub-theme, not 1:1 mapping |
+| Section absent from numbering (gap) | Continuous numbering, note gap in phase intro |
+| Auto-transcribe garble (vd "read us" → Redis, "yet" → GET) | Silently correct, never quote verbatim |
+| Code snippets in transcript use contrived examples | Replace with production-realistic pattern |
+| Transcript mentions only CLI usage | ALWAYS add equivalent code in mainstream language |
+| Transcript doesn't mention concurrency/scale/security | Add the missing dimension yourself if relevant |
+| File draft < 100 lines | Probably too shallow — expand or merge |
+| File draft > 400 lines | Probably should split |
 
-## Common Mistakes
+## Common Mistakes To Avoid
 
 | Mistake | Fix |
 |---|---|
-| Copying transcript prose verbatim | Rewrite in your own structure; transcript is *content reference*, not voice |
-| Writing in English | All teaching MD must be in **Vietnamese** (term Anh kèm VN giải thích) |
-| Skipping sections silently | Use continuous numbering but mention in the affected phase intro that source section X was missing |
-| Short files (< 100 lines) | Combine; aim 150-350 lines per file |
-| Forgetting "next bài" link at end | Always add `**Bài kế tiếp** → [...]` (except final file → links to next phase or summary) |
-| Committing transcripts under different commit than content | Single commit cleaner; user wants traceability |
-| Force-deleting branch without remote backup | `git push -u origin <branch>` FIRST, then `git branch -D` |
-| Adding emojis | Don't, unless user asks |
-
-## Anti-Patterns to Avoid
-
-- ❌ Generating shallow "summary" — depth must exceed transcript.
-- ❌ Bullet-only files (no prose explanation, no diagrams).
-- ❌ Using `KEYS *`, `cat file | grep` style — show production-correct patterns.
-- ❌ Skipping the design approval gate.
-- ❌ Writing all files before the first commit (lose work if crash); but ALSO don't commit each file (noisy history). One commit per session is the sweet spot.
-
-## Reference Files in This Workspace
-
-Read these to anchor your style and depth before writing:
-
-- `/redis/phase-1/01-redis-la-gi.md` — định nghĩa + so sánh + định vị
-- `/redis/phase-2/03-set-options.md` — option deep-dive với pattern
-- `/redis/phase-2/07-lam-viec-voi-so.md` — race condition explanation diagram
-- `/redis/phase-3/03-redis-design-methodology.md` — methodology bài (most important content type)
-- `/redis/phase-3/05-implement-page-caching.md` — code-along bài
-- `/redis/phase-2/08-bai-tap-va-loi-giai.md` — exercise + gotchas tổng kết
-
-`/github-action/` exists but is **shallower** (~50-100 line/file); use `/redis/` as the depth target.
+| Copying transcript prose verbatim | Rewrite in your own structure |
+| Writing in English | All teaching content **must be Vietnamese** (terms Anh kèm VN) |
+| Skipping terminology explanations | Define every technical term at first use |
+| Shallow files (< 150 lines) | Combine adjacent or expand with bonus content |
+| Missing "Bài kế tiếp" link | Always add — chains the curriculum |
+| Generic headings ("Introduction", "Conclusion") | Use content-describing headings |
+| Files reading like blog posts | Should read as **reference/textbook**, scannable |
+| No ASCII diagrams when flow exists | Add — diagrams cement understanding |
+| No comparison table when 3+ options | Add table |
+| Code without expected output | Always show what command produces |
+| No production trade-offs | Add "khi nào KHÔNG dùng" subsection |
+| Forgetting to commit + push | Final step every session |
+| Emojis | Don't use unless user asks |
+| Comments in code that explain what (not why) | Remove — naming + structure should be self-evident |
 
 ## Deliverables Checklist (End of Session)
 
-- [ ] New folder `/<course-name>/` with phase subfolders.
-- [ ] N files per phase (3-8 typical), all Vietnamese, 150-350 line each.
-- [ ] Every file ends with link to next bài (or summary section if final).
-- [ ] Git branch `<course-name>` exists, contains single commit with content + transcripts + script changes.
-- [ ] Removed local branches that have remote backup.
-- [ ] Working tree clean.
-- [ ] User notified of progress (phases done, what's left).
+- [ ] New folder `/<output-folder>/` (or extension of existing) with phase subfolders.
+- [ ] Each phase has 3-10 files, all Vietnamese, 150-350 lines each.
+- [ ] Every file ends with `**Bài kế tiếp** → [...]` link (except phase summary may link to next phase).
+- [ ] Every technical term explained in Vietnamese on first use.
+- [ ] Every file has ASCII diagram or comparison table where applicable.
+- [ ] Every file has trade-off / "khi nào KHÔNG dùng" section.
+- [ ] Production code samples (not just CLI).
+- [ ] Branch `<course-name>` exists, content committed, pushed to remote.
+- [ ] User notified: phases done, what remains, est. for next session.
+
+## Self-Verification Before Reporting Done
+
+Compare your output against `/redis/` files:
+- Line count comparable? (within ±50% range)
+- Same structure (hook → concepts → API → deep-dive → use case → bẫy → tóm tắt → bài kế tiếp)?
+- Same level of terminology unpacking?
+- Diagrams + tables present?
+- Production code present?
+
+If any answer is "no" — **rewrite the weak file before committing.**
