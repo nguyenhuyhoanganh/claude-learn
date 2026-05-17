@@ -289,4 +289,4 @@ class SettingsPage extends LitElement {
    → Subscribe callbacks cho push updates
 ```
 
-→ [Bài tiếp theo: Build System và Resources](03-resources-build.md)
+→ [Bài tiếp theo: WebUIDataSource — serve resources](03-webui-data-source.md)

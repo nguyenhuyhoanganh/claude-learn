@@ -239,4 +239,4 @@ Samsung Browser additions
 
 ---
 
-→ [Phase 5: Mojo IPC](../phase-5-mojo-ipc/01-mojo-overview.md)
+→ [Phase 6: Mojo IPC](../phase-6-mojo-ipc/01-mojo-overview.md)

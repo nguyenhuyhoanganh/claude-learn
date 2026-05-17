@@ -305,4 +305,4 @@ Bạn không cần hiểu sâu GN ngay. Biết rằng:
 
 ---
 
-→ [Bài tiếp theo: WebUIController chi tiết](02-webui-controller.md)
+→ [Bài tiếp theo: WebUIController C++ chi tiết](02-webui-controller-cpp.md)
