@@ -406,4 +406,4 @@ settings_ property updated → re-render
 
 ---
 
-→ [Phase 6: Thực chiến](../phase-6-practical/01-reading-source.md)
+→ [Phase 7: Thực chiến](../phase-7-practical/01-reading-source.md)

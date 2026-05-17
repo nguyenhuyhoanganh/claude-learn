@@ -340,4 +340,4 @@ suite('SamsungSettingsPage', () => {
 
 ---
 
-→ [Bài tiếp theo: Debugging](03-debugging.md)
+→ [Bài tiếp theo: Tạo WebUI page mới từ đầu](03-creating-new-webui.md)

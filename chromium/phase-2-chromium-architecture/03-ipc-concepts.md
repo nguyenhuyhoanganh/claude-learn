@@ -230,4 +230,4 @@ Bây giờ bạn đã hiểu **tại sao** cần Mojo. Phase 5 sẽ dạy **các
 
 ---
 
-→ [Phase 3: LitElement](../phase-3-litelement/01-litelement-basics.md)
+→ [Phase 3: Polymer](../phase-3-polymer/01-polymer-intro.md)

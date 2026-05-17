@@ -385,4 +385,4 @@ class SettingsSection extends LitElement {
 | `::slotted()` | Style slot content |
 | `::part()` | Expose để external styling |
 
-→ [Phase 4: Chromium WebUI Framework](../phase-4-chromium-webui/01-webui-overview.md)
+→ [Phase 5: Chromium WebUI Framework](../phase-5-chromium-webui/01-webui-overview.md)
