@@ -71,11 +71,12 @@ jenkins-cicd/
 │   ├── 01-gioi-thieu-ci.md                      ← CI là gì, vì sao cần
 │   ├── 02-du-an-website-va-github.md            ← Setup repo + project
 │   ├── 03-docker-lam-build-environment.md       ← Chạy build trong container
-│   ├── 04-workspace-sync-va-git-checkout.md     ← Pull code từ Git
-│   ├── 05-running-tests-va-junit-report.md      ← Unit test + JUnit report
-│   ├── 06-e2e-tests-voi-playwright.md           ← E2E tests + HTML report
-│   ├── 07-parallel-stages-va-blue-ocean.md      ← Chạy song song + Blue Ocean
-│   └── 08-cau-truc-pipeline-va-update.md        ← Cách tổ chức pipeline + nâng cấp Jenkins
+│   ├── 04-git-jenkins-va-workspace-sync.md      ← Pull code Git + reuseNode
+│   ├── 05-build-va-test-stage.md                ← Build project + Unit tests
+│   ├── 06-junit-comments-va-html-report.md      ← JUnit report + comments + HTML
+│   ├── 07-e2e-tests-voi-playwright.md           ← E2E tests Playwright + serve background
+│   ├── 08-parallel-blue-ocean-va-cau-truc.md    ← Parallel + Blue Ocean + structure
+│   └── 09-update-jenkins-va-tong-ket.md         ← Nâng cấp Jenkins + tổng kết Phase 2
 │
 ├── phase-3-continuous-deployment/               ← ⭐ CD: từ build đến production
 │   ├── 01-tu-manual-den-cd.md                   ← Manual deploy → automated
