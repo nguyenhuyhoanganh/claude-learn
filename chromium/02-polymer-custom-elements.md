@@ -207,23 +207,27 @@ static get template() {
 </template>
 ```
 
-### Bẫy lớn: `$=` cho HTML attribute
+### `$=` cho HTML attribute
 
 ```html
-<!-- SAI — không bind, src thành string literal "[[imageUrl]]" -->
-<img src=[[imageUrl]]>
-
-<!-- ĐÚNG — $= cho HTML standard attribute -->
-<img src$="[[imageUrl]]">
-
-<!-- Custom property binding (mặc định) — set element.foo = bar -->
+<!-- Custom property binding (mặc định, không $) — set element.foo = bar -->
 <my-element foo="[[bar]]"></my-element>
 
 <!-- HTML attribute binding với $= — set element.setAttribute('foo', bar) -->
 <my-element foo$="[[bar]]"></my-element>
 ```
 
-→ Quy tắc: standard HTML attribute (`src`, `href`, `class`, `style`, `disabled`...) phải có `$=`. Custom property của Polymer/Lit element thì không.
+Theo Polymer doc, **bắt buộc** dùng `$=` cho các attribute sau (vì IDL property tên khác hoặc không có): **`class`, `style`, `href`, `for`, `data-*`**. Ví dụ:
+
+```html
+<!-- SAI: class không có $= → Polymer cố set element.class (không tồn tại) -->
+<div class="[[cssClass]]">
+
+<!-- ĐÚNG -->
+<div class$="[[cssClass]]">
+```
+
+Các attribute có property tương đương (`src`, `disabled`, `checked`, `hidden`...) — property binding **vẫn work**, nhưng best practice dùng `$=` để serialize ra DOM attribute (cho CSS selector hoạt động).
 
 ### `[[...]]` vs `{{...}}` — quan trọng
 
@@ -301,8 +305,8 @@ items: {
 // Hậu quả:
 const a = document.createElement('my-list');
 const b = document.createElement('my-list');
-a.push('x');
-console.log(b.items);  // ['x'] — bị thay đổi cả b!
+a.items.push('x');                // mutate trực tiếp shared array
+console.log(b.items);             // ['x'] — bị thay đổi cả b!
 
 // ĐÚNG — mỗi instance có array riêng
 items: {
@@ -315,7 +319,7 @@ items: {
 
 ### Property options — ý nghĩa từng cái
 
-- **`type`** — String, Number, Boolean, Array, Object, Function. Polymer dùng để convert string attribute → đúng type.
+- **`type`** — Polymer 3 chính thức support 6 type: String, Number, Boolean, Date, Array, Object (xem Polymer 3 doc). Polymer dùng để convert string attribute → đúng type.
 - **`value`** — default. Set khi instance được tạo (sau constructor).
 - **`reflectToAttribute: true`** — khi `this.disabled = true`, Polymer auto thêm `disabled` attribute vào DOM. Hữu ích cho CSS selector `:host([disabled])`.
 - **`notify: true`** — khi property đổi, fire `<prop-name>-changed` event. Cần cho two-way binding `{{prop}}`.
@@ -463,18 +467,18 @@ class MyComponent extends PolymerElement {
 ready() {
   super.ready();
   // Setup once
-  this.$.input.addEventListener('focus', () => this._wasFocused = true);
+  this.$.input.addEventListener('focus', () => this.wasFocused_ = true);
 }
 
 connectedCallback() {
   super.connectedCallback();
   // Setup mỗi lần component xuất hiện
-  document.addEventListener('keydown', this._boundKeyHandler);
+  document.addEventListener('keydown', this.boundKeyHandler_);
 }
 
 disconnectedCallback() {
   super.disconnectedCallback();
-  document.removeEventListener('keydown', this._boundKeyHandler);
+  document.removeEventListener('keydown', this.boundKeyHandler_);
 }
 ```
 
@@ -524,12 +528,12 @@ onClick_(e) {
 
 ```javascript
 class MyButton extends PolymerElement {
-  // Private (không dùng từ ngoài)
+  // Private (không dùng từ ngoài) — suffix `_`
   onClick_(e) { ... }
   computeFullName_(first, last) { ... }
-  _internalState = null;
+  internalState_ = null;
 
-  // Public (gọi từ ngoài hoặc test được)
+  // Public (gọi từ ngoài hoặc test được) — không có dấu `_`
   focus() { this.$.button.focus(); }
   reset() { this.value = ''; }
 }

@@ -602,7 +602,7 @@ Chromium **đang migrate** từ Polymer sang Lit nhưng quá trình kéo dài đ
 Khi đọc code WebUI thật, sẽ gặp các quy ước sau:
 
 1. **TypeScript** — code mới chủ yếu là `.ts`, không phải `.js`.
-2. **Private field dùng suffix `_`** — `this._settings`, `onClick_()`, `_renderToggle_()`. Đây là Google JS style.
+2. **Private field/method dùng suffix `_`** — `this.settings_`, `onClick_()`, `renderToggle_()`. Convention Chromium: dấu `_` ở **cuối** chứ không phải đầu identifier. Đây là Google JS style.
 3. **`I18nMixin`** — mixin cho i18n (đọc localized string).
 4. **`BrowserProxy` pattern** — wrap Mojo (đã giải thích).
 5. **`cr-*` elements** — design system, không dùng `paper-*` (legacy).
