@@ -97,7 +97,7 @@ class MyCounter extends LitElement {
 | **Two-way binding** | `{{prop}}` | **KHÔNG có** (manual) |
 | Conditional | `<template is="dom-if">` | `${cond ? html`...` : ''}` |
 | List | `<template is="dom-repeat">` | `${arr.map(i => html`...`)}` |
-| Expression in template | KHÔNG (chỉ value) | **CÓ** (full JS expression) |
+| Expression in template | Chỉ single `!` ở đầu binding (vd `[[!x]]`) — không có operator khác | **CÓ** (full JS expression) |
 | Computed property | `computed: 'method_(...)'` | Getter property |
 | Observers | `observer:` / `observers` | `updated()` callback |
 | Code share | Mixins | Mixins / function utilities |
@@ -133,8 +133,10 @@ Polymer update **chính xác từng binding**. Lit re-evaluate template + diff. 
 **Polymer**: declarative — template chỉ là string với `[[...]]` placeholders.
 
 ```html
-<div class$="card [[type]]">  <!-- không expression -->
-<p hidden$="[[!isVisible]]">  <!-- KHÔNG WORK (no `!`) -->
+<div class$="card [[type]]">          <!-- compound binding OK: string literal + binding -->
+<p hidden$="[[!isVisible]]">          <!-- single ! ở đầu binding: WORK -->
+<div class$="[[isActive ? 'on' : '']]"> <!-- KHÔNG WORK: ternary không support -->
+<p>[[count + 1]]</p>                   <!-- KHÔNG WORK: arithmetic không support -->
 ```
 
 **LitElement**: JavaScript-native expression.

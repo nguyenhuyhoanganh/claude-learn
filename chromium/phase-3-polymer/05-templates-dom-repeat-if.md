@@ -105,14 +105,14 @@ Không có `observe`, Polymer chỉ re-evaluate khi top-level array đổi (push
 ### Re-render manual
 
 ```javascript
-// Force re-render dom-repeat
-this.shadowRoot.querySelector('dom-repeat').render();
+// dom-repeat là một <template is="dom-repeat"> — query bằng template[is=dom-repeat]:
+this.shadowRoot.querySelector('template[is=dom-repeat]').render();
 
-// Hoặc lấy domRepeat element rồi gọi
+// Hoặc nếu template có id, dùng this.$:
 this.$.myRepeat.render();
 ```
 
-Hữu ích khi data thay đổi mà Polymer không detect được (vd thay đổi external).
+Hữu ích khi data thay đổi mà Polymer không detect được (vd thay đổi external). `render()` flush pending updates ngay lập tức.
 
 ### Performance — Item update
 
@@ -129,17 +129,11 @@ this.set(`users.${idx}.name`, 'NewName');
 
 Polymer's smart update phụ thuộc vào array mutation cụ thể. Replace toàn bộ = re-render toàn bộ.
 
-### Tracking với id
+### Tracking giữa các lần render
 
-```html
-<template is="dom-repeat" items="[[items]]" id-as="id">
-  <my-item item="[[item]]"></my-item>
-</template>
-```
+Polymer 3 dom-repeat **luôn track theo index** (mảng position). Khác với React `key` hay Vue `:key`, dom-repeat **không có** option tracking theo unique key. Khi insert/remove ở giữa array, các item phía sau có thể bị re-bind (Polymer dùng path-based change detection để giảm thiểu re-render thực sự).
 
-Mặc định Polymer track items theo **index**. Khi insert ở giữa, các item phía sau bị re-render. Set `id-as` để track theo property unique → chỉ re-render item mới.
-
-> Hiếm cần `id-as` — default index thường đủ.
+→ Cho list lớn cần stable identity, xem `<iron-list>` (Bài 8) — có virtual scrolling.
 
 ### Click handler trong dom-repeat
 
@@ -224,39 +218,40 @@ Mặc định, khi `if` false, Polymer **hide** content (display:none) thay vì 
 - Component có internal state nặng cần reset mỗi lần.
 - Memory quan trọng hơn performance toggle.
 
-### Wait! `[[!expr]]` không work
+### `[[!expr]]` — single `!` ở đầu binding HOẠT ĐỘNG
 
 ```html
-<!-- KHÔNG WORK -->
+<!-- WORK: Polymer support single ! ngay sau [[ hoặc {{ -->
 <template is="dom-if" if="[[!isLoading]]">
+  <div class="content">[[title]]</div>
+</template>
 ```
 
-Polymer KHÔNG support `!` trong binding (xem bài 3).
-
-**Workaround**:
+Đây là **ngoại lệ duy nhất** Polymer cho expression trong binding. Mọi expression khác (`!!`, `>`, `?:`, `+`, ...) đều không work — phải dùng computed property:
 
 ```html
-<!-- Computed property -->
-<template is="dom-if" if="[[isNotLoading_]]">
+<!-- KHÔNG WORK: cần computed -->
+<template is="dom-if" if="[[count > 0]]">
+
+<!-- ĐÚNG: -->
+<template is="dom-if" if="[[hasItems_]]">
 ```
 
 ```javascript
 static get properties() {
   return {
-    isLoading: Boolean,
-    isNotLoading_: {
+    count: Number,
+    hasItems_: {
       type: Boolean,
-      computed: 'computeNot_(isLoading)',
+      computed: 'computeHasItems_(count)',
     },
   };
 }
 
-computeNot_(value) {
-  return !value;
+computeHasItems_(count) {
+  return count > 0;
 }
 ```
-
-Hoặc dùng utility mixin (sẽ học bài 7).
 
 ### Multiple dom-if như else-if
 
@@ -357,7 +352,7 @@ Khi cần binding ở **page level** (không trong component), dùng `dom-bind`:
 </template>
 ```
 
-Lưu ý: `[[!cat.items.length]]` — Polymer hỗ trợ ngầm `!` trên **single property path** trong một số trường hợp (length là Number, truthy/falsy check). Nhưng safest vẫn dùng computed.
+Lưu ý: `[[!cat.items.length]]` — Polymer **chính thức support** single `!` ở đầu binding (làm boolean coerce + negate). Hoạt động với mọi value (number, string, object). Đây là operator duy nhất Polymer support trong template.
 
 ## Template trong dom-repeat — passing data
 
@@ -591,7 +586,7 @@ Trong example này:
 | Bẫy | Hậu quả | Cách tránh |
 |---|---|---|
 | `this.users.push(x)` thay vì `this.push('users', x)` | dom-repeat không update | Dùng Polymer array API |
-| `[[!isLoading]]` trong `dom-if` | Không hoạt động (`!` không support) | Computed property `isNotLoading_` |
+| `[[count > 0]]` hoặc `[[a ? b : c]]` trong `dom-if` | Không hoạt động (Polymer không support expression, trừ single `!`) | Computed property như `hasItems_` |
 | Quên `as="..."` khi nested dom-repeat | Inner override outer `item` | Đặt tên rõ ràng |
 | `e.model` undefined khi handler trong native event handler | Event fire từ ngoài dom-repeat | Handler phải định nghĩa trong template của dom-repeat |
 | Performance kém với list dài (>1000) | Polymer dom-repeat không virtualize | Dùng `iron-list` (virtual scrolling) |

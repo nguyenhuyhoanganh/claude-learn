@@ -283,7 +283,7 @@ Chromium có **quy ước riêng** khi viết Polymer (khác với tutorial trê
 3. **`html_to_wrapper`** convert HTML template → TypeScript module ở compile time.
 4. **`I18nMixin`** cho i18n.
 5. **`BrowserProxy` pattern** wrap Mojo calls.
-6. **Strict private fields** với suffix `_` (vd `this._settings`).
+6. **Strict private fields** với suffix `_` (vd `this.settings_`, method `onClick_()` — Chromium convention dùng underscore ở **cuối** chứ không phải đầu).
 7. **`PolicyControlledIndicatorMixin`** cho settings controlled by enterprise policy.
 
 Sẽ học từng cái trong các bài sau.

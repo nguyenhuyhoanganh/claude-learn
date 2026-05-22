@@ -41,7 +41,7 @@ static get properties() {
 }
 ```
 
-8 options chính:
+7 options chính thức của Polymer 3:
 
 | Option | Mô tả |
 |---|---|
@@ -52,7 +52,6 @@ static get properties() {
 | `computed` | Function expression để compute từ properties khác |
 | `reflectToAttribute` | Sync property → HTML attribute |
 | `readOnly` | Chỉ component tự đặt được (qua `_setX(value)`) |
-| `statePath` | Bind property tới state path trong Redux store (hiếm dùng, advanced) |
 
 ## `type` — type coercion
 
@@ -75,7 +74,7 @@ Polymer:
 2. Thấy `type: Number` → convert thành `25` (number).
 3. Set `this.age = 25`.
 
-Các type support:
+Polymer 3 chính thức support **6 type** sau:
 
 | Type | Conversion từ attribute string |
 |---|---|
@@ -85,7 +84,8 @@ Các type support:
 | `Array` | `JSON.parse()` — vd `[1,2,3]` |
 | `Object` | `JSON.parse()` — vd `{"a":1}` |
 | `Date` | `new Date(string)` |
-| `Function` | Không convert — chỉ set bằng JS |
+
+Type khác (`Function`, custom class) không deserialize được từ attribute, chỉ set qua JS.
 
 ```html
 <!-- Boolean: presence = true -->
@@ -124,8 +124,8 @@ items: {
 // Test:
 const a = document.createElement('my-list');
 const b = document.createElement('my-list');
-a.push('items', 'x');
-console.log(b.items);  // ['x'] — bị thay đổi!
+a.items.push('x');                // mutate trực tiếp shared array
+console.log(b.items);             // ['x'] — bị thay đổi!
 ```
 
 Lý do: trong JavaScript, default value được đánh giá **1 lần** lúc class load. Mọi instance reference cùng object.
@@ -160,9 +160,6 @@ isActive: { type: Boolean, value: false }
 // Array/Object: PHẢI function
 items: { type: Array, value: () => [] }
 user: { type: Object, value: () => ({}) }
-
-// Function: cũng nên function (vì function là object)
-handler: { type: Function, value: () => () => {} }
 ```
 
 ## `notify: true` — enable two-way binding
@@ -348,13 +345,13 @@ computeFullName_(first, last) {
 Use case phổ biến:
 
 ```javascript
-// Boolean negation (không làm được trong template binding)
+// Boolean negation phức tạp (nếu chỉ negation đơn giản, dùng [[!isVisible]] trong template — Polymer support single ! ở đầu binding)
 isHidden_: {
   type: Boolean,
-  computed: 'computeIsHidden_(isVisible)',
+  computed: 'computeIsHidden_(isVisible, isOverride)',
 },
 
-computeIsHidden_(visible) { return !visible; }
+computeIsHidden_(visible, override) { return !visible && !override; }
 ```
 
 ```javascript
@@ -495,15 +492,9 @@ HTML attribute tự động kebab-case:
 
 Polymer tự convert. Bạn dùng `this.firstName` trong JS, viết `first-name` trong HTML.
 
-### Override mapping
+### Không thể override mapping
 
-```javascript
-firstName: {
-  type: String,
-  // Default: attribute = 'first-name'. Có thể override:
-  // (rất hiếm khi cần)
-}
-```
+Polymer 3 không có option để đổi tên attribute mapping — convention `firstName ↔ first-name` là **fixed**. Nếu cần observe attribute bằng tên khác, phải tự override `attributeChangedCallback`.
 
 ## Order — khi nào properties được initialize?
 

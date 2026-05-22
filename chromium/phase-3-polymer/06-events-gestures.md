@@ -219,20 +219,20 @@ class SearchPage extends PolymerElement {
   ready() {
     super.ready();
     
-    // Bind 'this' để có thể remove sau
-    this._keyHandler = this.onGlobalKey_.bind(this);
-    document.addEventListener('keydown', this._keyHandler);
+    // Bind 'this' để có thể remove sau (convention Chromium: suffix _ cho private field)
+    this.keyHandler_ = this.onGlobalKey_.bind(this);
+    document.addEventListener('keydown', this.keyHandler_);
     
-    this._resizeHandler = this.onResize_.bind(this);
-    window.addEventListener('resize', this._resizeHandler);
+    this.resizeHandler_ = this.onResize_.bind(this);
+    window.addEventListener('resize', this.resizeHandler_);
   }
   
   disconnectedCallback() {
     super.disconnectedCallback();
     
     // CLEANUP — quan trọng!
-    document.removeEventListener('keydown', this._keyHandler);
-    window.removeEventListener('resize', this._resizeHandler);
+    document.removeEventListener('keydown', this.keyHandler_);
+    window.removeEventListener('resize', this.resizeHandler_);
   }
   
   onGlobalKey_(e) {

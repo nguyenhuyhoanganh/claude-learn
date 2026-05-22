@@ -166,22 +166,40 @@ Tagged template literal `html\`...\``:
 
 ### Lưu ý `$=` cho attribute
 
+Polymer có **2 kiểu binding** với syntax gần giống nhau:
+
 ```html
-<!-- Sai: src=[[imageUrl]] sẽ không bind! -->
-<img src=[[imageUrl]]>
-
-<!-- Đúng: dùng $= cho HTML attribute -->
-<img src$="[[imageUrl]]">
-
-<!-- Khác với property binding (mặc định): -->
+<!-- Property binding (mặc định, không `$`): element.foo = bar -->
 <my-element foo="[[bar]]"></my-element>
-<!-- = element.foo = bar (property) -->
 
+<!-- Attribute binding (có `$=`): element.setAttribute('foo', bar) -->
 <my-element foo$="[[bar]]"></my-element>
-<!-- = element.setAttribute('foo', bar) (attribute) -->
 ```
 
-`$=` cho HTML standard attributes (`src`, `href`, `class`, `style`...). Property binding (mặc định, không `$`) cho custom component properties.
+Một số **HTML attribute bắt buộc phải dùng `$=`** vì không có property tương đương hoặc property tên khác:
+
+| Attribute | Bắt buộc `$=`? | Lý do |
+|---|---|---|
+| `class` | **Có** | Property là `className`/`classList`, không phải `class` |
+| `style` | **Có** | Property `style` là object CSSStyleDeclaration, không gán string trực tiếp |
+| `href` (anchor) | **Có** | Cross-browser issue với binding braces |
+| `for` (label) | **Có** | Property tên `htmlFor`, không phải `for` |
+| `data-*` | **Có** | Lưu vào `element.dataset`, không có property tên `data-x` |
+| `src` (img/script) | Không bắt buộc | `src` là property — `<img src="[[url]]">` bind qua property work; vẫn dùng `$=` được, vài team Chromium prefer cho consistency |
+| Boolean attr (`disabled`, `checked`, `hidden`) | Không bắt buộc | Có property tương đương — nhưng nên `$=` để serialize ra DOM (cho CSS selector `[disabled]`) |
+
+```html
+<!-- Sai: class không có $= → Polymer cố set div.class (không tồn tại), không update class -->
+<div class="[[cssClass]]">
+
+<!-- Đúng: $= cho class -->
+<div class$="[[cssClass]]">
+
+<!-- src work cả 2 cách, nhưng best practice là $= cho HTML standard attribute -->
+<img src$="[[imageUrl]]">
+```
+
+**Quy tắc nhớ**: Dùng `$=` cho HTML standard attribute (`class`, `style`, `href`, `for`, `data-*`, `aria-*`). Property binding (không `$`) cho custom component property.
 
 ## Phần 5 — `static get properties()` — định nghĩa data
 
@@ -221,7 +239,7 @@ static get properties() {
       reflectToAttribute: true,    // property → attribute
       notify: true,                // cho two-way binding
       observer: 'ageChanged_',     // callback khi đổi
-      readOnly: false,             // cho phép set từ ngoài
+      readOnly: true,              // chỉ set được qua _setAge() internal; setter công khai bị disable
     },
     
     // Object/Array — value PHẢI là function (tránh share giữa instances)
@@ -246,7 +264,7 @@ static get properties() {
 
 Sẽ đào sâu mỗi option trong Bài 4. Hiện tại quan trọng nhất:
 
-1. **`type`** — String, Number, Boolean, Array, Object, Function.
+1. **`type`** — String, Number, Boolean, Date, Array, Object (Polymer 3 chính thức support 6 type này — không có `Function`).
 2. **`value`** — default value. **Phải là function** cho Array/Object.
 3. **`reflectToAttribute`** — sync property xuống HTML attribute (cho CSS selector dùng được).
 
@@ -262,8 +280,8 @@ items: {
 // Hậu quả:
 const a = document.createElement('my-list');
 const b = document.createElement('my-list');
-a.push('x');
-console.log(b.items);  // ['x'] — bị thay đổi cả b!
+a.items.push('x');                // mutate trực tiếp shared array
+console.log(b.items);             // ['x'] — bị thay đổi cả b!
 
 // ĐÚNG — mỗi instance có array riêng
 items: {
@@ -456,18 +474,18 @@ class MyComponent extends PolymerElement {
 ready() {
   super.ready();
   // Setup once
-  this.$.input.addEventListener('focus', () => this._wasFocused = true);
+  this.$.input.addEventListener('focus', () => this.wasFocused_ = true);
 }
 
 connectedCallback() {
   super.connectedCallback();
   // Setup mỗi lần component xuất hiện
-  document.addEventListener('keydown', this._boundKeyHandler);
+  document.addEventListener('keydown', this.boundKeyHandler_);
 }
 
 disconnectedCallback() {
   super.disconnectedCallback();
-  document.removeEventListener('keydown', this._boundKeyHandler);
+  document.removeEventListener('keydown', this.boundKeyHandler_);
 }
 ```
 
@@ -672,7 +690,7 @@ Khoá học sẽ dùng cách 1 cho ví dụ đơn giản, cách 2 cho ví dụ p
 | Quên `static get is()` | `customElements.define(undefined, ...)` lỗi | Luôn có `static get is()` |
 | Quên `super.ready()` | Properties không hoạt động | Luôn gọi `super.method()` đầu tiên |
 | Array/Object value không là function | Shared between instances | `value: () => []` |
-| `<img src="[[url]]">` (thiếu `$=`) | Attribute không bind | `<img src$="[[url]]">` |
+| `<div class="[[cls]]">` (thiếu `$=` cho HTML standard attribute) | `class` không update — không có property `element.class` | `<div class$="[[cls]]">` |
 | Truy cập `this.$.search` trong constructor | undefined (DOM chưa render) | Dùng trong `ready()` hoặc `connectedCallback()` |
 | Quên `customElements.define()` | Tag không hoạt động, browser parse như unknown | Luôn define ở cuối file |
 | Tên tag không có `-` | `customElements.define()` throw error | `my-button` không `mybutton` |

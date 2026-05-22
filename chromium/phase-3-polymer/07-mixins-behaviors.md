@@ -36,7 +36,7 @@ class PrivacyPage extends PolymerElement {
 **Mixin** = function nhận một class, trả về class mới đã extend với features mới.
 
 ```javascript
-// Định nghĩa mixin
+// Định nghĩa mixin (Chromium convention: private field/method dùng suffix _)
 const I18nMixin = (superClass) => class extends superClass {
   // Methods của mixin
   i18n(key, ...args) {
@@ -48,16 +48,16 @@ const I18nMixin = (superClass) => class extends superClass {
     super.ready();
     
     // Listen language change
-    this._langHandler = this._onLangChange.bind(this);
-    document.addEventListener('language-changed', this._langHandler);
+    this.langHandler_ = this.onLangChange_.bind(this);
+    document.addEventListener('language-changed', this.langHandler_);
   }
   
   disconnectedCallback() {
     super.disconnectedCallback();
-    document.removeEventListener('language-changed', this._langHandler);
+    document.removeEventListener('language-changed', this.langHandler_);
   }
   
-  _onLangChange() {
+  onLangChange_() {
     // Force re-render mọi binding có i18n call
     this.notifyResize();
   }

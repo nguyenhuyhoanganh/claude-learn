@@ -360,7 +360,9 @@ Icon-only button. Build-in tooltip, focus state.
 ### `cr-tabs`
 
 ```html
-<cr-tabs tab-names="[['General', 'Privacy', 'Advanced']]" selected="{{selectedTab}}">
+<!-- Bind tab-names tới property của component (đừng inline array literal — Polymer
+     không evaluate JS expression trong binding). -->
+<cr-tabs tab-names="[[tabNames_]]" selected="{{selectedTab}}">
 </cr-tabs>
 
 <div hidden$="[[!isTab_(selectedTab, 0)]]">General content</div>
@@ -369,6 +371,16 @@ Icon-only button. Build-in tooltip, focus state.
 ```
 
 ```javascript
+static get properties() {
+  return {
+    tabNames_: {
+      type: Array,
+      value: () => ['General', 'Privacy', 'Advanced'],
+    },
+    selectedTab: { type: Number, value: 0 },
+  };
+}
+
 isTab_(selected, idx) { return selected === idx; }
 ```
 

@@ -42,7 +42,7 @@ this.name = 'Bob';
 
 Polymer thay `[[title]]` bằng text content của property `title`. Khi `this.title = 'Hello'`, text content tự update.
 
-> **Lưu ý**: Polymer KHÔNG hỗ trợ expression trong binding. `[[count + 1]]` không work. Phải dùng computed property (Bài 4).
+> **Lưu ý**: Polymer chỉ support **đúng một operator** — single `!` ở vị trí đầu binding (vd `[[!isVisible]]`). Mọi expression khác như `[[count + 1]]`, `[[a > b]]`, `[[cond ? x : y]]` đều **không work** — phải dùng computed property (Bài 4).
 
 ### 2. Attribute binding — bind vào HTML attribute
 
@@ -75,22 +75,25 @@ Quy tắc đơn giản:
 <a href$="[[url]]">Link</a>
 
 <!-- class attribute: DÙNG $ -->
-<div class$="card [[isActive ? 'active' : '']]">...</div>
+<div class$="card [[itemClass]]">...</div>
+<!-- Lưu ý: Polymer không cho ternary trong binding (vd `[[isActive ? 'active' : '']]`).
+     Cần combine class thì phải tạo computed property (xem section "Multiple bindings" bên dưới). -->
 ```
 
 ### 3. Boolean attribute binding
 
-Cho attribute kiểu "có hoặc không có" (`disabled`, `hidden`, `checked`...):
+Cho attribute kiểu "có hoặc không có" (`disabled`, `hidden`, `checked`...) — **best practice là dùng `$=`**:
 
 ```html
-<!-- Sai (sẽ render disabled="false" hoặc disabled="true" — cả 2 đều mean disabled!) -->
-<button disabled="[[isDisabled]]">Click</button>
-
-<!-- Đúng -->
+<!-- Best practice cho mọi element (native lẫn custom) -->
 <button disabled$="[[isDisabled]]">Click</button>
 ```
 
-Polymer hiểu boolean: `true` → có attribute, `false` → không có attribute.
+Với `$=`, Polymer translate boolean → có/không có attribute:
+- `isDisabled = true` → render `<button disabled="">` (browser hiểu là disabled)
+- `isDisabled = false` → render `<button>` (không có attribute)
+
+> **Vì sao phải `$=`?** Với **native** `<button>` thì `disabled="[[isDisabled]]"` (không `$`) cũng work vì Polymer làm property binding (`button.disabled = isDisabled` — `disabled` là JS boolean property của `HTMLButtonElement`, browser tự sync attribute). Nhưng với **custom element** không khai báo property `disabled`, property binding sẽ silent fail. Dùng `$=` an toàn cho cả hai và buộc serialize ra attribute (cần thiết khi CSS dùng `[disabled]` selector hoặc khi đọc bằng `element.hasAttribute('disabled')`).
 
 ### 4. Event binding — không phải data binding nhưng cùng cú pháp template
 
@@ -174,7 +177,7 @@ Parent template:
 class MyInput extends PolymerElement {
   static get template() {
     return html`
-      <input value$="[[value]]" on-input="onInput_">
+      <input value="[[value]]" on-input="onInput_">
     `;
   }
   
@@ -344,52 +347,73 @@ computeFullName_(first, last) {
 
 ## Negation / boolean operations trong binding?
 
-Polymer **KHÔNG hỗ trợ expression** trong binding:
+Polymer **chỉ support đúng 1 toán tử**: `!` (logical NOT) làm **ký tự đầu tiên** ngay sau `[[` hoặc `{{`. Ngoài ra **không có operator nào** khác.
 
 ```html
-<!-- KHÔNG WORK -->
+<!-- WORK: single ! ở đầu binding -->
 <div hidden$="[[!isVisible]]">
-<div hidden$="[[count > 0]]">
-<div class$="[[isActive ? 'on' : 'off']]">
+<button disabled$="[[!canSubmit]]">
+
+<!-- KHÔNG WORK: các expression khác -->
+<div hidden$="[[!!isVisible]]">          <!-- không có double-not -->
+<div hidden$="[[count > 0]]">            <!-- không có comparison -->
+<div class$="[[isActive ? 'on' : 'off']]"> <!-- không có ternary -->
+<p>[[count + 1]]</p>                     <!-- không có arithmetic -->
 ```
 
-Phải dùng computed property:
+Cho mọi case phức tạp hơn `!`, phải dùng computed property:
 
 ```javascript
 static get properties() {
   return {
-    isVisible: Boolean,
-    isHidden_: {
+    count: Number,
+    hasItems_: {
       type: Boolean,
-      computed: 'computeHidden_(isVisible)',
+      computed: 'computeHasItems_(count)',
     },
   };
 }
 
-computeHidden_(visible) {
-  return !visible;
+computeHasItems_(count) {
+  return count > 0;
 }
 ```
 
 ```html
-<div hidden$="[[isHidden_]]">
+<div hidden$="[[!hasItems_]]">   <!-- single ! vẫn dùng được -->
+<div hidden$="[[hasItems_]]">    <!-- hoặc direct -->
 ```
 
 → Verbose hơn React/Vue nhưng force tách biệt logic ra khỏi template. Có ưu/nhược.
 
-## Multiple bindings trong 1 attribute — concatenation
+## Multiple bindings trong 1 attribute — compound binding
+
+Polymer **có support** "compound binding" — kết hợp string literal với binding trong cùng 1 attribute:
 
 ```html
-<!-- KHÔNG WORK trong Polymer -->
-<div class="card [[type]]">
-
-<!-- Phải computed property hoặc tách dòng -->
-<div class$="card [[typeClass]]">
+<!-- Đều WORK -->
+<div class$="card [[type]]">                   <!-- "card " + giá trị type -->
+<a href$="/items/[[id]]">                      <!-- prefix + id -->
+<div class$="card [[type]] [[size]]">          <!-- nhiều binding + literal -->
+<span>Xin chào [[name]], tuổi [[age]]</span>   <!-- compound binding trong text -->
 ```
 
-Polymer cho phép **single binding** trong attribute, không cho concatenation phức tạp.
+**Caveat quan trọng**: Compound binding **luôn là one-way (host → target)**, kể cả khi viết bằng `{{...}}`. Không thể two-way bind kiểu compound.
 
-Trick: dùng `_computeClasses_` computed property:
+**Bẫy phổ biến**: Quên `$=` cho HTML standard attribute (`class`, `style`, `href`, `for`, `data-*`):
+
+```html
+<!-- KHÔNG WORK: class cần $= -->
+<div class="card [[type]]">
+
+<!-- Đúng -->
+<div class$="card [[type]]">
+```
+
+**Khi nào nên dùng computed property thay vì compound binding?**
+- Cần logic điều kiện (vd "thêm class `active` nếu `isOn`, `disabled` nếu disabled..."). Compound binding không support logic.
+- Cần two-way (compound luôn one-way).
+- Cần reuse nhiều chỗ.
 
 ```javascript
 computeClasses_(type, isActive) {
@@ -460,13 +484,17 @@ this.set('user.name', 'Bob');
 this.push('items', x);
 ```
 
-### 3. `[[!something]]` không work
+### 3. Expression phức tạp trong binding không work (trừ single `!`)
 
 ```html
-<!-- Sai -->
+<!-- WORK: chỉ single `!` ở đầu được support -->
 <div hidden$="[[!isVisible]]">
 
-<!-- Đúng: computed -->
+<!-- KHÔNG WORK: các expression khác -->
+<div hidden$="[[count > 0]]">
+<div class$="[[isActive ? 'on' : 'off']]">
+
+<!-- Phải dùng computed cho các trường hợp khác -->
 <div hidden$="[[isHidden_]]">
 ```
 
@@ -485,13 +513,14 @@ Chú ý: trong Chromium convention, method `_` ở **cuối** (`computeFullName_
 ### 5. `$=` cho attribute, không cho property
 
 ```html
-<!-- Sai: data-id$ vô nghĩa nếu data-id không phải standard attribute -->
+<!-- Sai: data-* là HTML standard attribute. Không có $=, Polymer cố set property
+     `element['data-id']` (không tồn tại) → attribute không được serialize ra DOM. -->
+<div data-id="[[itemId]]">
+
+<!-- Đúng: data-* là standard, dùng $= để Polymer setAttribute('data-id', value) -->
 <div data-id$="[[itemId]]">
 
-<!-- Đúng: data-* là standard, dùng $= -->
-<div data-id$="[[itemId]]">
-
-<!-- Hoặc property style -->
+<!-- Custom element property: KHÔNG dùng $= -->
 <my-element item-id="[[itemId]]"></my-element>
 <!-- → element.itemId = itemId (camelCase auto convert) -->
 ```
@@ -600,7 +629,7 @@ Dùng:
 
 Trong ví dụ này:
 - `{{searchQuery}}` — two-way: input đổi → parent đổi → `<p>` cập nhật.
-- `[[!hasResults_]]` — không work! Phải dùng computed `hasResults_`.
+- `hidden$="[[!hasResults_]]"` — single `!` ngay đầu binding **được Polymer support** (xem section "Negation" bên dưới). Không cần khai báo riêng `noResults_`.
 - `value="{{query::input}}"` — bind native input value.
 - `notify: true` cho `query` → cho phép `{{query}}` từ parent.
 
@@ -613,6 +642,6 @@ Trong ví dụ này:
 - `{{prop::input}}` cho two-way với native input.
 - `this.set('a.b.c', value)` thay vì `this.a.b.c = value` (vì nested change).
 - `this.push('items', x)` thay vì `this.items.push(x)`.
-- Polymer **không support expression** trong binding — phải dùng computed property cho `!`, `?:`, `+`, etc.
+- Polymer **chỉ support 1 operator**: single `!` ở đầu binding (vd `[[!isVisible]]`). `?:`, `+`, `>`, `&&`, ... đều không work — phải dùng computed property.
 
 **Bài kế tiếp** → [Bài 4: Properties — notify, observers, computed](04-properties-observers.md)
