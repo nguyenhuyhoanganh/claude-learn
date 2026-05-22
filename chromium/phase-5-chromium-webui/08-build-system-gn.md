@@ -1,4 +1,4 @@
-# Bài 3: Build System và Resources
+# Bài 8: Build System (GN) — đầy đủ pipeline
 
 ## Tổng quan Build Pipeline
 
@@ -52,9 +52,11 @@ css_to_wrapper("css_wrapper_ts") {
   in_files = [ "settings_page.css" ]
 }
 
-# Mojo bindings generation
-mojo_webui_js_bundle("mojo_bindings_ts") {
-  mojo_files = [ "settings.mojom" ]
+# Mojo bindings generation — Chromium dùng template `mojom`
+# (xem //mojo/public/tools/bindings/mojom.gni)
+mojom("mojo_bindings") {
+  sources = [ "settings.mojom" ]
+  webui_module_path = "/"        # mount JS bindings tại chrome://settings/
 }
 ```
 

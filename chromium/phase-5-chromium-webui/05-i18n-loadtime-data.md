@@ -232,11 +232,23 @@ const html = this.i18nAdvanced('learnMoreLink', {
 // "Learn more about this setting" với <a> link work
 ```
 
-```html
-<div .innerHTML="[[i18nAdvanced('learnMoreLink')]]"></div>
+Polymer không bind được `innerHTML` qua template syntax — phải set bằng JS, đi qua `sanitizeInnerHtml` để chống XSS:
+
+```javascript
+import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
+
+ready() {
+  super.ready();
+  this.$.learnMoreText.innerHTML =
+      sanitizeInnerHtml(this.i18nAdvanced('learnMoreLink'));
+}
 ```
 
-> ⚠️ `i18nAdvanced` allow HTML — chỉ dùng với **trusted translation strings**, không bao giờ user input.
+```html
+<div id="learnMoreText"></div>
+```
+
+> ⚠️ `i18nAdvanced` allow HTML — chỉ dùng với **trusted translation strings**, không bao giờ user input. `sanitizeInnerHtml` chỉ cho phép subset whitelist của HTML tags.
 
 ### LitElement version — `I18nMixinLit`
 

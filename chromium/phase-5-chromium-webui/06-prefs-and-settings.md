@@ -98,7 +98,7 @@ Chromium có **2 PrefService instances**:
 ```cpp
 // Local state
 PrefService* local_state = g_browser_process->local_state();
-bool browser_lang = local_state->GetString("intl.app_locale");
+std::string browser_lang = local_state->GetString("intl.app_locale");
 
 // Profile prefs (per-user)
 PrefService* prefs = profile->GetPrefs();

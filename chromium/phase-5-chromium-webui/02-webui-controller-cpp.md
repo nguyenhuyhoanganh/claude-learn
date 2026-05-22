@@ -189,7 +189,7 @@ JS không giao tiếp Mojo trực tiếp trong component — thường qua một
 
 ```javascript
 // settings_browser_proxy.js
-import {SettingsPageHandlerRemote, PageCallbackRouter}
+import {PageCallbackRouter, PageHandlerFactory, PageHandlerRemote}
     from './settings.mojom-webui.js';
 
 // Singleton
@@ -197,14 +197,14 @@ let instance = null;
 
 export class SettingsBrowserProxy {
   constructor() {
-    this.handler = new SettingsPageHandlerRemote();
+    this.handler = new PageHandlerRemote();
     this.callbackRouter = new PageCallbackRouter();
 
-    // Kết nối: tạo pipe và gửi sang C++
-    const factory = new PageHandlerFactoryRemote();
-    factory.$.bindNewPipeAndPassReceiver();
-
-    factory.createPageHandler(
+    // Pattern chuẩn Chromium: PageHandlerFactory.getRemote() là static method
+    // mojo bindings tự gen — trả về Remote đã bind sẵn qua interface broker
+    // của browser. Sau đó gọi createPageHandler để tạo cả PageHandler (JS→C++)
+    // và Page callback (C++→JS) trên cùng connection.
+    PageHandlerFactory.getRemote().createPageHandler(
       this.callbackRouter.$.bindNewPipeAndPassRemote(),
       this.handler.$.bindNewPipeAndPassReceiver(),
     );

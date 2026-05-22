@@ -294,7 +294,15 @@ Quan trọng: thường pair với `cr-link-row` slot `secondary-action`:
 
 <!-- States -->
 <cr-button disabled>Disabled</cr-button>
-<cr-button loading>Loading...</cr-button>
+
+<!-- cr-button không có attribute `loading` built-in. Nếu cần loading state,
+     dùng disabled + thay nội dung (vd hiện spinner/text khác trong slot): -->
+<cr-button disabled$="[[isSubmitting_]]">
+  <template is="dom-if" if="[[isSubmitting_]]">
+    <cr-loading-gradient></cr-loading-gradient>
+  </template>
+  <template is="dom-if" if="[[!isSubmitting_]]">Submit</template>
+</cr-button>
 ```
 
 ### `cr-icon-button` — icon-only button

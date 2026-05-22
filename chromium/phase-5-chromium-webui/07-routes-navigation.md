@@ -83,20 +83,24 @@ export class Route {
   isSubpageOf(route: Route): boolean { ... }
 }
 
-// Define all routes
+// Define all routes — phải build top-level trước, sub-routes sau
+// (không thể tham chiếu `routes.X` trong chính object literal của `routes`).
+const BASIC = new Route('/');
+const ABOUT = new Route('/about');
+const APPEARANCE = new Route('/appearance');
+const PRIVACY = new Route('/privacy');
+const PEOPLE = new Route('/people');
+
 export const routes = {
-  BASIC: new Route('/'),
-  ABOUT: new Route('/about'),
-  APPEARANCE: new Route('/appearance'),
-  PRIVACY: new Route('/privacy'),
-  PEOPLE: new Route('/people'),
+  BASIC, ABOUT, APPEARANCE, PRIVACY, PEOPLE,
   
-  // Sub-routes
-  PRIVACY_COOKIES: routes.PRIVACY.createChild('/cookies'),
-  PRIVACY_SECURITY: routes.PRIVACY.createChild('/security'),
-  SYNC: routes.PEOPLE.createChild('/sync'),
-  SYNC_ADVANCED: routes.SYNC.createChild('/advanced'),
+  // Sub-routes — tham chiếu local consts ở trên
+  PRIVACY_COOKIES: PRIVACY.createChild('/cookies'),
+  PRIVACY_SECURITY: PRIVACY.createChild('/security'),
+  SYNC: PEOPLE.createChild('/sync'),
 };
+// Sub-routes cấp sâu hơn: gán sau khi `routes` đã exist
+routes.SYNC_ADVANCED = routes.SYNC.createChild('/advanced');
 ```
 
 → Routes là **tree structure**. Sub-page biết parent.
@@ -187,20 +191,24 @@ class Router {
   private routeFromCurrentUrl_() {
     const path = window.location.pathname;
     const route = this.matchRoute_(path);
-    this.setCurrentRoute_(route, false);  // không pushState (vì đã từ URL)
+    const params = new URLSearchParams(window.location.search);
+    this.setCurrentRoute_(route, params, /*pushState=*/false);  // đã từ URL
   }
   
   navigateTo(route: Route, params?: URLSearchParams) {
-    this.setCurrentRoute_(route, true);   // pushState
+    this.setCurrentRoute_(route, params, /*pushState=*/true);
   }
   
-  private setCurrentRoute_(route: Route, pushState: boolean) {
+  private setCurrentRoute_(route: Route,
+                            params: URLSearchParams|undefined,
+                            pushState: boolean) {
     if (pushState) {
       let url = route.path;
       if (params) url += `?${params.toString()}`;
       history.pushState(null, '', url);
     }
     this.currentRoute_ = route;
+    this.currentQueryParams_ = params ?? new URLSearchParams();
     this.notifyObservers_();
   }
 }
