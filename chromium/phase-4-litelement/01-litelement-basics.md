@@ -302,11 +302,17 @@ class SettingsToggle extends LitElement {
 
     .toggle {
       width: 36px; height: 20px;
-      background: ${this.checked ? 'var(--toggle-on, #1a73e8)' : 'var(--toggle-off, #ccc)'};
+      background: var(--toggle-off, #ccc);
       border-radius: 10px;
       position: relative;
       cursor: pointer;
       transition: background 0.2s;
+    }
+    /* Vì checked có reflect: true → attribute selector hoạt động. 
+       static styles được evaluate 1 lần khi class define, KHÔNG có this 
+       — không thể viết `background: ${this.checked ? ... : ...}` */
+    :host([checked]) .toggle {
+      background: var(--toggle-on, #1a73e8);
     }
   `;
 

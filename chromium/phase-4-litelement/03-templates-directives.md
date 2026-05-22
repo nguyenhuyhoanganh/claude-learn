@@ -314,11 +314,11 @@ render() {
 render() {
   return html`
     <div class="container">
-      ${this._isLoading_ ? html`
+      ${this._isLoading ? html`
         <div class="loading">
           <cr-loading-gradient></cr-loading-gradient>
         </div>
-      ` : this._items_.length === 0 ? html`
+      ` : this._items.length === 0 ? html`
         <div class="empty-state">
           <img src="empty.svg" alt="">
           <p>No items found</p>
@@ -327,7 +327,7 @@ render() {
       ` : html`
         <ul>
           ${repeat(
-            this._items_,
+            this._items,
             item => item.id,
             item => html`<li>${item.name}</li>`
           )}
