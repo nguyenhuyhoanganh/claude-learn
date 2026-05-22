@@ -92,31 +92,40 @@ JS (Renderer Process)              C++ (Browser Process)
 ──────────────────────             ──────────────────────
 
 // Page loads, JS runs:
-import {PageHandlerFactory}        class WebUIController
-    from './foo.mojom-webui.js';       : MojoWebUIController {
-                                     void BindInterface(
-// Chromium tự động kết nối:          PendingReceiver<Factory>);
-factory = new Factory();           }
-factory.$.bindNewPipeAndPass
-    Receiver();
-         │
-         │  (Chromium magic: WebUI framework
-         │   auto-routes BindInterface call)
-         ▼
+import {PageHandlerFactory,        class WebUIController
+        PageHandlerRemote,             : MojoWebUIController {
+        PageCallbackRouter}            void BindInterface(
+    from './foo.mojom-webui.js';       PendingReceiver<Factory>);
+                                   }
+// PageHandlerFactory.getRemote()
+// là static method auto-gen: lấy
+// Remote đã pre-bind qua interface
+// broker của WebUI framework
+// (WebUIController.BindInterface
+// được gọi tự động bởi framework)
+const factory =
+    PageHandlerFactory.getRemote();
+
+// Tạo 2 endpoint còn lại:
+const router = new PageCallbackRouter();
+const handler = new PageHandlerRemote();
+
 factory.createPageHandler(         void CreatePageHandler(
-  pageReceiver,                        PendingRemote<Page> page,
-  handlerRemote,                       PendingReceiver<Handler> h) {
-);                                   handler_ = new HandlerImpl(h, page);
+  router.$.bindNewPipe                 PendingRemote<Page> page,
+       AndPassRemote(),                PendingReceiver<Handler> h) {
+  handler.$.bindNewPipe              handler_ = new HandlerImpl(
+       AndPassReceiver(),               std::move(h),
+);                                     std::move(page));
                                    }
 
 // Now connected:
-await handler.getData();           void GetData(callback) {
-                                     callback.Run(ReadData());
-const {data} = response;          }
+const {data} =                     void GetData(GetDataCallback cb) {
+    await handler.getData();         std::move(cb).Run(ReadData());
+                                   }
 
 // Push from C++:
-                                   page_->OnDataChanged(newData);
-onDataChanged(newData) { ... }
+router.onDataChanged                 page_->OnDataChanged(newData);
+    .addListener(d => {...});
 ```
 
 ---
@@ -128,13 +137,21 @@ Khi compile `foo.mojom` cho JavaScript, bạn nhận được 3 classes chính:
 ### 1. `FooRemote` — Client (JS gọi C++)
 
 ```javascript
-import {FooRemote} from './foo.mojom-webui.js';
+import {FooRemote, Foo} from './foo.mojom-webui.js';
 
+// 2 cách tạo remote:
+
+// Cách A — static getRemote() (cho top-level WebUI interface):
+const remote = Foo.getRemote();
+// Đã bind sẵn qua interface broker, dùng được luôn.
+
+// Cách B — new + bindNew*, rồi PASS pending receiver sang đầu kia.
+// Pending receiver chính là return value của bindNewPipeAndPassReceiver():
 const remote = new FooRemote();
-// Cần bind pipe trước khi gọi:
-remote.$.bindNewPipeAndPassReceiver(); // Trả PendingReceiver để gửi sang C++
+const pendingReceiver = remote.$.bindNewPipeAndPassReceiver();
+factory.createSomething(pendingReceiver);  // pass cho C++ qua factory đã bind
 
-// Sau khi connected:
+// Sau khi connected (hoặc remote đã getRemote()):
 const {result} = await remote.someMethod(arg1, arg2);
 ```
 

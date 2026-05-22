@@ -285,10 +285,10 @@ module samsung.browser.new_tab.mojom;
 // Interfaces: PascalCase
 interface NewTabPageHandler { ... };
 
-// Methods: camelCase trong IDL (→ camelCase trong JS)
+// Methods: PascalCase trong IDL → bindings tự convert sang camelCase trong JS
 interface Handler {
-  getBookmarks() => (array<Bookmark> bookmarks);
-  setSearchEngine(string engine);
+  GetBookmarks() => (array<Bookmark> bookmarks);   // JS: handler.getBookmarks()
+  SetSearchEngine(string engine);                  // JS: handler.setSearchEngine()
 };
 
 // Structs: PascalCase

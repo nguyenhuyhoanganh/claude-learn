@@ -96,26 +96,26 @@ const {data} = await remote.getData();
 
 ## `getRemote()` — Auto-connect
 
-Nhiều Mojo interfaces trong Chromium WebUI có static `getRemote()` method:
+Nhiều Mojo interfaces trong Chromium WebUI có static `getRemote()` method. **Cơ chế thật** (không phải code trên — đừng copy):
 
-```javascript
-// Bên trong generated code (mojom-webui.js):
-static getRemote() {
-  let remote = new FooRemote();
-  remote.$.bindNewPipeAndPassReceiver().handle.close();
-  // Thực ra phức tạp hơn — nhờ Chromium infrastructure tự route
-  return remote;
-}
+```text
+1. getRemote() tạo PendingReceiver mới qua bindNewPipeAndPassReceiver().
+2. Gọi MojoBindings.connect() / Mojo Embedder để route receiver đó qua
+   "interface broker" của WebUI framework.
+3. Interface broker dispatch tới WebUIController.BindInterface() trong C++
+   (đã được framework đăng ký lúc tạo WebUI page).
+4. Receiver được bind ở C++ side, Remote ở JS sẵn sàng dùng.
 ```
 
-Pattern này được dùng khi interface được setup bởi Chromium (không cần Factory):
+→ `getRemote()` giúp **bỏ qua step factory** khi C++ side đã setup BindInterface trực tiếp cho interface đó. Pattern này thấy ở Chromium-managed interfaces (vd `PageHandlerFactory`, một số service interface).
 
-```javascript
-import {BrowserProxy} from 'chrome://resources/js/cr.js';
+Khi nào dùng `getRemote()` trực tiếp vs qua factory pattern:
 
-// Một số interfaces có thể gọi trực tiếp
-const proxy = BrowserProxy.getInstance();
-```
+| Dùng `Interface.getRemote()` | Dùng factory pattern |
+|---|---|
+| Interface là entry point (factory hoặc 1-method handler) | Cần cả Handler + Page (callback) trong 1 connection |
+| C++ implement `BindInterface` cho riêng interface đó | Có sub-handler tạo on-demand |
+| Không có callback channel ngược JS ← C++ | Cần observer/push từ C++ |
 
 ---
 
@@ -197,10 +197,11 @@ remote.$.setConnectionErrorHandler(() => {
   // Có thể reconnect hoặc show error UI
   this._showConnectionError();
 });
-
-// Chromium cũng có pattern disconnect handler:
-remote.onConnectionError = () => { ... };
 ```
+
+API duy nhất là `setConnectionErrorHandler` trên `$`. Không có pattern gán
+trực tiếp như `remote.onConnectionError = ...` (đó là LitElement event handler
+syntax, không phải Mojo).
 
 ---
 
