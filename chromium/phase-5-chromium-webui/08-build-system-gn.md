@@ -23,7 +23,8 @@ BUILD.gn           →  gn gen→  build.ninja
 ```gn
 # BUILD.gn cho một WebUI page
 
-# JS/TS library
+# JS/TS library. Đây là target low-level; WebUI mới trong Chromium
+# thường bọc các target này bằng build_webui(...) để gom TS/CSS/HTML/resources.
 ts_library("settings_page_ts") {
   sources = [
     "settings_page.ts",

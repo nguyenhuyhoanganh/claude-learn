@@ -318,7 +318,7 @@ computeFullName(first, last) {
 }
 ```
 
-**Cẩn thận**: method **phải public** (không có `_` prefix) khi dùng trong template. Polymer parser cần xem được tên method.
+**Cẩn thận**: method dùng trong binding phải tồn tại trên instance. Chromium convention thường đặt `_` ở cuối tên method private-ish (ví dụ `computeFullName_`). Dấu `_` ở đầu tên method vẫn hoạt động về kỹ thuật, nhưng không khớp convention Chromium.
 
 Phổ biến hơn là dùng [computed property](04-properties-observers.md) (declared, không inline):
 
@@ -498,17 +498,17 @@ this.push('items', x);
 <div hidden$="[[isHidden_]]">
 ```
 
-### 4. Method trong binding phải public
+### 4. Method trong binding phải tồn tại trên instance
 
 ```html
-<!-- Sai: method có _ → Polymer parser không tìm thấy -->
+<!-- Hoạt động về kỹ thuật, nhưng không theo convention Chromium -->
 <p>[[_computeFullName(first, last)]]</p>
 
-<!-- Đúng: method public -->
+<!-- Convention Chromium: suffix _ cho helper/private method -->
 <p>[[computeFullName_(first, last)]]</p>
 ```
 
-Chú ý: trong Chromium convention, method `_` ở **cuối** (`computeFullName_`) thì OK. `_` ở **đầu** (`_computeFullName`) là sai.
+Polymer lookup method theo tên trên element instance. Vì vậy lỗi thực sự là method không tồn tại hoặc sai tên, không phải vì tên bắt đầu bằng `_`.
 
 ### 5. `$=` cho attribute, không cho property
 

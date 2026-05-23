@@ -199,7 +199,7 @@ Polymer:
 ### `restamp` — destroy vs hide
 
 ```html
-<!-- Default: lazy destroy -->
+<!-- Default: hide, giữ stamped DOM lại -->
 <template is="dom-if" if="[[showDialog]]">
   <my-dialog></my-dialog>
 </template>

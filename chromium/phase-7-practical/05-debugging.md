@@ -302,8 +302,8 @@ DCHECK(page_.is_bound()) << "Page remote not connected";
 DCHECK_GT(font_size, 0) << "Invalid font size: " << font_size;
 
 // Xem logs:
-chrome --enable-logging --vmodule=settings_handler*=2
-# → Logs ra stderr hoặc chrome_debug.log
+chrome --enable-logging=stderr --vmodule=settings_handler*=2
+# → Logs ra terminal. Nếu chỉ dùng --enable-logging, logs thường vào chrome_debug.log.
 ```
 
 ---

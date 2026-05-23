@@ -247,15 +247,14 @@ Quan trọng: thường pair với `cr-link-row` slot `secondary-action`:
     min="0" 
     max="100"
     value="{{volume}}"
-    label="Volume"
-    show-markers="11"
+    marker-count="11"
     snaps>
 </cr-slider>
 ```
 
 - `min` / `max` — range.
 - `value` — current (two-way).
-- `show-markers="N"` — N tick marks.
+- `marker-count="N"` — số marker/tick.
 - `snaps` — snap to tick marks.
 
 ### `cr-search-field` — search box độc lập (không phải toolbar)

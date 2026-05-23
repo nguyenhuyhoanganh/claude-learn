@@ -507,11 +507,11 @@ Polymer 3 không có option để đổi tên attribute mapping — convention `
    ↓
 4. Programmatic property sets (vd this.foo = 'bar' trong constructor)
    ↓
-5. ready() được gọi
+5. Element được attach vào DOM → connectedCallback()
    ↓
-6. connectedCallback()
+6. Trong super.connectedCallback(), Polymer enable properties và gọi ready() lần đầu
    ↓
-7. Initial render (DOM được tạo, bindings hoạt động)
+7. Local DOM đã được stamp, bindings hoạt động; phần còn lại của connectedCallback() tiếp tục chạy
 ```
 
 → Lúc `ready()`, mọi property đã có giá trị. Đó là chỗ tốt để do logic phụ thuộc property.

@@ -19,7 +19,7 @@ class MyComponent extends LitElement {
 }
 ```
 
-Lit tự động inject styles vào shadow DOM. Styles được share (dùng `<style>` với `CSSStyleSheet` adoptedStyleSheets).
+Lit tự động inject styles vào shadow DOM. Khi browser hỗ trợ, Lit dùng `adoptedStyleSheets` để share `CSSStyleSheet`; nếu không, Lit fallback sang `<style>`.
 
 ---
 

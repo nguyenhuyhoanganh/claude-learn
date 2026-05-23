@@ -429,7 +429,7 @@ class MyComponent extends PolymerElement {
     super.ready();
     // DOM đã render. Properties đã set default.
     // Có thể query elements: this.$.*, this.shadowRoot.querySelector
-    // Chạy MỘT LẦN duy nhất trong life của instance.
+    // Chạy MỘT LẦN duy nhất trong lần connect đầu của instance.
   }
 
   // ─── Web Components native ───
@@ -459,7 +459,7 @@ class MyComponent extends PolymerElement {
 
 | | `ready()` | `connectedCallback()` |
 |--|-----------|----------------------|
-| Khi gọi | Sau khi DOM render lần đầu | Mỗi lần connect vào DOM |
+| Khi gọi | Một lần trong lần connect đầu, sau khi local DOM được stamp | Mỗi lần connect vào DOM |
 | Lần gọi | **1 lần** | Nhiều lần |
 | Dùng cho | One-time setup | Subscribe global state |
 

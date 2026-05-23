@@ -364,4 +364,4 @@ interface SamsungSettingsHandlerFactory {
 
 ---
 
-→ [Bài tiếp theo: Data Types và Serialization](03-data-types.md)
+→ [Bài tiếp theo: Remote, Receiver và Connection Setup](03-interfaces-remote-receiver.md)

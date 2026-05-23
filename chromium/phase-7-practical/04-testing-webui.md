@@ -421,8 +421,9 @@ suite('QuickLauncherApp', () => {
 ## Running tests
 
 ```bash
-# Unit tests (run trong browser_tests harness)
-out/Default/browser_tests --gtest_filter="WebUIMochaBrowserTest.QuickLauncher*"
+# Unit tests (Mocha trong browser_tests harness)
+# Filter theo fixture/subclass cụ thể của page, không dùng base class WebUIMochaBrowserTest.
+out/Default/browser_tests --gtest_filter="QuickLauncherMochaTest*"
 
 # Browser tests
 out/Default/browser_tests --gtest_filter="QuickLauncherBrowserTest*"
@@ -431,7 +432,7 @@ out/Default/browser_tests --gtest_filter="QuickLauncherBrowserTest*"
 out/Default/browser_tests --gtest_filter="*.AddApp"
 
 # With logging
-out/Default/browser_tests --gtest_filter="*Quick*" --enable-logging --vmodule="quick_launcher*=2"
+out/Default/browser_tests --gtest_filter="*Quick*" --enable-logging=stderr --vmodule="quick_launcher*=2"
 ```
 
 ## Coverage report

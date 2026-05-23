@@ -5,7 +5,7 @@
 Không cần clone toàn bộ Chromium (~30GB). Dùng:
 
 - **https://source.chromium.org** — Official Chromium Code Search, full text search
-- **https://cs.chromium.org** — Alias
+- **https://cs.chromium.org** — URL cũ; nếu gặp link này, chuyển sang `source.chromium.org`
 - **grep.app** — Cross-repo search nhanh hơn
 
 ---

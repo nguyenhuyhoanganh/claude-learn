@@ -263,11 +263,21 @@ Polymer({
 });
 ```
 
-→ **Polymer 3 không support `listeners`**. Phải dùng `on-event` trong template hoặc `addEventListener` trong `ready()`.
+→ `PolymerElement` style Polymer 3 không dùng `listeners`. Phải dùng `on-event` trong template hoặc `addEventListener` trong `ready()`. Legacy mode qua `LegacyElementMixin` vẫn có thể support `listeners`, nhưng không dùng cho code mới.
 
 ## Polymer gesture events
 
 Polymer cung cấp gesture events từ thời mobile touch chậm. Phổ biến nhất:
+
+Trong Polymer 3, muốn listen gesture event bằng `on-tap`, `on-track`, `on-down`, `on-up` trong template, component phải apply `GestureEventListeners` mixin:
+
+```javascript
+import {GestureEventListeners} from '@polymer/polymer/lib/mixins/gesture-event-listeners.js';
+
+class MyGestureElement extends GestureEventListeners(PolymerElement) {
+  // ...
+}
+```
 
 ### `tap`
 

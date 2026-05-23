@@ -728,15 +728,25 @@ Polymer({
 });
 ```
 
-→ **Polymer 3 không hỗ trợ `listeners`**. Phải dùng `on-event` trong template hoặc `addEventListener` trong `ready()`.
+→ `PolymerElement` style Polymer 3 không dùng `listeners`. Phải dùng `on-event` trong template hoặc `addEventListener` trong `ready()`. Legacy mode qua `LegacyElementMixin` vẫn có thể support `listeners`, nhưng không dùng cho code mới.
 
-Khi đọc code rất cũ và thấy `listeners`, đó là Polymer 1.
+Khi đọc code rất cũ và thấy `listeners`, đó thường là Polymer legacy style.
 
 ---
 
 ## 18. Polymer gesture events — `track`
 
 Polymer cung cấp gesture events cho drag:
+
+Trong Polymer 3, muốn dùng gesture event trong template, component phải apply `GestureEventListeners` mixin:
+
+```javascript
+import {GestureEventListeners} from '@polymer/polymer/lib/mixins/gesture-event-listeners.js';
+
+class MyGestureElement extends GestureEventListeners(PolymerElement) {
+  // ...
+}
+```
 
 ```html
 <div on-track="onTrack_">Drag me</div>

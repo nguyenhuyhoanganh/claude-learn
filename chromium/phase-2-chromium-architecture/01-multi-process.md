@@ -35,10 +35,12 @@ Chromium giải quyết bằng cách dùng nhiều process riêng biệt.
 └─────────────┘ └────────────┘ └─────────────┘
 
 Ngoài ra còn có:
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│   GPU       │  │   Network   │  │   Storage   │
-│  Process    │  │   Service   │  │   Service   │
-└─────────────┘  └─────────────┘  └─────────────┘
+┌─────────────┐  ┌─────────────┐
+│   GPU       │  │   Network   │
+│  Process    │  │   Service   │
+└─────────────┘  └─────────────┘
+
+Storage Service là service boundary cho storage APIs, nhưng thường vẫn được host trong Browser Process.
 ```
 
 ---
@@ -83,7 +85,7 @@ Renderer Process (sandboxed)
 
 ## Site Isolation
 
-Từ Chrome 67, mỗi **origin** (domain) có renderer process riêng:
+Từ Chrome 67, Site Isolation tách renderer process theo **site** (scheme + registered domain/eTLD+1), không phải theo từng origin:
 
 ```
 Tab với https://samsung.com/settings
@@ -93,7 +95,7 @@ iframe với https://ads.example.com
   → Renderer Process B (khác!)
 ```
 
-Điều này ngăn chặn các cuộc tấn công như Spectre (đọc memory của process khác).
+Điều này ngăn chặn các cuộc tấn công như Spectre (đọc memory của process khác). Ví dụ `https://a.example.com` và `https://b.example.com` là hai origin khác nhau nhưng cùng site `https://example.com`, nên Site Isolation mặc định không coi chúng là hai site riêng.
 
 **WebUI pages** (như `chrome://settings`, hay Samsung WebUI) cũng chạy trong renderer process riêng, nhưng được tin tưởng hơn vì chúng là internal pages.
 
@@ -112,7 +114,7 @@ Renderer process gửi **draw calls** đến GPU process, không trực tiếp a
 
 ## Network Service và Storage Service
 
-Từ Chromium ~M80, network và storage được tách thành service riêng:
+Chromium đang "servicify" nhiều capability thành service nói chuyện qua Mojo. Network Service chạy như service riêng cho network stack; Storage cũng được tách theo service boundary trong code, nhưng không nên hiểu là luôn có một out-of-process Storage process riêng mặc định:
 
 ```
 Renderer → "Tôi cần fetch https://api.samsung.com/data"
@@ -122,7 +124,7 @@ Renderer → "Tôi cần fetch https://api.samsung.com/data"
          → Trả kết quả về Renderer
 ```
 
-Pattern này gọi là **Services Architecture** — mỗi capability là một service độc lập, giao tiếp qua Mojo IPC.
+Pattern này gọi là **Services Architecture** — mỗi capability được đóng gói thành service/interface rõ ràng, giao tiếp qua Mojo IPC. Một service có thể chạy out-of-process hoặc vẫn được host trong Browser Process tùy cấu hình/feature.
 
 ---
 
@@ -171,13 +173,13 @@ Message đi qua **Mojo message pipe** — một kênh giao tiếp nhanh, type-sa
 
 ## Tóm tắt
 
-| Process | Trách nhiệm | Sandbox |
-|---------|-------------|---------|
+| Process/service | Trách nhiệm | Sandbox/ghi chú |
+|-----------------|-------------|-----------------|
 | Browser Process | Quản lý, native features, storage | Không |
 | Renderer Process | Render web/WebUI, chạy JS | Có |
 | GPU Process | Graphics, compositing | Có |
-| Network Service | Fetch, DNS, sockets | Có |
-| Storage Service | Cookies, databases | Có |
+| Network Service | Fetch, DNS, sockets | Thường có sandbox/process riêng |
+| Storage Service | Cookies, databases | Service boundary; thường host trong Browser Process |
 
 ---
 

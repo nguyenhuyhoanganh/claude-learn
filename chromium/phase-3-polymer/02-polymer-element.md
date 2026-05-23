@@ -86,7 +86,7 @@ class MyButton extends PolymerElement {
 
 `PolymerElement` extend `HTMLElement` (Web Components native) + thêm:
 - Tự `attachShadow({mode: 'open'})`.
-- Tự render template khi `connectedCallback`.
+- Tự stamp/render template trong lần attach đầu tiên, thông qua Polymer property system và `ready()`.
 - Reactive property system.
 - Data binding engine.
 - Lifecycle hooks bổ sung.
@@ -430,7 +430,8 @@ class MyComponent extends PolymerElement {
     console.log('1. constructor');
   }
   
-  // Polymer-specific (gọi sau constructor, trước connectedCallback)
+  // Polymer-specific: gọi một lần trong lần connectedCallback đầu tiên,
+  // khi super.connectedCallback() enable properties và stamp local DOM.
   ready() {
     super.ready();
     // DOM đã render. Properties đã set default values.
@@ -441,6 +442,7 @@ class MyComponent extends PolymerElement {
   connectedCallback() {
     super.connectedCallback();
     // Element đã được thêm vào DOM tree.
+    // Sau super.connectedCallback(), ready() có thể đã chạy trong lần connect đầu.
     // Add global event listeners ở đây.
     console.log('3. connectedCallback');
   }
@@ -465,7 +467,7 @@ class MyComponent extends PolymerElement {
 
 | | `ready()` | `connectedCallback()` |
 |---|---|---|
-| Gọi lúc nào | Sau khi DOM render lần đầu | Element vào DOM tree |
+| Gọi lúc nào | Một lần trong lần connect đầu, sau khi local DOM được stamp | Mỗi lần element vào DOM tree |
 | Gọi mấy lần | **1 lần duy nhất** | Nhiều lần (nếu remove + re-add) |
 | DOM ready? | Có | Có |
 | Dùng cho | One-time setup (focus initial, attach listeners trong component) | Setup mỗi lần connect (subscribe global) |
@@ -703,7 +705,7 @@ Khoá học sẽ dùng cách 1 cho ví dụ đơn giản, cách 2 cho ví dụ p
 - `html\`\`` tagged template literal cho template.
 - `[[prop]]` text binding, `on-click` event, `$=` attribute binding, `<slot>` cho children.
 - `this.$.id` shortcut truy cập elements có id.
-- Lifecycle: `constructor` → `ready` (1 lần) → `connectedCallback` (mỗi lần connect) → `disconnectedCallback`.
+- Lifecycle thực tế: `constructor` → `connectedCallback` → `super.connectedCallback()` gọi `ready` lần đầu → phần còn lại của `connectedCallback` → `disconnectedCallback`.
 - **Luôn `value: () => []`** cho Array/Object property.
 - **Luôn `super.method()`** đầu tiên trong overridden lifecycle.
 

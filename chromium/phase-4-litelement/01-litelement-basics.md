@@ -214,8 +214,8 @@ html`<input .value=${this.text}>`
 ```javascript
 class MyComponent extends LitElement {
 
-  // Gọi trước render đầu tiên
-  // Dùng để setup ban đầu, fetch initial data
+  // Gọi khi element được attach vào DOM.
+  // Lit bắt đầu update cycle sau khi connected; async fetch có thể hoàn tất sau render đầu.
   async connectedCallback() {
     super.connectedCallback(); // BẮT BUỘC gọi super
     this.data = await this.pageHandler.getData();

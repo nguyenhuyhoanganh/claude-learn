@@ -27,10 +27,12 @@ Hiện tại:
 
 ### `iron-icon` — display SVG icon
 
-```html
-<link rel="import" href="iron-icon/iron-icon.html">
-<link rel="import" href="iron-icons/iron-icons.html">
+```javascript
+import '@polymer/iron-icon/iron-icon.js';
+import '@polymer/iron-icons/iron-icons.js';
+```
 
+```html
 <iron-icon icon="add"></iron-icon>
 <iron-icon icon="settings" style="color: blue"></iron-icon>
 <iron-icon icon="image:photo"></iron-icon>      <!-- "image" iconset, "photo" icon -->
@@ -39,7 +41,7 @@ Hiện tại:
 
 Icons từ Material Icons set. Có thể custom iconset.
 
-> Polymer 3 version: `import '@polymer/iron-icon/iron-icon.js';`
+> Legacy Polymer 1/2 dùng HTML Imports (`<link rel="import">`). Polymer 3 dùng ES modules như ví dụ trên.
 
 ### `iron-iconset-svg` — define custom iconset
 
