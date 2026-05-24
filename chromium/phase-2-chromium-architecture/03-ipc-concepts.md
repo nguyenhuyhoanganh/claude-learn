@@ -102,11 +102,12 @@ Renderer                         Browser
 
 Trong JS (WebUI side):
 ```javascript
-// 'pending_remote' đã được tạo và gửi qua
-const remote = SettingsRemote();
-// hoặc
-const remote = new SettingsMojoRemote();
-remote.$.bindNewPipeAndPassReceiver(); // tạo pipe, gửi receiver sang C++
+// Pattern phổ biến: tạo Remote, lấy pending receiver, pass cho C++
+// (qua factory.createXxx() hoặc Interface.getRemote() — xem phase 5/6)
+const remote = new SettingsRemote();
+const pendingReceiver = remote.$.bindNewPipeAndPassReceiver();
+// pendingReceiver phải được PASS sang C++ qua factory hoặc interface broker;
+// chỉ gọi bindNewPipeAndPassReceiver() rồi vứt return value sẽ KHÔNG nối được.
 ```
 
 ---
@@ -230,4 +231,4 @@ Bây giờ bạn đã hiểu **tại sao** cần Mojo. Phase 5 sẽ dạy **các
 
 ---
 
-→ [Phase 3: LitElement](../phase-3-litelement/01-litelement-basics.md)
+→ [Phase 3: Polymer](../phase-3-polymer/01-polymer-intro.md)
