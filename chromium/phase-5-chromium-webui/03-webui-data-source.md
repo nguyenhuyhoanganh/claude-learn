@@ -1,5 +1,13 @@
 # Bài 3: WebUIDataSource — serve HTML/JS/CSS cho WebUI page
 
+> **🎯 Định hướng cho web dev:** Bài này nhiều C++ nhất phase 5, nhưng **bạn không viết C++ ở đây**. Native team viết WebUIDataSource setup. Bạn cần:
+> 1. **Biết mỗi WebUI page có 1 data source** ai đó (native) register.
+> 2. **Hiểu `.grd` file** — vì khi thêm file JS/HTML/CSS mới, bạn phải nói native team cập nhật `.grd`.
+> 3. **Biết default CSP của WebUI** — vì code JS của bạn sẽ bị block nếu vi phạm.
+> 4. **Biết `loadTimeData` lấy dữ liệu từ đâu** — bạn yêu cầu native add key, JS đọc qua `loadTimeData.getString(...)`.
+>
+> Code C++ trong bài đều bọc `<details>` collapse — đọc khi tò mò, đóng nếu chỉ cần concept.
+
 Khi browser navigate đến `chrome://settings` hoặc `samsung://quick-settings`, browser **không** fetch qua HTTP/network. Nó tìm file **bên trong binary** Chromium. **`WebUIDataSource`** là API giúp đăng ký các file resource đó.
 
 Bài này dạy:
@@ -36,6 +44,21 @@ Khi user gõ `chrome://settings`:
 
 ### Tạo và register
 
+> **🎯 Concept tổng quan:** Constructor của WebUIController làm 4 việc tuần tự:
+>
+> 1. **Tạo `WebUIDataSource`** cho host (vd `"settings"`) — báo browser "tôi quản lý URL này".
+> 2. **Setup resources** — gắn danh sách file (HTML/JS/CSS) từ `.grd` vào source.
+> 3. **CSP** — khai báo origin nào được phép load script/img/style. Có default, override khi cần thêm domain.
+> 4. **Inject runtime data** — truyền config từ C++ xuống JS qua `loadTimeData`.
+>
+> **Web dev liên quan:** Bạn yêu cầu native:
+> - "Thêm file `foo.js` của tôi vào `.grd`" → bước 2.
+> - "Thêm `script-src https://fonts.gstatic.com`" → bước 3.
+> - "Inject `bool isFeatureEnabled` để JS đọc" → bước 4.
+
+<details>
+<summary>📎 Reference: C++ constructor đầy đủ (đọc nếu tò mò)</summary>
+
 ```cpp
 // settings_ui.cc
 #include "chrome/browser/ui/webui/settings/settings_ui.h"
@@ -71,11 +94,18 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 }
 ```
 
+</details>
+
 Phân tích từng bước:
 
 ### Bước 1: `WebUIDataSource::CreateAndAdd(...)`
 
-Tạo data source và register với BrowserContext (= profile của user).
+> **🎯 Concept:** Tạo data source và register với BrowserContext (= profile của user). Đây là dòng "claim" URL host — sau dòng này, browser hiểu **mọi request đến `chrome://settings/*` đi qua data source này**.
+>
+> **Web dev cần biết:** Khi tạo WebUI page mới, bạn đề xuất host name (vd `samsung://my-feature`). Native team add `kChromeUI...Host` constant + gọi `CreateAndAdd`.
+
+<details>
+<summary>📎 Reference: C++ code</summary>
 
 ```cpp
 auto* source = content::WebUIDataSource::CreateAndAdd(
@@ -91,13 +121,20 @@ const char kChromeUISettingsHost[] = "settings";
 const char kChromeUISettingsURL[]  = "chrome://settings/";
 ```
 
-Sau dòng này, browser hiểu **mọi request đến `chrome://settings/*` đi qua `source` này**.
+</details>
 
 ### Bước 2: Register resources
 
-Có **2 cách** add resources:
+> **🎯 Concept:** Báo cho data source danh sách file (HTML/JS/CSS) page cần. Có 2 cách:
+> - **Cách 1 (phổ biến):** Pass cả mảng từ `.grd` (file XML khai báo resources — xem section dưới). Một dòng helper là xong.
+> - **Cách 2 (manual):** Add từng file một. Hiếm dùng, chỉ cho legacy hoặc page tí hon.
+>
+> **Web dev cần biết:** Mỗi file JS/HTML/CSS của bạn phải được khai báo trong `.grd`. Nếu quên → 404 khi browser fetch.
 
-#### Cách 1 — `SetupWebUIDataSource` (Chromium convention)
+<details>
+<summary>📎 Reference: C++ code 2 cách</summary>
+
+**Cách 1 — `SetupWebUIDataSource` (Chromium convention)**
 
 ```cpp
 webui::SetupWebUIDataSource(
@@ -106,9 +143,9 @@ webui::SetupWebUIDataSource(
     IDR_SETTINGS_SETTINGS_HTML);
 ```
 
-`kSettingsResources` là array auto-generated từ `.grd` file (sẽ explain dưới). `SetupWebUIDataSource` helper add tất cả vào source + default settings (CSP, MIME types).
+`kSettingsResources` là array auto-generated từ `.grd` file. `SetupWebUIDataSource` helper add tất cả vào source + default settings (CSP, MIME types).
 
-#### Cách 2 — `AddResourcePath` manual
+**Cách 2 — `AddResourcePath` manual**
 
 ```cpp
 source->AddResourcePath("settings.html", IDR_SETTINGS_HTML);
@@ -120,9 +157,11 @@ source->SetDefaultResource(IDR_SETTINGS_HTML);  // Khi URL không match path
 
 `IDR_*` là **integer ID** của resource. Định nghĩa ở `chrome/grit/settings_resources.h` (auto-generated).
 
-→ Cách 1 phổ biến hơn — dùng `.grd` file declarative.
+</details>
 
 ### Bước 3: Content Security Policy
+
+> **🎯 ĐÂY là phần web dev cần thuộc** — CSP block code JS/CSS của bạn khi vi phạm.
 
 WebUI có **CSP strict** mặc định để chống attack:
 
@@ -140,7 +179,17 @@ Hiểu:
 - `'self'` — cho phép resources từ cùng origin (chrome://settings).
 - `chrome://resources` — shared resources từ Chromium.
 
-Override khi cần:
+**Hệ quả với code JS bạn viết:**
+- ❌ Không `eval()`, không inline `<script>` không có nonce.
+- ❌ Không `fetch('https://...')` external — phải đi qua Mojo.
+- ❌ Không `<img src="https://...">` external — phải bundle hoặc qua Mojo.
+- ✅ Import từ `chrome://resources/...` OK (Lit/Polymer/cr-* đều ở đó).
+- ✅ Import file của page mình (`./foo.js`) OK.
+
+**Khi cần thêm domain:** Yêu cầu native team override CSP.
+
+<details>
+<summary>📎 Reference: C++ override code</summary>
 
 ```cpp
 source->OverrideContentSecurityPolicy(
@@ -154,7 +203,16 @@ source->OverrideContentSecurityPolicy(
 
 → Common case: add `chrome://favicon` cho favicon, `blob:` cho file download preview.
 
+</details>
+
 ### Bước 4: Inject runtime data — `loadTimeData`
+
+> **🎯 ĐÂY là phần web dev dùng hằng ngày.** Đây là cách native truyền **simple data** từ C++ → JS lúc page load (config, feature flag, user email...).
+>
+> **Workflow:** Bạn yêu cầu native add key (vd `"isDarkMode"`), native gọi `source->AddBoolean(...)`. JS bạn đọc qua `loadTimeData.getBoolean('isDarkMode')`. Đối với data phức tạp hoặc thay đổi runtime, dùng **Mojo** (xem phase 6).
+
+<details>
+<summary>📎 Reference: C++ side</summary>
 
 ```cpp
 source->AddBoolean("isDarkMode", IsDarkModeEnabled());
@@ -163,7 +221,9 @@ source->AddInteger("fontSize", GetFontSize());
 source->AddLocalizedString("welcomeTitle", IDS_WELCOME_TITLE);
 ```
 
-Data này được inject vào HTML qua `<script>` tự generate. Trong JS:
+</details>
+
+**JS side — bạn viết:**
 
 ```javascript
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -174,11 +234,13 @@ const fontSize = loadTimeData.getInteger('fontSize');
 const title = loadTimeData.getString('welcomeTitle');  // already translated
 ```
 
-→ Pattern phổ biến truyền **simple data** từ C++ → JS lúc page load. Cho complex/changing data, dùng Mojo (phase 6).
-
 Bài 5 sẽ đào sâu `loadTimeData`.
 
 ## `.grd` file — declarative resource registration
+
+> **🎯 ĐÂY là file web dev sẽ thường yêu cầu native team cập nhật.** Mỗi khi bạn thêm/đổi tên file JS/HTML/CSS, file `.grd` phải sync. Nếu quên → 404.
+>
+> `.grd` là XML — không phải C++ — nên đọc/hiểu dễ. Bạn có thể tự đề xuất diff cho native team review.
 
 `.grd` (Grit Resource Description) là XML định nghĩa resources nào available trong WebUI. Đây là **single source of truth** cho resources.
 
@@ -289,7 +351,12 @@ Khi browser khởi tạo, Chromium auto register `WebUIDataSource` cho `chrome:/
 
 ## Multiple data sources per host
 
+> **🎯 Hiếm dùng — đọc một lần để biết, sau quên cũng được.**
+
 1 host có thể có **nhiều data sources**. Pattern dùng cho features riêng:
+
+<details>
+<summary>📎 Reference: C++ code</summary>
 
 ```cpp
 // Main settings UI
@@ -301,11 +368,18 @@ auto* search_source = content::WebUIDataSource::CreateAndAdd(
     profile, "settings/search");
 ```
 
+</details>
+
 → Hiếm dùng. Thông thường 1 host = 1 data source.
 
 ## Inline data — `AddBoolean` / `AddString` / etc.
 
-Đã giới thiệu ở bước 4. Full list:
+> **🎯 Cheat sheet để yêu cầu native:** "Em cần một boolean tên `foo` truyền xuống JS" → native add 1 dòng C++ tương ứng bảng dưới.
+
+Full list (C++ side, native team viết):
+
+<details>
+<summary>📎 Reference: C++ API list</summary>
 
 ```cpp
 source->AddBoolean("name", bool_value);
@@ -325,7 +399,9 @@ source->AddString("welcomeWithName",
     l10n_util::GetStringFUTF16(IDS_WELCOME, user_name));
 ```
 
-Trong JS:
+</details>
+
+**Trong JS — bạn viết:**
 
 ```javascript
 loadTimeData.getBoolean('name');
@@ -362,7 +438,21 @@ Browser tự inject `<script>` set `loadTimeData.data` **trước** `settings_ma
 
 ## CSP — Khi nào cần override
 
-### Trường hợp 1: External fonts
+> **🎯 Bạn KHÔNG viết C++ override, nhưng bạn cần biết KHI NÀO yêu cầu native override CSP.**
+
+| Tình huống bạn gặp | Cần yêu cầu native override gì |
+|---|---|
+| Code import Google Fonts (`https://fonts.gstatic.com`) | `FontSrc` — thêm domain |
+| Code có `<script>inline</script>` không nonce | `ScriptSrc` thêm `'unsafe-inline'` (⚠️ security risk, hạn chế) |
+| Code dùng `new Worker(...)` | `WorkerSrc` — thêm `'self'` |
+| Page nhúng `<iframe>` | `FrameAncestors` — thêm origin được phép |
+| Page hiện favicon | `ImgSrc` — thêm `chrome://favicon` |
+| Page hiện file download preview | `ImgSrc` — thêm `blob:` |
+
+<details>
+<summary>📎 Reference: C++ override snippets cho 4 trường hợp</summary>
+
+**Trường hợp 1: External fonts**
 
 ```cpp
 source->OverrideContentSecurityPolicy(
@@ -372,7 +462,7 @@ source->OverrideContentSecurityPolicy(
 
 Cho phép load Google Fonts. (Hiếm — thường bundle font vào resources.)
 
-### Trường hợp 2: Inline scripts (NOT recommended)
+**Trường hợp 2: Inline scripts (NOT recommended)**
 
 ```cpp
 source->OverrideContentSecurityPolicy(
@@ -382,7 +472,7 @@ source->OverrideContentSecurityPolicy(
 
 `'unsafe-inline'` cho phép `<script>...</script>` inline. **Cẩn thận** — security risk.
 
-### Trường hợp 3: Web Workers
+**Trường hợp 3: Web Workers**
 
 ```cpp
 source->OverrideContentSecurityPolicy(
@@ -390,7 +480,7 @@ source->OverrideContentSecurityPolicy(
     "worker-src 'self';");
 ```
 
-### Trường hợp 4: Frame ancestors (iframe)
+**Trường hợp 4: Frame ancestors (iframe)**
 
 ```cpp
 source->OverrideContentSecurityPolicy(
@@ -398,16 +488,23 @@ source->OverrideContentSecurityPolicy(
     "frame-ancestors 'self';");
 ```
 
+</details>
+
 ## `RequestableLocalizedString` — partial localization
 
-Đôi khi muốn add string với placeholder sẽ replace runtime:
+> **🎯 Web dev cần:** biết cú pháp `loadTimeData.getStringF('key', arg1, arg2)` khi string có placeholder `$1`, `$2`.
+
+<details>
+<summary>📎 Reference: C++ add string với placeholder</summary>
 
 ```cpp
 source->AddLocalizedString("user_greeting", IDS_USER_GREETING);
 // IDS_USER_GREETING = "Hello $1, you have $2 messages"
 ```
 
-JS:
+</details>
+
+**JS — bạn viết:**
 
 ```javascript
 const msg = loadTimeData.getStringF('user_greeting', userName, count);
@@ -416,7 +513,16 @@ const msg = loadTimeData.getStringF('user_greeting', userName, count);
 
 ## Setup helper — `webui::SetupWebUIDataSource()`
 
-Đây là **helper hay dùng nhất**:
+> **🎯 Concept:** Đây là **helper hay dùng nhất** ở native side. Nó gom 4 bước (add resources, default resource, basic CSP, common strings) thành 1 dòng. 90% WebUIController chỉ cần helper này + vài dòng inject data. Web dev không động vào helper.
+
+Helper này tự động:
+1. Add tất cả resources từ array (auto generated từ `.grd`).
+2. Set default resource (URL không match path).
+3. Setup basic CSP cho WebUI.
+4. Add common shared strings (vd "OK", "Cancel" buttons).
+
+<details>
+<summary>📎 Reference: Helper signature + full constructor example</summary>
 
 ```cpp
 // chrome/browser/ui/webui/webui_util.h
@@ -427,14 +533,6 @@ namespace webui {
       int default_resource);
 }
 ```
-
-Helper này:
-1. Add tất cả resources từ array (auto generated từ .grd).
-2. Set default resource (URL không match path).
-3. Setup basic CSP cho WebUI.
-4. Add common shared strings (vd "OK", "Cancel" buttons).
-
-Đầy đủ:
 
 ```cpp
 SettingsUI::SettingsUI(content::WebUI* web_ui) 
@@ -456,9 +554,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 
 → Hầu hết WebUI controllers chỉ cần như này.
 
+</details>
+
 ## Samsung Browser specific — additional setup
 
-Trong Samsung Browser, có thể có thêm:
+> **🎯 Concept:** Samsung Browser fork Chromium → có thể tạo host `samsung://` riêng (vd `samsung://settings`), serve thêm `samsung://resources/` cho shared Samsung components. Workflow tương tự `chrome://`, chỉ khác tên host và thêm origin trong CSP.
+
+<details>
+<summary>📎 Reference: C++ setup mẫu</summary>
 
 ```cpp
 SamsungSettingsUI::SamsungSettingsUI(content::WebUI* web_ui) 
@@ -482,6 +585,8 @@ SamsungSettingsUI::SamsungSettingsUI(content::WebUI* web_ui)
   source->AddString("samsungBrowserVersion", GetSamsungVersion());
 }
 ```
+
+</details>
 
 ## Debugging — kiểm tra resources
 
@@ -520,6 +625,16 @@ Developer mode (chrome://flags/#enable-webui-tab-strip etc.)
 | Wrong CSP override khi extending | Override toàn bộ thay vì append | Đọc kỹ CSP semantics |
 
 ## Real example — full setup cho `chrome://samsung-quick-settings`
+
+> **🎯 Đây là ví dụ "đọc cho biết hình hài thật của setup".** Toàn bộ collapse trong `<details>` — bạn không cần memorize. Khi tạo WebUI page mới ở Samsung Browser, native team copy-paste skeleton này → đổi tên + thêm runtime data.
+>
+> **Web dev cần làm gì với example này:**
+> - **Nhận diện**: 1 file `.h`, 1 file `.cc`, 1 file `.grd` — đây là 3 file native sẽ tạo cho mỗi page mới.
+> - **Đối chiếu**: tên host (`"samsung-quick-settings"`) phải khớp với URL bạn dự định dùng (`chrome://samsung-quick-settings`).
+> - **Resources**: tìm trong `.grd` file của bạn xem đã có `index.html`, `browser_proxy.js`, mojom binding chưa.
+
+<details>
+<summary>📎 Reference: Full C++ + .grd skeleton (đọc nếu tò mò)</summary>
 
 ```cpp
 // samsung_quick_settings_ui.h
@@ -622,8 +737,11 @@ void SamsungQuickSettingsUI::CreateHandler(
 </grit-part>
 ```
 
+</details>
+
 ## Tóm tắt bài 3
 
+**Concept:**
 - **`WebUIDataSource`** = registry resources cho 1 host (`chrome://settings`, `samsung://...`).
 - Resources không qua network — load từ binary qua **`.pak`** file.
 - **`.grd`** XML file định nghĩa resources, generate `IDR_*` constants.
@@ -631,5 +749,33 @@ void SamsungQuickSettingsUI::CreateHandler(
 - **`webui::SetupWebUIDataSource`** helper cho 90% case.
 - **`source->AddBoolean/String/etc`** inject data vào `loadTimeData` (xem bài 5).
 - **CSP** strict mặc định, override khi cần thêm domains.
+
+---
+
+## ✅ Web dev — bạn cần nhớ gì sau bài 3
+
+**Bạn KHÔNG viết:**
+- File `.cc/.h` của WebUIController.
+- Helper `SetupWebUIDataSource`.
+- CSP override C++.
+
+**Bạn THƯỜNG XUYÊN làm:**
+
+| Task | Việc của bạn |
+|---|---|
+| Thêm file JS/HTML/CSS mới cho page | Báo native team add vào `.grd` (hoặc tự đề xuất diff XML) |
+| Cần config từ C++ (vd `isFeatureEnabled`) | Yêu cầu native gọi `source->AddBoolean('key', ...)` → bạn đọc `loadTimeData.getBoolean('key')` |
+| Cần localized string | Yêu cầu native `source->AddLocalizedString('key', IDS_*)` → bạn đọc `loadTimeData.getString('key')` |
+| Import external resource bị block | Yêu cầu native override CSP cho directive tương ứng |
+
+**Debug checklist khi gặp lỗi:**
+
+| Triệu chứng | Check |
+|---|---|
+| 404 `chrome://your-host/your-file.js` | `.grd` có file? Native đã rebuild chưa? |
+| `loadTimeData.getString('x')` throw | C++ chưa `AddString('x', ...)` |
+| Console: "Refused to load script" | CSP block — yêu cầu override `script-src` |
+| `chrome://your-host` 404 page | WebUIController chưa register host, hoặc `BUILD.gn` chưa link |
+| Sau khi đổi file `.grd` mà vẫn 404 | Cần rebuild (Grit phải re-generate `IDR_*`) |
 
 **Bài kế tiếp** → [Bài 4: cr-* elements library — chi tiết](04-cr-elements-library.md)
