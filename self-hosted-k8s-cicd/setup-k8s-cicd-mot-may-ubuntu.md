@@ -760,30 +760,360 @@ Từ giờ, **mỗi `git push origin main`** sẽ tự build image mới (tag = 
 
 ---
 
-## 13. Sổ tay gỡ lỗi (tra nhanh khi kẹt)
+## 13. Troubleshooting & các tình huống thực tế
 
-| Triệu chứng | Nguyên nhân thường gặp | Cách sửa |
+Đây là phần dài nhất của bài — và quan trọng nhất. Tự host nghĩa là **bạn là người trực sự cố**. Phần này chia làm 3 lớp:
+
+- **13.0** — Quy trình chẩn đoán tổng quát (gặp bất kỳ lỗi nào cũng bắt đầu từ đây).
+- **13.1 → 13.5** — Tình huống lúc **cài đặt** (theo từng bước).
+- **13.6 → 13.12** — Tình huống lúc **vận hành** (sau khi đã chạy được: deploy hỏng, node chết, đầy đĩa, cert hết hạn...).
+
+### 13.0. Quy trình chẩn đoán tổng quát — luôn bắt đầu từ đây
+
+Đừng đoán mò. Mọi sự cố K8s đều lần ra theo chuỗi này:
+
+```text
+1. Tổng quan:   kubectl get nodes              → node có Ready không?
+                kubectl get pods -A -o wide     → pod nào không Running? ở node nào?
+2. Vì sao pod hỏng:
+                kubectl describe pod <pod>      → đọc mục Events ở CUỐI (vàng nhất)
+3. App nói gì:  kubectl logs <pod>              → log ứng dụng
+                kubectl logs <pod> --previous   → log của lần crash trước
+4. Hạ tầng:     sudo journalctl -u kubelet -f   → kubelet (node-level)
+                sudo journalctl -u containerd -f→ runtime (pull/run container)
+```
+
+> **90% câu trả lời nằm trong `kubectl describe pod` — mục `Events`.** Luôn đọc nó trước khi google. Nó nói thẳng: "Failed to pull image... 401 Unauthorized", "0/2 nodes available: untolerated taint", "Back-off restarting failed container"...
+
+Bộ trạng thái pod cần thuộc lòng:
+
+| Trạng thái | Nghĩa | Nhìn vào đâu |
 |---|---|---|
-| `kubeadm init` fail ở preflight | Còn swap / thiếu module / sai cgroup | Làm lại Phần 1 & 2; `SystemdCgroup=true` |
-| Node `NotReady` mãi | Chưa cài CNI, hoặc containerd cgroup sai | `kubectl get pods -A` xem flannel; check Phần 2 |
-| `kubectl` báo `localhost:8080 refused` | Chưa copy kubeconfig | Làm lại Phần 4 (copy `admin.conf`) |
-| Pod `ImagePullBackOff` + `x509` | containerd chưa tin cert registry | Phần 7.2 trên **mọi** node |
-| Pod `ImagePullBackOff` + `401` | Thiếu/sai `imagePullSecret` | Phần 8; kiểm tra user/pass |
-| Pod `Pending` + `untolerated taint` | Single-node chưa gỡ taint | Phần 4.2 |
-| Worker join xong vẫn `NotReady` | Firewall chặn 6443/8472, hoặc flannel chưa lên | Mở port; `kubectl get pods -A -o wide` |
-| Push `docker` báo `x509` | Docker chưa tin cert | Phần 7.1; restart docker |
-| Workflow `kubectl: command not found` | Runner không có kubectl trong PATH | Cài kubectl cho user gh-runner / dùng đường dẫn tuyệt đối |
-| Deploy "thành công" nhưng app cũ | Vẫn tag `latest`, K8s không thấy thay đổi | Tag bằng SHA (Phần 11) |
-| `rollout status` timeout | Image crash / readinessProbe fail | `kubectl logs`, `kubectl describe pod` |
+| `Pending` | Chưa được xếp lên node nào | `describe pod` → Events (taint, thiếu tài nguyên, PVC chưa bound) |
+| `ContainerCreating` | Đang tạo (kẹt lâu = vấn đề mount/CNI) | `describe pod`, log kubelet |
+| `ImagePullBackOff`/`ErrImagePull` | Không pull được image | `describe pod` Events (x509 / 401 / not found) |
+| `CrashLoopBackOff` | App start rồi chết lặp lại | `kubectl logs --previous` |
+| `Running` nhưng không `Ready` | App sống nhưng readinessProbe fail | `logs` + kiểm tra probe path/port |
+| `Terminating` mãi không xong | Pod kẹt khi xóa (finalizer/volume) | `describe`, cân nhắc `--force` |
 
-Lệnh debug hay dùng:
+---
+
+### 13.1. Lúc `kubeadm init` / chuẩn bị máy (Bước 1–4)
+
+**TH1 — `kubeadm init` fail ở preflight.** Đọc kỹ dòng `[ERROR ...]`:
 
 ```bash
-kubectl get pods -A -o wide          # nhìn toàn cảnh, ở node nào
-kubectl describe pod <pod>           # xem Events (lý do pull fail, schedule fail)
-kubectl logs <pod> [--previous]      # log app; --previous xem pod vừa crash
-sudo journalctl -u kubelet -f        # log kubelet khi node có vấn đề
-sudo crictl ps                       # liệt kê container do containerd quản lý
+# Swap còn bật:
+[ERROR Swap]: running with swap on is not supported
+  → sudo swapoff -a   (và sửa /etc/fstab, Bước 1.2)
+
+# Cgroup driver lệch:
+  → kiểm tra: sudo crictl info | grep -i systemdCgroup   (phải true)
+  → sửa /etc/containerd/config.toml (Bước 2), restart containerd
+
+# Port đã bị chiếm (init lại sau khi fail dở):
+[ERROR Port-6443]: Port 6443 is in use
+  → sudo kubeadm reset -f && sudo rm -rf /etc/cni/net.d ~/.kube/config
+  → rồi init lại
+```
+
+> **Reset sạch để làm lại từ đầu** (khi init hỏng giữa chừng):
+> ```bash
+> sudo kubeadm reset -f
+> sudo rm -rf /etc/cni/net.d $HOME/.kube/config /etc/kubernetes
+> sudo systemctl restart containerd
+> ```
+
+**TH2 — Node `NotReady` sau init.** Gần như luôn là **CNI**:
+
+```bash
+kubectl get pods -n kube-flannel        # flannel pod Running chưa?
+kubectl describe node <node> | grep -A5 Conditions
+# "container runtime network not ready" = CNI chưa cài/chưa lên → cài lại Flannel (Bước 4.1)
+```
+
+Nếu flannel `CrashLoopBackOff`: thường do `--pod-network-cidr` lúc init **không khớp** `10.244.0.0/16` của Flannel. Sửa: reset + init lại đúng CIDR, hoặc sửa CIDR trong manifest flannel.
+
+**TH3 — `kubectl` báo `The connection to the server localhost:8080 was refused`.** Chưa có kubeconfig → làm lại Bước 4 (copy `admin.conf` vào `~/.kube/config`). Với user khác (như `gh-runner`) phải copy riêng.
+
+---
+
+### 13.2. Lúc join worker (Bước 5)
+
+**TH4 — Worker join báo lỗi token.**
+
+```bash
+# "token has expired" hoặc "couldn't validate the identity":
+#  → trên MASTER tạo lệnh join mới:
+kubeadm token create --print-join-command
+```
+
+**TH5 — Join thành công nhưng worker `NotReady` mãi.**
+
+```bash
+kubectl get pods -A -o wide | grep <worker>   # flannel/kube-proxy trên worker lên chưa?
+```
+
+- Flannel pod trên worker `Pending`/`CrashLoop` → kiểm tra firewall **UDP 8472** (VXLAN) giữa 2 máy.
+- Kiểm tra port API: từ worker `nc -zv <master-ip> 6443` phải thông.
+- Tạm thời để test: `sudo ufw disable` trên cả hai máy. Nếu hết lỗi → là firewall, mở đúng port thay vì tắt hẳn (xem bảng port ở 13.12).
+
+---
+
+### 13.3. Lúc dựng Registry (Bước 6–7) — nhóm lỗi tốn thời gian nhất
+
+**TH6 — `docker push` báo `x509: certificate signed by unknown authority`.** Docker chưa tin cert tự ký → Bước 7.1 (copy `ca.crt` vào `/etc/docker/certs.d/registry.local:5000/`), `sudo systemctl restart docker`.
+
+**TH7 — `docker push` báo `server gave HTTP response to HTTPS client`.** Registry đang chạy **HTTP** nhưng client cố nói **HTTPS** (hoặc ngược lại). Hoặc bạn quên bật TLS cho registry. Hai lựa chọn: bật TLS đúng (Bước 6) hoặc khai báo insecure (lối tắt cuối Bước 7).
+
+**TH8 — Pod `ImagePullBackOff`, `describe` Events ghi `x509`.** Đây là lỗi **kinh điển**: bạn đã cho **Docker** tin nhưng **chưa cho containerd** tin. K8s pull bằng containerd! → làm Bước 7.2 trên **MỌI node** rồi `sudo systemctl restart containerd`.
+
+```bash
+# Test pull trực tiếp bằng đúng runtime của K8s, bỏ qua Docker:
+sudo crictl pull registry.local:5000/myapp:latest
+# Nếu lệnh này lỗi x509/401 thì pod chắc chắn cũng lỗi → sửa containerd, không phải Docker
+```
+
+**TH9 — Pod `ImagePullBackOff`, Events ghi `401 Unauthorized`.** Thiếu/sai `imagePullSecret`:
+
+```bash
+kubectl get secret regcred                       # tồn tại trong đúng namespace chưa?
+kubectl get pod <pod> -o jsonpath='{.spec.imagePullSecrets}'   # pod có tham chiếu secret?
+# Sai user/pass: xóa và tạo lại (Bước 8). Lưu ý secret theo namespace!
+```
+
+**TH10 — Pod `ErrImagePull`, Events ghi `not found` / `manifest unknown`.** Sai tên/tag image. Kiểm tra registry thực có gì:
+
+```bash
+curl -k -u deployer:Str0ngP@ss https://registry.local:5000/v2/_catalog
+curl -k -u deployer:Str0ngP@ss https://registry.local:5000/v2/myapp/tags/list
+```
+
+---
+
+### 13.4. Lúc cài runner (Bước 9)
+
+**TH11 — Runner cài xong nhưng GitHub hiện `Offline`.**
+
+```bash
+cd /home/gh-runner/actions-runner
+sudo ./svc.sh status                 # service chạy không?
+sudo journalctl -u 'actions.runner.*' -f
+# Thường gặp: máy không ra được internet (proxy/DNS) hoặc token đăng ký hết hạn (token sống ~1h)
+```
+
+**TH12 — Job chạy nhưng `docker: permission denied ... /var/run/docker.sock`.** User `gh-runner` chưa ở group `docker`:
+
+```bash
+sudo usermod -aG docker gh-runner
+cd /home/gh-runner/actions-runner && sudo ./svc.sh stop && sudo ./svc.sh start   # phải restart service mới nhận group mới
+```
+
+**TH13 — Job báo `kubectl: command not found` hoặc `connection refused`.**
+- Không có kubectl trong PATH của service → dùng đường dẫn tuyệt đối `/usr/bin/kubectl`, hoặc cài kubectl hệ thống.
+- `connection refused` / `Unauthorized` → user `gh-runner` thiếu kubeconfig (Bước 9.3) hoặc token ServiceAccount đã hết hạn.
+
+---
+
+### 13.5. Lúc workflow deploy (Bước 11)
+
+**TH14 — Build/push xong nhưng `kubectl rollout status` timeout.** Pod mới không bao giờ `Ready`. Đây là tình huống vận hành quan trọng — xử lý ở **13.6**.
+
+**TH15 — Deploy "xanh" nhưng app vẫn bản cũ.** Bạn deploy bằng tag `latest` và manifest không đổi → K8s nghĩ "không có gì mới". Bắt buộc tag bằng **commit SHA** (Bước 11). Kiểm tra:
+
+```bash
+kubectl get deploy myapp -o jsonpath='{.spec.template.spec.containers[0].image}'
+```
+
+---
+
+### 13.6. [VẬN HÀNH] Deploy bản mới làm app chết — chẩn đoán & rollback
+
+Tình huống thật hay gặp nhất: vừa merge code, workflow đỏ ở bước `rollout status`, hoặc app trả 500.
+
+**Bước 1 — Xem chuyện gì xảy ra:**
+
+```bash
+kubectl get pods -l app=myapp           # pod mới CrashLoopBackOff? Running-không-Ready?
+kubectl describe pod <pod-mới>          # Events: Liveness/Readiness probe failed? OOMKilled?
+kubectl logs <pod-mới> --previous       # log lần crash → thường lộ ngay (thiếu env, sai config, panic)
+```
+
+**Bước 2 — Rollback ngay (ưu tiên khôi phục dịch vụ trước, điều tra sau):**
+
+```bash
+kubectl rollout undo deployment/myapp           # về revision trước đó
+kubectl rollout status deployment/myapp         # chờ ổn định
+# Xem lịch sử & rollback về 1 revision cụ thể:
+kubectl rollout history deployment/myapp
+kubectl rollout undo deployment/myapp --to-revision=3
+```
+
+> **Vì sao rollback dễ?** Nhờ tag SHA bất biến (Bước 11), mỗi revision trỏ tới một image cố định còn nguyên trong registry. `rollout undo` chỉ việc trỏ lại image cũ. Đây chính là lý do **không bao giờ dùng mỗi `latest`**.
+
+**Các nguyên nhân crash thường gặp & cách đọc:**
+
+| Events / log | Nghĩa | Xử lý |
+|---|---|---|
+| `OOMKilled` | App vượt memory limit | Tăng `resources.limits.memory` hoặc sửa rò rỉ bộ nhớ |
+| `Readiness probe failed: connection refused` | App chưa nghe port / sai port probe | Sửa `targetPort`/probe path; tăng `initialDelaySeconds` |
+| `CrashLoopBackOff` + log `ECONNREFUSED db` | Thiếu/sai biến môi trường, DB chưa sẵn sàng | Kiểm tra ConfigMap/Secret/env |
+| `exec format error` | Build image sai kiến trúc (ARM vs x86) | Build `--platform linux/amd64` |
+
+---
+
+### 13.7. [VẬN HÀNH] App `Running` & `Ready` nhưng `curl NodePort` không vào
+
+Đi từ trong ra ngoài để khoanh vùng:
+
+```bash
+# 1) Pod tự nó trả lời không? (loại trừ app)
+kubectl exec -it <pod> -- wget -qO- localhost:8080
+
+# 2) Service có endpoint trỏ tới pod không? (loại trừ selector sai)
+kubectl get endpoints myapp
+#  → RỖNG = selector của Service không khớp label pod. So lại spec.selector vs pod labels.
+
+# 3) Truy cập trong cluster qua ClusterIP:
+kubectl run tmp --rm -it --image=busybox -- wget -qO- myapp.default.svc:80
+
+# 4) NodePort từ ngoài:
+curl http://<node-ip>:30080
+#  → fail = firewall chặn NodePort, hoặc gọi nhầm IP node không chạy pod (NodePort mở trên MỌI node)
+```
+
+> Lỗi phổ biến nhất ở đây: **Service `selector` không khớp `labels` của pod** → `endpoints` rỗng → Service "đen". Sửa cho khớp là xong.
+
+---
+
+### 13.8. [VẬN HÀNH] Node `NotReady` đột ngột (đang chạy bỗng chết)
+
+```bash
+kubectl get nodes
+kubectl describe node <node> | grep -A10 Conditions
+#  DiskPressure / MemoryPressure / PIDPressure = node cạn tài nguyên
+```
+
+```bash
+# Trên node đó:
+df -h /var/lib/containerd /var/lib/kubelet    # đầy đĩa?
+sudo systemctl status kubelet containerd      # service còn sống?
+sudo journalctl -u kubelet --since "10 min ago"
+```
+
+Xử lý theo nguyên nhân:
+- **Kubelet chết** → `sudo systemctl restart kubelet`.
+- **DiskPressure** → dọn image rác (xem 13.9). Khi `DiskPressure`, kubelet **evict pod** và **từ chối pod mới** — dọn đĩa là node tự `Ready` lại.
+- **Node hỏng thật / cần bảo trì** → drain để dời workload đi:
+
+```bash
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data   # dời pod sang node khác
+# ... bảo trì ...
+kubectl uncordon <node>                                           # cho nhận pod trở lại
+```
+
+---
+
+### 13.9. [VẬN HÀNH] Hết đĩa — image rác & registry phình to
+
+Sau vài chục lần CI, đĩa đầy vì image cũ chất đống ở **3 nơi**: Docker (build cache), containerd (image đã pull), và Registry (mọi tag SHA).
+
+```bash
+# 1) Docker trên runner — build cache & image cũ:
+docker system df                 # xem chiếm bao nhiêu
+docker system prune -af          # xóa image/container/cache không dùng (cẩn thận)
+docker builder prune -af         # riêng build cache
+
+# 2) containerd trên các node — image mồ côi:
+sudo crictl rmi --prune          # xóa image không pod nào dùng
+
+# 3) Registry phình — mỗi commit 1 tag SHA, không bao giờ tự xóa:
+#    Bật garbage collection: xóa tag cũ qua API rồi chạy GC
+docker exec registry registry garbage-collect /etc/docker/registry/config.yml
+```
+
+> **Phòng hơn chống**: thêm bước `docker image prune -f` cuối workflow, và đặt **lịch dọn registry** (giữ N tag gần nhất). Nếu không, một ngày đẹp trời CI fail vì `no space left on device`.
+
+---
+
+### 13.10. [VẬN HÀNH] Runner chết / kẹt job / cần thêm sức build
+
+```bash
+# Runner offline giữa chừng:
+sudo ./svc.sh status
+sudo ./svc.sh start
+sudo journalctl -u 'actions.runner.*' --since "30 min ago"
+
+# Job kẹt "Waiting for a runner to pick up this job...":
+#  → không runner nào có ĐỦ tất cả label workflow yêu cầu (runs-on).
+#    Kiểm tra label runner khớp [self-hosted, linux, k8s-deployer].
+
+# Workspace bẩn gây lỗi build lạ (file lần trước sót lại):
+#  → thêm 'actions/checkout@v4' với clean, hoặc xóa _work:
+sudo rm -rf /home/gh-runner/actions-runner/_work/<repo>
+```
+
+> Cần build song song nhiều job → cài thêm runner (mỗi cái 1 thư mục/`--name` khác) hoặc chuyển sang **Actions Runner Controller (ARC)** để runner chạy tự co giãn trong chính K8s.
+
+---
+
+### 13.11. [VẬN HÀNH] Chứng chỉ hết hạn — cluster & registry "đột tử"
+
+Hai mốc thời gian dễ quên, làm hệ thống đang chạy ngon bỗng chết:
+
+**Cert control-plane K8s — mặc định hạn 1 năm:**
+
+```bash
+sudo kubeadm certs check-expiration         # xem ngày hết hạn từng cert
+sudo kubeadm certs renew all                # gia hạn tất cả
+sudo systemctl restart kubelet
+# Rồi cập nhật lại ~/.kube/config từ /etc/kubernetes/admin.conf
+```
+
+> Triệu chứng: `kubectl` báo `x509: certificate has expired or is not yet valid`. Đây là lý do nên **gia hạn định kỳ** (hoặc nâng cấp cluster hằng năm, việc đó tự gia hạn cert).
+
+**Cert registry tự ký:** bài này tạo hạn 10 năm (`-days 3650`) nên ít lo. Nếu dùng cert ngắn hạn, tạo lại cert (Bước 6) và **deploy lại trust** cho Docker + containerd (Bước 7) trên mọi node.
+
+---
+
+### 13.12. Tham chiếu nhanh: port, lệnh, "nút khẩn cấp"
+
+**Các port phải thông (khi có firewall / nhiều máy):**
+
+| Port | Giao thức | Dùng cho | Mở ở đâu |
+|---|---|---|---|
+| 6443 | TCP | Kubernetes API server | master |
+| 10250 | TCP | kubelet API | mọi node |
+| 8472 | UDP | Flannel VXLAN | mọi node |
+| 30000–32767 | TCP | NodePort services | node chạy app |
+| 5000 | TCP | Docker Registry | máy chạy registry |
+| 2379–2380 | TCP | etcd | master |
+
+```bash
+# Mở bằng ufw (ví dụ master):
+sudo ufw allow 6443/tcp && sudo ufw allow 8472/udp && sudo ufw allow 10250/tcp
+```
+
+**Bộ lệnh điều tra "vạn năng":**
+
+```bash
+kubectl get pods -A -o wide          # toàn cảnh: pod nào, node nào, trạng thái
+kubectl describe pod <pod>           # Events — đọc ĐẦU TIÊN
+kubectl logs <pod> [-f] [--previous] # log app (-f follow, --previous lần crash trước)
+kubectl get events -A --sort-by=.lastTimestamp   # mọi event toàn cluster theo thời gian
+kubectl top nodes ; kubectl top pods # dùng CPU/RAM (cần metrics-server)
+sudo crictl ps -a ; sudo crictl logs <id>        # cấp containerd, khi kubectl "mù"
+sudo journalctl -u kubelet -f                    # node có vấn đề
+```
+
+**Nút khẩn cấp (khi cần khôi phục dịch vụ NGAY):**
+
+```bash
+kubectl rollout undo deployment/myapp            # quay về bản chạy được
+kubectl rollout restart deployment/myapp         # restart toàn bộ pod (kẹt state, đổi config/secret)
+kubectl scale deployment/myapp --replicas=0      # tắt khẩn (dừng app lỗi gây hại)
+kubectl scale deployment/myapp --replicas=2      # bật lại
+kubectl delete pod <pod>                         # xóa 1 pod kẹt — Deployment tự tạo lại pod mới
 ```
 
 ---
@@ -804,6 +1134,8 @@ sudo crictl ps                       # liệt kê container do containerd quản
 12. Siết **RBAC**, secret, runner trên private repo (Phần 12).
 
 Sau khi xong, mỗi `git push origin main` sẽ tự động build và deploy. Bạn đã có một pipeline CI/CD hoàn chỉnh chạy trên hạ tầng của chính mình.
+
+> **Khi có sự cố** → mở thẳng **Phần 13**. Luôn bắt đầu bằng quy trình 13.0 (`get nodes` → `get pods -A` → `describe pod` → `logs`), rồi tra đúng tình huống: lúc cài đặt (13.1–13.5) hay lúc vận hành (13.6–13.12: deploy hỏng/rollback, node chết, đầy đĩa, cert hết hạn, runner offline). Nút khẩn cấp khôi phục dịch vụ ngay ở 13.12.
 
 > **3 bài học cốt lõi cần nhớ mãi:**
 > 1. *Build* (Docker) và *Run* (containerd) là hai việc khác nhau — chúng chỉ gặp nhau ở **Registry**.
