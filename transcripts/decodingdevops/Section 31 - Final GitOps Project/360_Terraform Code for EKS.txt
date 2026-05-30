@@ -1,0 +1,3 @@
+# Terraform Code for EKS
+
+[No English transcript available]

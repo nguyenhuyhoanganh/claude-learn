@@ -1,0 +1,3 @@
+# Outro
+
+Welcome to the club. You now have your own lab setup and you have already used the command line a little. This foundation is very important for what comes next. The Linux section. By the time you complete Linux and Vagrant modules, you will be confident and comfortable with all of this. But for now, just make sure you can create a virtual machine manually and automatically. Both great work so far. I'll see you in the next section. All the best.

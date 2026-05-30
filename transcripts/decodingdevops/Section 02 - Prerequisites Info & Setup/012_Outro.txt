@@ -1,0 +1,3 @@
+# Outro
+
+All right, you're all set. You have packed your luggage for the journey ahead. Some of the tools you have installed will be used immediately in next section. Our VM setup. And as we move forward, you will gradually unpack everything else you prepared. One step at a time. Before you continue, make sure you have completed all the prerequisites. A strong foundation now will make your entire learning journey smoother and more enjoyable. Your journey officially begins now. All the best. Let's get started.

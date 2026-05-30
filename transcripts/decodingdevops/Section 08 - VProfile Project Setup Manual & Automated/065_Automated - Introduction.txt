@@ -1,0 +1,3 @@
+# Automated - Introduction
+
+Hello and welcome. This is a follow up video from the previous project. In this video, we will see how to set up this entire stack automatically. We are going to run just vagrant up. command All the VMS will be provisioned automatically. And also all the services Nginx, Tomcat, Rabbitt, MQ, Memcache and MySQL will be also provisioned automatically. So a similar design as the previous project, except here, will be having bash scripts that will get executed automatically. And these bash scripts will provision all our services, the entire stack.
