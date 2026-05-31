@@ -1,5 +1,12 @@
 # Bài 2: WebUIController — Cầu nối C++ và WebUI
 
+> **🎯 Định hướng bài này cho web dev:** Bạn sẽ viết Polymer/Lit, **không viết C++**. Bài này dạy bạn **hiểu hệ thống** để:
+> - Đồng thiết kế Mojo interface với native team (`.mojom` file).
+> - Viết BrowserProxy + Component chính xác.
+> - Debug khi connection vỡ — biết "lỗi ở phía nào".
+>
+> Code C++ trong bài này đều bọc trong `<details>` collapse. Mở ra khi tò mò, đóng lại nếu chỉ cần concept.
+
 ## PageHandler Pattern
 
 Đây là pattern **chuẩn** trong toàn bộ Chromium WebUI. Gần như mọi WebUI page đều follow pattern này:
@@ -25,6 +32,8 @@ Có 2 "hướng" giao tiếp:
 ---
 
 ## Mojom file — Định nghĩa Contract
+
+> **🎯 ĐÂY là phần quan trọng nhất bạn cần thuộc.** `.mojom` là **contract** giữa C++ và JS. Bạn sẽ tham gia thiết kế nó (cùng native team), và mọi method/event/struct ở đây sẽ phản chiếu sang JS side. Đọc kỹ.
 
 ```mojom
 // settings.mojom
@@ -66,6 +75,20 @@ struct Settings {
 ---
 
 ## C++ WebUIController Implementation
+
+> **🎯 Concept (cần biết, không cần viết):**
+>
+> `SettingsUI` (đặt tên theo page) là class C++ kế thừa từ `MojoWebUIController` + implement `PageHandlerFactory` interface từ `.mojom`. Vai trò:
+>
+> 1. **Là entry point** khi browser navigate đến `chrome://settings` — Chromium tạo 1 instance của class này.
+> 2. **Register resources** trong constructor (xem bài 3 — `WebUIDataSource`).
+> 3. **Bind Mojo pipe** khi JS gọi `getRemote()` lần đầu — qua `BindInterface()`.
+> 4. **Tạo `PageHandler` thực** khi JS gọi `createPageHandler(...)` — qua method `CreatePageHandler()`.
+>
+> **Bạn cần biết để debug:** Nếu BrowserProxy ở JS không kết nối được → một trong 2 method `BindInterface` hoặc `CreatePageHandler` lỗi ở C++ side. Báo native team check.
+
+<details>
+<summary>📎 Reference: C++ WebUIController code (không cần memorize)</summary>
 
 ```cpp
 // settings_ui.h
@@ -125,9 +148,33 @@ void SettingsUI::CreatePageHandler(
 }
 ```
 
+</details>
+
 ---
 
 ## C++ PageHandler Implementation
+
+> **🎯 Concept (cần biết):**
+>
+> `SettingsPageHandler` là class C++ implement **interface `PageHandler`** đã định nghĩa trong `.mojom`. Mỗi method trong `.mojom` (vd `GetSettings`, `SetTheme`) tương ứng **một method C++** ở đây.
+>
+> - Khi JS gọi `proxy.handler.getSettings()` → C++ chạy `SettingsPageHandler::GetSettings(callback)` → trả data qua `callback`.
+> - Khi C++ muốn báo JS (vd theme đổi) → gọi `page_->OnThemeChanged(...)` → JS nhận ở `callbackRouter.onThemeChanged`.
+>
+> **Lifecycle:** PageHandler được tạo MỘT lần khi page load (qua `CreatePageHandler` ở WebUIController), sống đến khi tab đóng.
+>
+> **Mapping cần nhớ:**
+>
+> | JS (BrowserProxy) | C++ (PageHandler) |
+> |---|---|
+> | `proxy.handler.getSettings()` | `PageHandler::GetSettings(callback)` |
+> | `proxy.handler.setTheme('dark')` | `PageHandler::SetTheme(const std::string& theme)` |
+> | `proxy.callbackRouter.onThemeChanged.addListener(fn)` | `page_->OnThemeChanged(theme)` |
+>
+> **Bạn cần biết để debug:** Nếu method JS gọi không nhận response → C++ side method không implement hoặc throw. Báo native team check log.
+
+<details>
+<summary>📎 Reference: C++ PageHandler code (không cần memorize)</summary>
 
 ```cpp
 // settings_page_handler.h
@@ -181,9 +228,13 @@ void SettingsPageHandler::OnThemeChanged() {
 }
 ```
 
+</details>
+
 ---
 
 ## JavaScript BrowserProxy Pattern
+
+> **🎯 ĐÂY là code bạn sẽ viết.** Đọc kỹ.
 
 JS không giao tiếp Mojo trực tiếp trong component — thường qua một **BrowserProxy** class:
 
@@ -264,29 +315,77 @@ class SettingsPage extends LitElement {
 
 ## Tóm tắt WebUIController Pattern
 
+Full pattern 5 bước (web dev viết 2 bước in đậm):
+
 ```
-1. Định nghĩa .mojom
+1. Định nghĩa .mojom  ← bạn cùng design với native
    → PageHandlerFactory, PageHandler, Page interfaces
    → Data structs
 
-2. C++: WebUIController
+2. C++: WebUIController  ← native viết
    → Kế thừa MojoWebUIController
    → Register resources
    → Implement PageHandlerFactory.CreatePageHandler()
 
-3. C++: PageHandler
+3. C++: PageHandler  ← native viết
    → Implement tất cả methods trong PageHandler interface
    → Giữ Remote<Page> để push updates xuống JS
 
-4. JS: BrowserProxy
+4. JS: BrowserProxy  ← ⭐ BẠN VIẾT
    → Tạo Remote<PageHandler>
    → Tạo Receiver<Page> (CallbackRouter)
    → Gọi Factory.CreatePageHandler() để kết nối
 
-5. JS: LitElement Component
+5. JS: LitElement/Polymer Component  ← ⭐ BẠN VIẾT
    → Dùng BrowserProxy.getInstance()
    → Gọi async methods
    → Subscribe callbacks cho push updates
 ```
+
+---
+
+## ✅ Web dev — bạn cần nhớ gì sau bài 2
+
+**Mental model cần có:**
+
+```
+┌──────────────────────────────┐         ┌──────────────────────────────┐
+│   JS (Renderer Process)      │         │  C++ (Browser Process)       │
+│  ──────────────────────      │         │  ──────────────────────      │
+│                              │         │                              │
+│  Component (bạn viết)        │         │  WebUIController (native)    │
+│    │                          │         │    │                          │
+│    │ uses                     │         │    │ creates                  │
+│    ▼                          │         │    ▼                          │
+│  BrowserProxy (bạn viết)     │ ◄────► │  PageHandler (native)        │
+│    - handler: Remote          │  Mojo   │    - implements PageHandler  │
+│    - callbackRouter: Receiver │  pipe   │    - holds Remote<Page>      │
+└──────────────────────────────┘         └──────────────────────────────┘
+        ▲                                          │
+        │                                          │
+        └──────────────────────────────────────────┘
+              C++ push notifications xuống JS
+              (qua callbackRouter của BrowserProxy)
+```
+
+**Checklist khi viết WebUI page mới:**
+
+| File | Ai viết | Bạn làm gì |
+|---|---|---|
+| `feature.mojom` | Native | ✋ Cùng design — chốt interface methods, data structs |
+| `feature_ui.cc/.h` (WebUIController) | Native | ❌ Không động |
+| `feature_page_handler.cc/.h` (PageHandler) | Native | ❌ Không động |
+| `feature.mojom-webui.js` | Auto-generated | ✅ Import vào BrowserProxy |
+| `browser_proxy.js` | **Bạn** | ⭐ Viết singleton wrapper Mojo |
+| `feature_page.ts` (Component) | **Bạn** | ⭐ Polymer/Lit, dùng BrowserProxy |
+
+**Lỗi thường gặp & nơi check:**
+
+| Triệu chứng | Nguyên nhân có thể | Check ở đâu |
+|---|---|---|
+| `handler.getXxx is not a function` | Sai tên method JS ↔ Mojo (camelCase JS, PascalCase Mojo) | Mojom file vs proxy.js |
+| Method gọi xong không return | C++ chưa `std::move(callback).Run(...)` | Native team check `PageHandler` |
+| Push event không nhận được ở JS | Quên `callbackRouter.onXxx.addListener(...)` | Component constructor/connectedCallback |
+| `PageHandlerFactory.getRemote() returns null` | Interface chưa register trong `BindInterface` ở WebUIController | Native team check |
 
 → [Bài tiếp theo: WebUIDataSource — serve resources](03-webui-data-source.md)

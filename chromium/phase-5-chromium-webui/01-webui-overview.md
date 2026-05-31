@@ -125,9 +125,23 @@ chrome/browser/ui/webui/settings/
 
 ---
 
-## WebUIController (C++ side)
+## WebUIController — class C++ "người quản lý" page
 
-Đây là "người quản lý" của mỗi WebUI page:
+> **🎯 Bạn chỉ cần biết concept ở mức này. KHÔNG cần viết C++.**
+
+**Concept:** Mỗi WebUI page (`chrome://settings`, `samsung://quick-settings`...) có **một class C++** tên là *WebUIController* sống ở Browser Process. Class này làm 3 việc:
+
+1. **Đăng ký** với browser: "tôi handle URL host này (vd `settings`)".
+2. **Liệt kê resources** (HTML/JS/CSS) mà page cần — browser sẽ serve các file này cho Renderer khi page load.
+3. **Mở Mojo pipe** khi JS xin → tạo `PageHandler` (xem bài 2) để JS gọi method C++.
+
+**Việc của native team — KHÔNG phải bạn.** Khi viết WebUI page mới, bạn:
+- Báo native team **tên host** mong muốn (vd `samsung://my-feature`) + **danh sách file JS/HTML/CSS** của bạn → họ thêm vào WebUIController + `.grd` (xem bài 3).
+- Khi 404 ở `chrome://your-host/your-file.js` → kiểm tra với native team xem file đã register chưa.
+- Khi Mojo connection không hoạt động → check với native team `BindInterface` có đúng interface không.
+
+<details>
+<summary>📎 Reference: C++ code thực tế của WebUIController (đọc nếu tò mò, không cần memorize)</summary>
 
 ```cpp
 // settings_ui.h
@@ -169,6 +183,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       "script-src chrome://resources 'self';");
 }
 ```
+
+</details>
 
 ---
 
@@ -304,5 +320,30 @@ Bạn không cần hiểu sâu GN ngay. Biết rằng:
 - Mojo `.mojom` files được compile sang bindings
 
 ---
+
+---
+
+## ✅ Web dev — bạn cần nhớ gì sau bài 1
+
+Đây là **bản tóm tắt theo góc nhìn người viết Polymer/Lit**, không phải native:
+
+| Cần làm gì | Bạn (web dev) | Native team |
+|---|---|---|
+| Viết HTML/CSS/JS của page | ✅ | ❌ |
+| Viết Polymer/Lit component | ✅ | ❌ |
+| Đặt tên host (`chrome://your-host`) | ✋ Đề xuất | ✅ Approve & register |
+| Viết WebUIController (.cc/.h) | ❌ | ✅ |
+| Viết file `.grd` (register resources) | ✋ Báo file cần add | ✅ Edit `.grd` |
+| Define Mojo interfaces (`.mojom`) | ✋ Cùng design | ✅ Approve & implement C++ side |
+| Implement PageHandler C++ | ❌ | ✅ |
+| Implement BrowserProxy + Component | ✅ | ❌ |
+| Khai báo CSP (script-src) | ✋ Yêu cầu khi cần thêm domain | ✅ Edit C++ |
+| Inject data qua `loadTimeData` | ✋ Yêu cầu giá trị nào cần | ✅ Thêm `AddBoolean/String...` |
+
+**Lỗi thường gặp & nơi check:**
+- 404 chrome://your-host/file.js → `.grd` thiếu file
+- "PageHandler is undefined" → BrowserProxy chưa init đúng (bạn) hoặc `BindInterface` sai (native)
+- "loadTimeData.getString('foo') throws" → C++ chưa `AddString("foo", ...)`
+- CSP block external resource → cần native override CSP
 
 → [Bài tiếp theo: WebUIController C++ chi tiết](02-webui-controller-cpp.md)
