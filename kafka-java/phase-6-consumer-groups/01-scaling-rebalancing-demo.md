@@ -231,43 +231,43 @@ Adding newly assigned partitions: order-events-2
 
 ✅ Final assignment: each consumer 1 partition. Perfect 1-1.
 
-## Demo: scale down (consumer leaves)
+## Demo: scale down (consumer leave group)
 
-### Step 5: Kill Consumer 1 (Ctrl-C)
+### Bước 5: Kill Consumer 1 (Ctrl-C)
 
 Pre-destroy log:
 ```text
-Total messages consumed: 0      (we haven't started producer yet)
+Total messages consumed: 0      (chưa start producer)
 ```
 
-Consumer 2 + 3 log:
+Log Consumer 2 + 3:
 ```text
 Revoking previously assigned partitions: ...
 Adding newly assigned partitions: ...
 ```
 
-After rebalance: Consumer 2 + 3 split 3 partitions (vd 2+1).
+Sau rebalance: Consumer 2 + 3 chia nhau 3 partition (vd 2+1).
 
-### Step 6: Kill Consumer 2
+### Bước 6: Kill Consumer 2
 
-Consumer 3 log:
+Log Consumer 3:
 ```text
 Adding newly assigned partitions: order-events-0, order-events-1, order-events-2
 ```
 
-✅ Consumer 3 ôm tất cả 3 partition.
+✅ Consumer 3 còn lại ôm cả 3 partition.
 
-## Demo: full flow with producer + counter verification
+## Demo full flow — kèm counter verification
 
-### Step 7: Stop tất cả consumers. Start producer.
+### Bước 7: Stop tất cả consumer. Start producer.
 
 ```text
 Producer: msg-1, msg-2, msg-3, msg-4, ...
 ```
 
-Super fast, 1000/sec. Messages accumulate in 3 partitions.
+Producer chạy cực nhanh, 1000 msg/giây. Message tích luỹ trong 3 partition.
 
-### Step 8: Start Consumer 1 (drain)
+### Bước 8: Start Consumer 1 để drain backlog
 
 ```text
 received: msg-1
@@ -275,121 +275,121 @@ received: msg-2
 ...
 ```
 
-1 consumer handle all 3 partitions, processes fast.
+1 consumer ôm cả 3 partition, xử lý nhanh.
 
-### Step 9: Scale up to 3 consumers (mid-flight)
+### Bước 9: Scale up lên 3 consumer (giữa lúc producer vẫn chạy)
 
 Start Consumer 2 → rebalance → split. Start Consumer 3 → rebalance → 1-1.
 
 Mỗi consumer xử lý ~33% load.
 
-### Step 10: Scale down
+### Bước 10: Scale down
 
-Kill Consumer 1 → pre-destroy prints:
+Kill Consumer 1 → log pre-destroy in ra:
 ```text
 Total messages consumed: 27851
 ```
 
-Kill Consumer 2 → pre-destroy prints:
+Kill Consumer 2 → log pre-destroy in ra:
 ```text
 Total messages consumed: 31204
 ```
 
-### Step 11: Stop producer
+### Bước 11: Stop producer
 
-Producer log final:
+Log producer cuối cùng:
 ```text
 ... msg-83343 sent
 ```
 
-Total produced = **83343**.
+Tổng số đã produce = **83343**.
 
-### Step 12: Stop Consumer 3
+### Bước 12: Stop Consumer 3
 
 Pre-destroy:
 ```text
 Total messages consumed: 24288
 ```
 
-### Step 13: Verify
+### Bước 13: Verify — tổng count phải bằng tổng produce
 
 ```text
 Consumer 1: 27851
 Consumer 2: 31204
 Consumer 3: 24288
-SUM:        83343    ✅
+TỔNG:       83343    ✅
 Producer:   83343
 ```
 
-🎉 **Sum matches**. Không message nào bị mất, không message nào duplicate giữa các consumers, dù rebalance xảy ra nhiều lần.
+🎉 **Tổng khớp**. **KHÔNG có message nào bị mất, KHÔNG có message nào duplicate** giữa các consumer — dù rebalance đã xảy ra nhiều lần trong quá trình demo.
 
-## Clarification — demo này về Kafka, không phải app reliability
+## Lưu ý — demo này về Kafka behavior, KHÔNG phải app reliability
 
-Bạn có thể hỏi: "Demo này không có DB call, không có failure simulation, không phải production-like."
+Bạn có thể thắc mắc: "Demo này không có DB call, không simulate failure, không giống production thực sự."
 
 **Đúng**. Nhưng:
-- **Goal section này**: demo **Kafka's partition distribution + rebalancing behavior**.
-- Kafka guarantee: messages assigned to consumers correctly. Sum matches.
+- **Mục tiêu của Section này**: demo **cách Kafka phân phối partition + rebalance**.
+- Kafka đảm bảo: message được assign cho consumer **chính xác**. Tổng count khớp.
 - KHÔNG về app reliability (DB transaction, retry on failure).
 
-App-level concerns ở các Phase sau:
-- **Phase 12**: Acknowledgement modes — when is message "consumed"?
-- **Phase 13**: Error handling — what if consumer process throws exception?
-- **Phase 14**: Transactions — atomic processing across topics.
+Những vấn đề về app reliability sẽ học ở các Phase sau:
+- **Phase 12**: Acknowledgement mode — khi nào 1 message được coi là "đã consume"?
+- **Phase 13**: Error handling — nếu consumer throw exception thì sao?
+- **Phase 14**: Transactions — xử lý atomic across nhiều topic.
 
-Phase 6 cho mental model: **Kafka không lose message do rebalancing**. App layer dưới đó là chuyện khác.
+Phase 6 cho mental model: **Kafka KHÔNG mất message khi rebalance**. App layer phía trên là chuyện khác.
 
-## Production observations
+## Quan sát production thực tế
 
-### Rebalance time
+### Thời gian rebalance
 
-Default rebalance: stop-the-world. Consumers pause ~5-10 giây.
+Rebalance default theo kiểu "stop-the-world": consumer **dừng consume** trong khoảng 5-10 giây.
 
-During pause:
-- Producer tiếp tục emit → broker accumulate messages.
-- Consumers không process.
-- Pause xong → resume.
+Trong khoảng dừng đó:
+- Producer vẫn publish bình thường → broker tích luỹ message.
+- Consumer KHÔNG process.
+- Hết rebalance → resume.
 
-→ Latency spike khi rebalance. Production: minimize via:
-- **Cooperative rebalance** (Phase 11).
-- **Static membership** (`group.instance.id`).
-- Avoid frequent restart (rolling deploy → rebalance storm).
+→ **Latency spike** khi rebalance. Production minimize bằng:
+- **Cooperative rebalance** (Phase 11 sẽ học).
+- **Static membership** (`group.instance.id`) — instance restart không trigger rebalance.
+- Tránh restart thường xuyên (rolling deploy gây rebalance storm).
 
-### Effective max consumers = partitions
+### Số consumer hiệu quả = số partition
 
 ```text
-3 partitions + 5 consumers → 3 active, 2 idle.
+3 partition + 5 consumer → 3 active, 2 idle.
 ```
 
-Scale up beyond partition count → wasted compute. Plan partitions theo max expected scale (Phase 3 bài 7 covered).
+Scale up vượt số partition = lãng phí compute (consumer thừa ngồi không). Plan số partition theo scale tối đa dự kiến (đã học ở Phase 3 bài 7).
 
-### Consumer offset persistence
+### Offset persist server-side
 
-When consumer 1 dies, broker remembers consumer 1's last committed offset. Consumer 2 (rebalanced to take that partition) **continues from there**.
+Khi Consumer 1 chết, broker vẫn nhớ **last committed offset** của Consumer 1. Consumer 2 (rebalance lên take partition đó) sẽ **resume từ chính offset đó**.
 
-→ Stateless app code OK. Offset state persisted server-side.
+→ App code có thể stateless. Offset state được Kafka lưu server-side trong `__consumer_offsets` topic.
 
-## Common pitfalls in real apps
+## Các pitfall trong app thực tế (preview các phase sau)
 
-(Preview của upcoming phases)
-
-| Pitfall | Phase |
+| Pitfall | Phase học sâu |
 |---|---|
-| Consumer processes message + crash before commit → re-process | Phase 12 |
-| Consumer processes + commit + crash before persist DB → message "lost" from app perspective | Phase 13 |
-| Long processing kicks consumer from group | Phase 11 |
-| Rebalance storm during rolling deploy | Phase 11 |
-| Consumer config mismatch in group → some idle | Operational |
-| Network blip → fake leave → unnecessary rebalance | Tuning session.timeout.ms |
+| Consumer xử lý message → crash trước commit → message bị process lại | Phase 12 |
+| Consumer commit → crash trước khi save DB → message "mất" từ góc nhìn app | Phase 13 |
+| Consumer xử lý dài → bị kick khỏi group → rebalance | Phase 11 |
+| Rolling deploy gây rebalance storm | Phase 11 |
+| Consumer config mismatch trong group → một số bị idle | Vấn đề vận hành |
+| Network blip → broker tưởng consumer leave → rebalance không cần thiết | Tune `session.timeout.ms` |
 
 ## Tóm tắt bài 1 + Phase 6
 
-- Phase 6 = practical demo Kafka rebalancing.
-- Setup: 3-partition topic + producer (1ms/msg) + 3 consumer instances.
-- Observed: scale up → rebalance to 1 partition per consumer. Scale down → remaining ones absorb partitions.
-- Counter verification: Sum(consumed) = Total(produced). **Kafka guarantee** holds.
-- Demo focus = Kafka behavior, NOT app reliability (DB call, error handle). Later phases.
-- Production: minimize rebalance disruption via cooperative protocol + static membership (Phase 11).
-- Effective max consumers = number of partitions. Plan partition count ahead.
+- Phase 6 là demo thực tế của **rebalancing trong Kafka**.
+- Setup: topic 3 partition + producer (1 msg/ms = 1000 msg/giây) + 3 instance consumer.
+- Quan sát:
+  - Scale up → rebalance → mỗi consumer ôm 1 partition.
+  - Scale down → consumer còn lại absorb partition của consumer đã leave.
+- Verify bằng counter: **Tổng(consumed) = Tổng(produced)**. Kafka guarantee hoạt động đúng.
+- Demo focus = **Kafka behavior**, KHÔNG phải app reliability (DB call, error handle) — học ở phase sau.
+- Production: giảm disruption khi rebalance bằng cooperative protocol + static membership (Phase 11).
+- Số consumer hiệu quả tối đa = số partition. Cần plan số partition trước khi tạo topic.
 
 **Bài kế tiếp** → [Phase 7 - SCS Processor pattern](../phase-7-spring-cloud-stream-processor/01-processor-pattern.md)

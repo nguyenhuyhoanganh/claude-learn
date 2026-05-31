@@ -128,15 +128,15 @@ Common production setup: **3 brokers, RF=3, min.insync.replicas=2** (Phase 12 de
 
 Cluster có 3 types of communication:
 
-| Type | Between | Purpose |
+| Loại | Giữa ai với ai | Mục đích |
 |---|---|---|
-| **Control plane** | Controllers | Cluster management, election |
-| **Data plane** | Brokers | Replication, internal data sync |
+| **Control plane** (mặt phẳng điều khiển) | Giữa các controller | Quản lý cluster, election |
+| **Data plane** (mặt phẳng data) | Giữa các broker | Replication, sync data nội bộ |
 | **External** | Application ↔ Broker | Producer publish, consumer poll |
 
-3 types → 3 different ports. Brokers listen on multiple addresses simultaneously.
+3 loại traffic → 3 port khác nhau. Mỗi broker listen trên **nhiều địa chỉ đồng thời**.
 
-### Configuration
+### Cấu hình listener
 
 ```properties
 listeners=CONTROLLER://kafka1:9093,INTERNAL://kafka1:9092,EXTERNAL://0.0.0.0:8081
@@ -144,98 +144,100 @@ controller.listener.names=CONTROLLER
 inter.broker.listener.name=INTERNAL
 ```
 
-Breakdown:
-- `listeners` = list of `LABEL://host:port` triples. Broker opens all these.
-- `controller.listener.names` = label used cho controller traffic.
-- `inter.broker.listener.name` = label used cho broker replication.
+Giải thích từng property:
+- `listeners` = danh sách `LABEL://host:port`, phân cách bằng dấu phẩy. Broker mở mọi port này để lắng nghe.
+- `controller.listener.names` = label nào dùng cho traffic controller.
+- `inter.broker.listener.name` = label nào dùng cho data plane (broker-to-broker replication).
 
-Remaining labels (`EXTERNAL`) inferred for client traffic.
+Label còn lại (`EXTERNAL`) Kafka tự suy ra là dành cho client traffic.
 
-> Labels (`CONTROLLER`, `INTERNAL`, `EXTERNAL`) là **arbitrary names**. Kafka không hiểu "internal" có nghĩa gì. Bạn label "FOO", "BAR" cũng work. Tên semantically meaningful là best practice.
+> **Lưu ý**: các label (`CONTROLLER`, `INTERNAL`, `EXTERNAL`) chỉ là **tên gọi tuỳ ý**. Kafka không hiểu "internal" có nghĩa gì cụ thể. Bạn label thành `FOO`, `BAR` vẫn chạy được. Đặt tên có ý nghĩa là best practice cho dễ đọc cấu hình.
 
-### Vì sao nhiều ports?
+### Vì sao cần nhiều port?
 
-Network segmentation:
-- **Controller traffic**: critical, low-volume, sensitive.
-- **Inter-broker replication**: high-volume, internal subnet only.
-- **External**: opens to clients, may need encryption (TLS).
+Để **phân chia network (network segmentation)**:
+- **Controller traffic**: quan trọng, volume thấp, nhạy cảm — nên đi qua port riêng.
+- **Inter-broker replication**: volume cao, chỉ trong internal subnet — không exposed ra ngoài.
+- **External**: mở cho client kết nối, có thể cần encryption (TLS).
 
-Tách:
-- Run on separate network interfaces (vd controller trên private subnet, external trên public).
-- Apply different security (controller plaintext internal, external SASL_SSL).
-- Different firewall rules.
+Tách port mang lại lợi ích:
+- Chạy trên các network interface khác nhau (vd controller trên private subnet, external trên public).
+- Áp dụng security khác nhau (controller plaintext nội bộ, external SASL_SSL).
+- Firewall rule khác nhau cho từng loại traffic.
 
-## Advertised listeners — how clients reach the broker
+## Advertised listeners — broker khai báo cách reach mình
 
-Vấn đề:
-- Broker listens at `0.0.0.0:8081`.
-- Client connects → broker says "for this topic, talk to Broker X."
-- Client needs to know **Broker X's reachable address**.
+Vấn đề thực tế:
+- Broker listen ở `0.0.0.0:8081` (mọi interface).
+- Client kết nối → broker bảo "topic này thì gọi Broker X."
+- Client cần biết **địa chỉ Broker X có thể connect được**.
 
-`advertised.listeners` = broker tells clients **how to reach me**.
+`advertised.listeners` = broker **khai báo cho client biết cách reach mình** (tương ứng với từng label).
 
 ```properties
 advertised.listeners=INTERNAL://kafka1:9092,EXTERNAL://localhost:8081
 ```
 
-Per label, where to reach this broker:
-- Internal (other brokers in cluster): `kafka1:9092` (Docker service name).
-- External (client app outside cluster): `localhost:8081` (port-mapped via Docker).
+Theo từng label, broker chỉ ra địa chỉ tương ứng:
+- Internal (broker khác trong cluster): reach qua `kafka1:9092` (tên service Docker).
+- External (client app bên ngoài Docker network): reach qua `localhost:8081` (port đã port-map qua Docker).
 
-### From caller's perspective
+### Hiểu theo "góc nhìn của người gọi"
 
-`INTERNAL://kafka1:9092` — other Docker containers reach this via service name `kafka1`.
-`EXTERNAL://localhost:8081` — host machine (running producer app) sees Kafka via port-mapped `localhost:8081`.
+`INTERNAL://kafka1:9092` — các Docker container khác trong cùng network reach broker này qua service name `kafka1`.
 
-Both valid simultaneously. Network plane determines which is used.
+`EXTERNAL://localhost:8081` — máy host (đang chạy producer Spring Boot app) thấy Kafka qua port đã map ra `localhost:8081`.
 
-### Real production
+Cả 2 đều **valid đồng thời**. Network plane mà client đang ở sẽ quyết định cái nào được dùng.
+
+### Production thực tế
 
 ```properties
 advertised.listeners=INTERNAL://10.0.1.5:9092,EXTERNAL://kafka1.acme.com:9092
 ```
 
-Internal IP for VPC traffic. Public DNS for external client (cross-AZ, hybrid cloud).
+- Internal: IP private cho traffic trong VPC.
+- External: public DNS cho client gọi từ ngoài (cross-AZ, hybrid cloud).
 
-## Security protocol per listener
+## Security protocol theo từng listener
 
-Each listener has security:
+Mỗi listener có security riêng:
 
 ```properties
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:SASL_SSL
 ```
 
-| Protocol | Auth | Encryption |
+| Protocol | Authentication | Encryption |
 |---|---|---|
-| `PLAINTEXT` | None | None |
-| `SSL` | None | Yes |
-| `SASL_PLAINTEXT` | Username/password | None |
-| `SASL_SSL` | Username/password | Yes |
+| `PLAINTEXT` | Không | Không |
+| `SSL` | Không | Có |
+| `SASL_PLAINTEXT` | Username/password | Không |
+| `SASL_SSL` | Username/password | Có |
 
-Mix:
-- Internal subnet trusted → `PLAINTEXT` (no overhead).
-- External public-facing → `SASL_SSL` (security mandatory).
+Mix theo nhu cầu:
+- Internal subnet trusted (nội bộ tin tưởng) → dùng `PLAINTEXT` để tránh overhead encryption.
+- External public-facing → `SASL_SSL` bắt buộc (bảo mật mandatory).
 
-Phase 16 security deep-dive.
+Phase 16 sẽ đi sâu vào security.
 
 ## Cluster ID + node ID
 
-Per-broker properties:
+Property cho mỗi broker:
 
 ```properties
-node.id=1                        # unique per broker (1, 2, 3, ...)
-cluster.id=abc123...             # SAME across all brokers
+node.id=1                        # unique cho mỗi broker (1, 2, 3, ...)
+cluster.id=abc123...             # GIỐNG NHAU cho tất cả broker trong cluster
 ```
 
-`cluster.id` generated once:
+`cluster.id` được generate **một lần** lúc setup cluster:
 ```bash
 ./kafka-storage.sh random-uuid
-# abc123-XYZ-...
+# Output: abc123-XYZ-...
 ```
 
-Use this same UUID for **all** brokers in cluster. Tells brokers "you belong to this cluster."
+Dùng cùng UUID này cho **tất cả** broker trong cluster. Property này nói với broker "mày thuộc cluster này."
 
-Different cluster IDs → brokers refuse to join.
+Nếu broker có `cluster.id` khác nhau → từ chối join cluster (Kafka coi đó là cluster khác).
 
 ## Controller quorum voters
 
@@ -243,29 +245,29 @@ Different cluster IDs → brokers refuse to join.
 controller.quorum.voters=1@kafka1:9093,2@kafka2:9093,3@kafka3:9093
 ```
 
-List of `nodeId@host:port` for **all controller-eligible nodes**.
+Danh sách `nodeId@host:port` của **mọi node eligible làm controller**.
 
-Each broker knows about all controllers. During election, brokers vote among themselves.
+Mỗi broker biết về tất cả controller-eligible. Khi election xảy ra, các broker này bầu cử lẫn nhau để chọn ra controller active.
 
-KRaft mode (Kafka 3.0+) replaces ZooKeeper. Controllers maintain cluster metadata internally.
+KRaft mode (Kafka 3.0+) đã thay thế ZooKeeper. Các controller tự duy trì metadata của cluster internally bằng Raft consensus protocol.
 
-## Internal `__consumer_offsets` topic replication
+## Internal topic `__consumer_offsets` cũng cần replicate
 
-Kafka tracks consumer offsets in `__consumer_offsets` internal topic.
+Kafka tracks offset của các consumer group trong internal topic `__consumer_offsets`.
 
-Default replication factor:
+Replication factor mặc định:
 ```properties
 offsets.topic.replication.factor=1
 ```
 
-Production: **set to broker count or 3**:
+Production nên **set = số broker hoặc 3**:
 ```properties
 offsets.topic.replication.factor=3
 ```
 
-If 1 broker dies and only 1 copy → consumer offset tracking lost → confused on rebalance. **Always replicate**.
+Vì sao quan trọng? Nếu chỉ 1 copy và broker chứa copy đó chết → **mất tracking consumer offset** → khi rebalance consumer bị confused (không biết đã consume tới đâu) → có thể replay hoặc skip message. **Luôn replicate** topic này.
 
-Same for `transaction.state.log.replication.factor` (Phase 14 transactions).
+Tương tự với `transaction.state.log.replication.factor` (Phase 14 sẽ học về transactions).
 
 ## Auto-create topics
 
@@ -274,47 +276,50 @@ Default dev:
 auto.create.topics.enable=true
 ```
 
-Producer/consumer to non-existent topic → auto-create with defaults (1 partition, RF=1).
+Producer/consumer gọi vào topic chưa tồn tại → broker tự tạo topic với default (1 partition, replication factor = 1).
 
-Production:
+Production phải set:
 ```properties
 auto.create.topics.enable=false
 ```
 
-Reasons:
-- Typo in topic name → silently create new topic. Producer publishes nothing visible to consumer. Bug.
-- Auto-created defaults (RF=1) are unsafe.
-- Topic creation should be explicit infra operation (Terraform, CLI).
+Lý do:
+- Typo trong tên topic → broker silently tạo topic mới với tên sai. Producer publish vào đó mà consumer không thấy gì → bug khó debug.
+- Topic auto-create dùng default RF=1, không safe cho production.
+- Tạo topic phải là **infra operation explicit** (qua Terraform, CLI, hoặc admin tool).
 
-## Broker properties summary table
+## Bảng tổng kết các broker property
 
-| Property | Common? | Notes |
+| Property | Common giữa các broker? | Note |
 |---|---|---|
-| `node.id` | Different per broker | 1, 2, 3, ... |
-| `cluster.id` | Same | Generated once |
-| `process.roles` | Same | `broker,controller` for combined |
-| `listeners` | Different ports | Per broker may differ |
-| `advertised.listeners` | Different | Reflects each broker's reachable address |
-| `controller.quorum.voters` | Same | All controllers in cluster |
-| `listener.security.protocol.map` | Same | Security per label |
-| `controller.listener.names` | Same | Which label = controller |
-| `inter.broker.listener.name` | Same | Which label = data plane |
-| `auto.create.topics.enable` | Same | Set false in prod |
-| `offsets.topic.replication.factor` | Same | Match broker count or 3 |
+| `node.id` | Khác nhau | 1, 2, 3, ... mỗi broker 1 ID unique |
+| `cluster.id` | Giống nhau | Generate 1 lần, share cho cả cluster |
+| `process.roles` | Giống nhau | `broker,controller` cho small cluster |
+| `listeners` | Có thể khác (port khác) | Mỗi broker mở port riêng |
+| `advertised.listeners` | Khác | Phản ánh địa chỉ reachable của từng broker |
+| `controller.quorum.voters` | Giống nhau | List tất cả controller trong cluster |
+| `listener.security.protocol.map` | Giống nhau | Security theo label |
+| `controller.listener.names` | Giống nhau | Label nào = controller |
+| `inter.broker.listener.name` | Giống nhau | Label nào = data plane |
+| `auto.create.topics.enable` | Giống nhau | Set false ở production |
+| `offsets.topic.replication.factor` | Giống nhau | Bằng số broker hoặc 3 |
 
 ## Tóm tắt bài 1
 
-- **Brokers**: capacity. **Partitions**: scalability. **Replication**: availability.
-- Replication factor N = N copies per partition. Tolerate N-1 broker failures.
-- Production: **3 brokers, RF=3, min.insync.replicas=2**.
-- **Listeners**: multiple ports/labels per broker:
+- 3 trục cốt lõi:
+  - **Số broker** → quyết định **capacity** (CPU, RAM, disk tổng cộng).
+  - **Số partition** → quyết định **scalability** (parallel processing cho 1 topic).
+  - **Replication factor** → quyết định **availability** (chịu được bao nhiêu broker chết).
+- Replication factor = N → mỗi partition có N copy → chịu được N-1 broker fail đồng thời.
+- Production chuẩn: **3 broker, RF=3, min.insync.replicas=2**.
+- **Listeners**: mỗi broker có nhiều port/label cho các loại traffic:
   - CONTROLLER (control plane).
-  - INTERNAL (data plane, inter-broker).
-  - EXTERNAL (clients).
-- `advertised.listeners` = each broker tells clients **how to reach me** per label.
-- Different security per listener possible (PLAINTEXT internal, SASL_SSL external).
-- `cluster.id` shared across cluster. `node.id` unique.
-- `controller.quorum.voters` = list of all controllers.
+  - INTERNAL (data plane, inter-broker replication).
+  - EXTERNAL (client).
+- `advertised.listeners` = broker khai báo **cách client reach mình** theo từng label.
+- Security có thể khác nhau giữa các listener (vd PLAINTEXT internal, SASL_SSL external).
+- `cluster.id` share trong toàn cluster. `node.id` unique cho mỗi broker.
+- `controller.quorum.voters` = list của tất cả controller-eligible node.
 - Production: `auto.create.topics.enable=false`, `offsets.topic.replication.factor=3`.
 
 **Bài kế tiếp** → [Bài 2: Multi-Node Cluster Docker Compose Setup](02-docker-compose-cluster.md)
