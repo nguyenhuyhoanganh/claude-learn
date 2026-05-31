@@ -277,32 +277,32 @@ Producer App
   - append to partition N's log
 ```
 
-Broker không re-calculate. Trust client.
+Broker không tự tính lại — tin tưởng vào client.
 
-### Manual partition override
+### Manual partition override — ép gửi tới partition cụ thể
 
-Client có thể skip hash, ép specific partition:
+Client có thể bỏ qua hash function, ép message vào partition cụ thể:
 
 ```java
 ProducerRecord<String, String> record = new ProducerRecord<>(
     "order-events",
-    0,           // partition (explicit)
+    0,           // partition (explicit — ép vào partition 0)
     "key",
     "value"
 );
 ```
 
-Rare use case (debug, special routing). Production hầu như dùng default key-based.
+Use case hiếm gặp (debug, routing đặc biệt). Production hầu như luôn dùng default key-based partitioning.
 
-## Null key — behavior khác
+## Null key — behavior khác hoàn toàn
 
-Demo: topic 2 partitions, producer gửi **không key**.
+Demo: topic 2 partition, producer gửi message **KHÔNG có key**.
 
 ```bash
 ./kafka-topics.sh --bootstrap-server localhost:9092 --create --topic null-key-topic --partitions 2
 
-# T1, T2: 2 consumers in group "null-key-group"
-# T3: producer (no key)
+# T1, T2: 2 consumer trong group "null-key-group"
+# T3: producer (không key)
 ```
 
 Script bash gửi message liên tục:
@@ -315,62 +315,65 @@ for i in $(seq 1 100); do
 done
 ```
 
-Observation:
-- Consumer T1 nhận chunk of messages (vd `1-30`).
-- Consumer T2 sau đó nhận chunk (`31-60`).
-- Lặp lại.
+Quan sát kết quả:
+- Consumer T1 nhận một loạt message liên tiếp (vd `1-30`).
+- Sau đó Consumer T2 nhận loạt tiếp theo (`31-60`).
+- Lặp lại pattern này.
 
-**Sticky partitioner** — Kafka 2.4+:
-- Null key → producer "stick" 1 partition trong khoảng thời gian / batch.
-- Sau batch, switch partition tiếp theo.
-- Mục đích: tận dụng `batch.size` (gửi batch lớn 1 partition rồi mới đổi).
+→ **KHÔNG phải round-robin từng message**.
+
+**Sticky partitioner** — feature từ Kafka 2.4+:
+- Null key → producer **dính** (stick) vào 1 partition trong 1 khoảng thời gian / 1 batch.
+- Hết batch → chuyển sang partition tiếp theo.
+- Mục đích: tận dụng `batch.size` (gửi 1 batch lớn vào 1 partition rồi mới đổi → throughput cao hơn).
 
 Trade-off:
-- ✓ Better throughput (large batches).
-- ✗ Không round-robin từng message — uneven trong window ngắn.
+- ✓ Throughput tốt hơn (batch lớn).
+- ✗ Không round-robin per-message — phân phối không đều trong window ngắn.
 
-Long-run, distribution gần đều.
+Về long-run (chạy lâu), phân phối gần đều giữa các partition.
 
-## Pitfalls
+## Anti-pattern — những lỗi thường gặp
 
-| Pitfall | Reason | Fix |
+| Anti-pattern | Lý do tệ | Cách fix |
 |---|---|---|
-| Tất cả message cùng key | Hash → 1 partition only → no parallelism | Vary key by entity ID |
-| Topic 1 partition + cần scale | Max 1 consumer | Recreate với more partitions |
-| Quá nhiều partition (1000+) | Broker overhead, slow rebalance | Stick 10-50 per topic typically |
-| Đổi key sau khi production live | Ordering broken across migration | Tránh — chọn key đúng từ đầu |
-| Reduce partition count | KHÔNG support trực tiếp | Chỉ tăng, không giảm |
+| Tất cả message dùng cùng 1 key | Hash → tất cả về 1 partition → không scale được | Đa dạng key theo entity ID |
+| Topic chỉ 1 partition + cần scale | Tối đa 1 consumer xử lý | Tạo lại topic với nhiều partition hơn |
+| Quá nhiều partition (1000+) | Overhead broker, rebalance chậm | Thường 10-50 partition/topic là đủ |
+| Đổi key sau khi production đã live | Phá vỡ ordering qua transition | Tránh — chọn đúng key từ đầu |
+| Cần giảm số partition | KHÔNG được support trực tiếp | Chỉ tăng được, không giảm. Tạo topic mới + migrate |
 
-## Visual recap
+## Visual tổng kết
 
 ```text
                             Topic "order-events"
-                            (3 partitions)
+                            (3 partition)
                                   │
         ┌─────────────────────────┼─────────────────────────┐
         ▼                         ▼                         ▼
    Partition 0              Partition 1              Partition 2
-   [keys: A1, A4, ...]      [keys: A2, A7, ...]      [keys: A3, A5, ...]
+   [key: A1, A4, ...]       [key: A2, A7, ...]       [key: A3, A5, ...]
         ▲                         ▲                         ▲
         │ assigned to             │ assigned to             │ assigned to
         │                         │                         │
    Consumer 1               Consumer 2               Consumer 3
-   (in group "payments")    (in group "payments")    (in group "payments")
+   (group "payments")       (group "payments")       (group "payments")
 ```
 
-Within partition: sequential. Across partition: parallel.
+- **Trong 1 partition**: tuần tự (giữ thứ tự message).
+- **Giữa các partition**: song song (parallel).
 
 ## Tóm tắt bài 6
 
-- Kafka không round-robin trong group vì **ordering quan trọng** (vd bank deposit → withdraw).
-- **Topic = logical abstraction**. **Partition = physical storage**.
-- Tạo topic: `--partitions N`. Default 1.
-- **Offset thuộc partition**, không thuộc topic. Ordering chỉ guarantee within 1 partition.
-- **Message key** + `hash(key) % numPartitions` → quyết định partition. Cùng key → cùng partition → sequential.
-- Consumer group: mỗi partition assigned cho **max 1 consumer** trong group → scale = # consumers ≤ # partitions.
-- Demo: 2 partitions + 2 consumers + key `account_id` → mỗi consumer ôm 1 partition, ordering preserved.
-- **Key choice critical**: account_id, user_id, order_id. Không date, không random.
-- Null key: **sticky partitioner** (Kafka 2.4+) — gom batch theo partition, switch theo chunks. OK throughput, uneven short-term.
-- Partition assignment do **client library** tính, không broker.
+- Kafka KHÔNG round-robin trong consumer group vì **giữ thứ tự message rất quan trọng** (vd bank: deposit phải trước withdraw).
+- **Topic = abstraction logic**. **Partition = đơn vị lưu trữ vật lý**.
+- Tạo topic với `--partitions N`. Default = 1 partition.
+- **Offset thuộc về partition**, không thuộc topic. Thứ tự message chỉ được đảm bảo trong 1 partition.
+- **Message key** + công thức `hash(key) % numPartitions` → quyết định partition. Cùng key → cùng partition → giữ thứ tự.
+- Consumer group: mỗi partition được assign cho **tối đa 1 consumer** trong group → scale tối đa = số partition.
+- Demo: 2 partition + 2 consumer + key `account_id` → mỗi consumer ôm 1 partition, ordering được đảm bảo.
+- **Chọn key cực kỳ quan trọng**: account_id, user_id, order_id. KHÔNG dùng date, KHÔNG random.
+- Null key: **sticky partitioner** (Kafka 2.4+) — gom batch theo partition, đổi theo chunk. Throughput tốt, phân phối không đều trong window ngắn.
+- Partition assignment được tính ở **client library**, không phải broker.
 
 **Bài kế tiếp** → [Bài 7: Rebalancing + Scaling scenarios + Modify partitions](07-rebalancing-scaling.md)

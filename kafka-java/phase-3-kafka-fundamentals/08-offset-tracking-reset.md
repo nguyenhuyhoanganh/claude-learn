@@ -225,41 +225,41 @@ Effect:
 - `earliest` = consumer **mới** bắt đầu từ offset 0.
 - Áp dụng **chỉ khi không có offset trong ledger**. Có ledger → resume từ đó.
 
-## Resetting Consumer Offsets
+## Reset Consumer Offset
 
-Use cases:
-1. **Bug trong consumer**: process sai, cần replay & process lại đúng.
-2. **Add new feature**: consumer cần build state từ historical data.
-3. **Skip poison messages**: jump qua offset gây crash.
-4. **Disaster recovery**: roll back về timestamp trước incident.
+Use case khi cần reset:
+1. **Bug trong consumer**: code xử lý sai, cần replay và xử lý lại đúng.
+2. **Thêm feature mới**: consumer cần build state từ data lịch sử.
+3. **Skip poison message**: nhảy qua offset gây crash consumer.
+4. **Disaster recovery**: roll back về thời điểm trước incident.
 
 CLI: `kafka-consumer-groups.sh --reset-offsets`.
 
-> Prerequisite: **stop all consumers in group**. Kafka không reset khi members đang active.
+> **Điều kiện tiên quyết**: phải **stop tất cả consumer trong group** trước. Kafka từ chối reset khi consumer đang active.
 
-### Reset options
+### Các option reset
 
-| Option | Effect |
+| Option | Hành vi |
 |---|---|
-| `--shift-by N` | Cộng N vào current offset (negative = lùi) |
-| `--to-offset N` | Set absolute offset |
-| `--to-earliest` | Reset về offset 0 (replay all) |
-| `--to-latest` | Reset về LEO (skip all backlog) |
-| `--by-duration PT5M` | Reset về 5 phút trước (ISO 8601 duration) |
-| `--to-datetime <ISO>` | Reset về timestamp specific |
-| `--to-current` | Stay at current (no-op, useful for verify) |
+| `--shift-by N` | Cộng N vào current offset (N âm = lùi lại N message) |
+| `--to-offset N` | Set offset tuyệt đối = N |
+| `--to-earliest` | Reset về offset 0 (replay từ đầu) |
+| `--to-latest` | Reset về LEO (bỏ qua mọi backlog) |
+| `--by-duration PT5M` | Reset về 5 phút trước (định dạng ISO 8601 duration) |
+| `--to-datetime <ISO>` | Reset về 1 timestamp cụ thể |
+| `--to-current` | Giữ nguyên (no-op, dùng để verify) |
 
-Modifiers:
-- `--dry-run`: show what would happen, không apply.
-- `--execute`: apply for real.
+2 modifier:
+- `--dry-run`: chỉ in ra "sẽ làm gì", **không apply** thật. Dùng để check trước.
+- `--execute`: apply thật.
 
-### Demo: shift-by -3
+### Demo: shift-by -3 (lùi lại 3 message)
 
-Tiếp tục từ demo trước. CG hiện tại current offset = `6`, `9`. Backlog lag = 0.
+Tiếp tục từ demo trước. Consumer group `CG` hiện tại current offset = `6` (partition 0), `9` (partition 1). Backlog lag = 0.
 
 Stop consumer trước.
 
-#### Dry-run
+#### Bước 1: Dry-run để xem sẽ ra gì
 
 ```bash
 ./kafka-consumer-groups.sh \
@@ -276,9 +276,9 @@ Stop consumer trước.
 # CG     offset-tracking-topic  1          6
 ```
 
-Partition 0: 6 - 3 = 3. Partition 1: 9 - 3 = 6. Reset áp dụng **cho mọi partition** (không chọn riêng).
+Tính: Partition 0: 6 - 3 = 3. Partition 1: 9 - 3 = 6. Reset áp dụng **cho mọi partition** trong topic (không chọn riêng).
 
-#### Execute
+#### Bước 2: Execute thật
 
 ```bash
 ./kafka-consumer-groups.sh \
@@ -286,15 +286,15 @@ Partition 0: 6 - 3 = 3. Partition 1: 9 - 3 = 6. Reset áp dụng **cho mọi par
   --reset-offsets --shift-by -3 --execute
 ```
 
-Describe sau:
+Describe sau khi execute:
 ```text
 CG  ...  Partition 0  current 3  LEO 6  lag 3
 CG  ...  Partition 1  current 6  LEO 9  lag 3
 ```
 
-Restart consumer → nhận lại 3 + 3 = 6 messages (last 3 messages của mỗi partition).
+Restart consumer → nhận lại **3 + 3 = 6 message** (3 message cuối của mỗi partition).
 
-### Reset to earliest
+### Reset về earliest — replay từ đầu
 
 ```bash
 ./kafka-consumer-groups.sh \
@@ -304,9 +304,9 @@ Restart consumer → nhận lại 3 + 3 = 6 messages (last 3 messages của mỗ
   --reset-offsets --to-earliest --execute
 ```
 
-Replay từ đầu. Use case: build state cho new feature.
+Use case: build state cho feature mới (vd thêm consumer "AnalyticsService" cần đọc lại toàn bộ event history để tính số liệu).
 
-### Reset by duration (re-process last hour)
+### Reset theo duration — re-process X giờ gần nhất
 
 ```bash
 ./kafka-consumer-groups.sh \
@@ -314,14 +314,14 @@ Replay từ đầu. Use case: build state cho new feature.
   --reset-offsets --by-duration PT1H --execute
 ```
 
-`PT1H` = 1 hour. ISO 8601 duration format:
-- `PT5M` = 5 minutes
-- `PT1H30M` = 1.5 hours
-- `P1D` = 1 day
+`PT1H` = 1 giờ. Định dạng ISO 8601 duration:
+- `PT5M` = 5 phút
+- `PT1H30M` = 1.5 giờ
+- `P1D` = 1 ngày
 
-Kafka find offset gần nhất với "now - 1H" theo timestamp → reset.
+Kafka tìm offset gần nhất theo timestamp "now - 1H" → reset đến đó.
 
-### Reset to datetime
+### Reset về 1 thời điểm cụ thể
 
 ```bash
 ./kafka-consumer-groups.sh \
@@ -329,69 +329,70 @@ Kafka find offset gần nhất với "now - 1H" theo timestamp → reset.
   --reset-offsets --to-datetime 2026-05-30T10:00:00.000 --execute
 ```
 
-Disaster recovery: "roll back to before incident at 10am".
+Use case disaster recovery: "roll back về trước incident lúc 10 giờ sáng."
 
-## Per-topic vs all topics
+## Reset cho 1 topic, nhiều topic, hay 1 partition cụ thể
 
 ```bash
-# Reset specific topic
+# Reset 1 topic cụ thể
 --topic offset-tracking-topic
 
-# Reset all topics group subscribed to
+# Reset tất cả topic mà group subscribe
 --all-topics
 
-# Reset specific partition only
---topic offset-tracking-topic:0   ← only partition 0
+# Reset chỉ 1 partition cụ thể trong topic
+--topic offset-tracking-topic:0   ← chỉ partition 0
 ```
 
-## Production cautions
+## Lưu ý quan trọng cho production
 
-| Caution | Why |
+| Lưu ý | Lý do |
 |---|---|
-| Stop all consumers before reset | Kafka rejects if active members |
-| Test in staging trước | Reset = irreversible (history processed lại) |
-| Avoid reset trong peak hours | Spike of reprocessing |
-| Communicate với downstream | Reprocessed events emit downstream events → cascade |
-| Idempotent consumers required | Processing message 2 lần phải safe (no double charge) |
+| Stop tất cả consumer trước khi reset | Kafka từ chối reset nếu vẫn còn member active |
+| Test ở staging trước | Reset = không thể undo (history sẽ bị process lại) |
+| Tránh reset trong peak hours | Reprocess gây spike tải hệ thống |
+| Communicate với downstream service | Event reprocess có thể tạo event downstream → cascade effect |
+| Consumer phải **idempotent** | Xử lý cùng 1 message 2 lần phải an toàn (không double charge customer) |
 
-Idempotency = critical. Phase 13-14 (Error Handling, Transactions) deep-dive.
+**Idempotency** (tính chất xử lý lặp an toàn) cực kỳ quan trọng. Phase 13-14 (Error Handling, Transactions) sẽ đi sâu.
 
 ## Programmatic offset commit (Java/Spring)
 
-Reset CLI cho ops. App code có 2 mode commit offset:
+Reset CLI là công cụ cho ops. Trong code app, có 2 mode commit offset:
 
 ```yaml
-spring.kafka.consumer.enable-auto-commit: true   # default, auto every 5s
+spring.kafka.consumer.enable-auto-commit: true   # default, auto commit mỗi 5 giây
 # hoặc
-spring.kafka.consumer.enable-auto-commit: false  # manual
+spring.kafka.consumer.enable-auto-commit: false  # manual — code tự commit
 ```
 
-Manual commit:
+Manual commit (production preferred):
 ```java
 @KafkaListener(topics = "order-events")
 public void handle(ConsumerRecord<String, String> record, Acknowledgment ack) {
     try {
-        process(record);
-        ack.acknowledge();   // commit offset SAU khi process xong
+        process(record);              // xử lý xong xuôi (DB write, etc.)
+        ack.acknowledge();            // commit offset SAU KHI process xong
     } catch (Exception e) {
-        // DON'T ack → Kafka redeliver
+        // KHÔNG gọi ack → Kafka sẽ redeliver message này
+        log.error("Process failed, will retry", e);
     }
 }
 ```
 
-Reliability mode quan trọng → Phase 12 (Reliability + Acknowledgement).
+Mode acknowledgement rất quan trọng cho reliability → Phase 12 sẽ học chi tiết.
 
 ## Tóm tắt bài 8
 
-- Kafka maintain **ledger nội bộ**: (consumer group, partition) → current offset. Lưu trong topic `__consumer_offsets`.
-- Mỗi consumer group có progress độc lập, không ảnh hưởng nhau.
-- `kafka-consumer-groups.sh --describe --group X` show: CURRENT-OFFSET, LOG-END-OFFSET, LAG.
-- LAG = LEO - current offset. 0 = caught up. >0 = backlog.
-- Group `no active members` vẫn tồn tại trong ledger sau khi consumer disconnect (chờ rejoin). Auto cleanup sau 7 ngày inactive.
-- `--from-beginning` (CLI) hoặc `auto.offset.reset` (app) chỉ effect **lần đầu** subscribe. Sau đó ledger là source of truth.
-- **Reset offset** qua `--reset-offsets`: `--shift-by`, `--to-earliest`, `--to-latest`, `--to-offset`, `--by-duration`, `--to-datetime`.
-- `--dry-run` để preview, `--execute` để apply. Stop consumers trước.
-- Production caution: idempotent consumers required, communicate downstream cascade.
-- Reset cho ops. App-level offset commit qua manual ack (Phase 12).
+- Kafka maintain **ledger nội bộ** ánh xạ: `(consumer group, partition) → current offset`. Ledger này lưu trong internal topic `__consumer_offsets`.
+- Mỗi consumer group có progress **độc lập**, không ảnh hưởng nhau.
+- `kafka-consumer-groups.sh --describe --group X` hiện 3 thông tin chính: **CURRENT-OFFSET**, **LOG-END-OFFSET (LEO)**, **LAG**.
+- **LAG = LEO - current offset**. 0 = consumer đã catch up. > 0 = còn backlog.
+- Group có status `no active members` vẫn tồn tại trong ledger sau khi consumer disconnect (chờ rejoin). Auto cleanup sau 7 ngày inactive.
+- `--from-beginning` (CLI) hoặc `auto.offset.reset` (app) chỉ có hiệu lực **lần đầu** group subscribe. Sau đó ledger là source of truth, các flag này bị ignore.
+- **Reset offset** qua `--reset-offsets` với các option: `--shift-by`, `--to-earliest`, `--to-latest`, `--to-offset`, `--by-duration`, `--to-datetime`.
+- Workflow: `--dry-run` preview trước, rồi `--execute` apply thật. Phải **stop consumer** trước khi reset.
+- Lưu ý production: yêu cầu consumer **idempotent**, communicate cascade impact với downstream.
+- Reset là tool cho ops. Trong app code, dùng manual ack mode để control offset commit (Phase 12).
 
 **Bài kế tiếp** → [Bài 9: Section Summary + Key takeaways](09-section-summary.md)

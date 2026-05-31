@@ -1,50 +1,51 @@
 # Bài 4: Serialization, retention policies, và offset
 
 3 khái niệm cốt lõi nữa trước khi đi vào consumer group:
-1. **Serialization** — Kafka chỉ hiểu bytes, app phải convert.
-2. **Retention** — Kafka giữ data bao lâu? Không phải forever.
-3. **Offset** — vị trí của 1 message trong topic, giống array index.
+1. **Serialization** — Kafka chỉ hiểu bytes, app phải tự chuyển đổi.
+2. **Retention** — Kafka giữ data trong bao lâu? Không phải mãi mãi.
+3. **Offset** — vị trí của 1 message trong topic, giống như index của array.
 
 ## Serialization & Deserialization
 
-Kafka **không hiểu cấu trúc message của bạn**. Nó chỉ thấy:
-- Stream of bytes from producer.
-- Store on disk.
-- Send bytes to consumer.
+Kafka **KHÔNG hiểu cấu trúc message** của bạn. Từ góc nhìn của broker, mọi message chỉ là:
+- Stream of bytes (luồng byte) nhận từ producer.
+- Lưu xuống disk.
+- Gửi bytes cho consumer khi consumer ask.
 
 ```text
-Producer side:
+Phía Producer:
   Java Object (OrderEvent { id, amount, ... })
        │
-       │ serializer
+       │ serializer (đổi object → bytes)
        ▼
-  byte[] → Kafka broker
+  byte[] → gửi đi Kafka broker
 
-Consumer side:
-  byte[] from broker
+Phía Consumer:
+  byte[] nhận từ broker
        │
-       │ deserializer
+       │ deserializer (đổi bytes → object)
        ▼
   Java Object (OrderEvent { id, amount, ... })
 ```
 
-Serialization is **producer + consumer's job**, không phải broker.
+Serialization và deserialization là **trách nhiệm của producer + consumer app**, KHÔNG phải của broker.
 
-### Built-in serializers (Kafka client library)
+### Built-in serializer (có sẵn trong Kafka client library)
 
-| Type | Serializer |
+| Kiểu dữ liệu | Serializer |
 |---|---|
 | String | `StringSerializer` |
 | Integer | `IntegerSerializer` |
 | Long | `LongSerializer` |
 | ByteArray | `ByteArraySerializer` |
 | UUID | `UUIDSerializer` |
+| Double | `DoubleSerializer` |
 
-Built-in cho primitive types only.
+Built-in chỉ cho **primitive type** (kiểu đơn giản).
 
-### Complex objects → JSON / Avro / Protobuf
+### Complex object → JSON / Avro / Protobuf
 
-Real app sends `OrderEvent`:
+Real app thường gửi object phức tạp như `OrderEvent`:
 
 ```java
 public class OrderEvent {
@@ -55,26 +56,26 @@ public class OrderEvent {
 }
 ```
 
-3 options:
+3 lựa chọn phổ biến:
 
-#### Option 1: JSON (dễ nhất)
+#### Option 1: JSON (đơn giản nhất, phổ biến nhất)
 
 ```java
-ObjectMapper mapper = new ObjectMapper();
+ObjectMapper mapper = new ObjectMapper();   // Jackson
 byte[] bytes = mapper.writeValueAsBytes(orderEvent);
 ```
 
-Spring Cloud Stream auto-config Jackson — bạn không phải viết. Phase 4 deep-dive.
+Spring Cloud Stream auto-config Jackson cho bạn — không phải viết code thủ công. Phase 4 sẽ đi sâu.
 
-Pros: human-readable, schema-flexible.
-Cons: verbose (text), no enforced schema, version evolution dễ vỡ.
+Ưu điểm: human-readable (đọc được bằng mắt), schema flexible.
+Nhược điểm: verbose (text dài), không có enforced schema, version evolution dễ vỡ (đổi field name → consumer cũ break).
 
 #### Option 2: Avro
 
-Schema-based binary format.
+Schema-based binary format do Apache phát triển.
 
 ```text
-schema (file .avsc):
+File schema (.avsc):
 {
   "type": "record",
   "name": "OrderEvent",
@@ -85,80 +86,82 @@ schema (file .avsc):
 }
 ```
 
-Pros: compact, schema enforcement, backward/forward compat rules.
-Cons: cần Schema Registry (Confluent), setup phức tạp.
+Ưu điểm: compact (gọn), enforce schema, có rule backward/forward compatibility.
+Nhược điểm: cần Schema Registry (Confluent cung cấp) — setup phức tạp.
 
-Industry standard cho production.
+Đây là **industry standard cho production** ở các công ty lớn.
 
 #### Option 3: Protobuf
 
-Tương tự Avro, Google-developed. Cần `.proto` file.
+Tương tự Avro, do Google phát triển. Cần file `.proto`.
 
-Pros: cực compact, language-agnostic.
-Cons: schema registry tương tự.
+Ưu điểm: cực compact, language-agnostic (sinh code cho Java, Go, Python, C++, ...).
+Nhược điểm: cần schema registry tương tự Avro.
 
-### Console producer/consumer = String default
+### Console producer/consumer = String mặc định
 
 ```bash
 > hello
 ```
 
-Bạn không config serializer. Vì sao work?
+Bạn không config serializer. Vì sao vẫn chạy được?
 
-Console tool **hard-code StringSerializer + StringDeserializer**. Mọi input lấy là String, convert sang `byte[]`. Mọi output là String.
+Console tool **hard-code** dùng `StringSerializer` + `StringDeserializer`. Mọi input nhận là String, convert sang `byte[]`. Mọi output là String.
 
-Production app không dùng default này — phải explicit specify serializer trong config.
+Production app **không nên** dựa vào default này — phải explicit khai báo serializer/deserializer trong config.
 
-## Log Retention — Kafka giữ data bao lâu?
+## Log Retention — Kafka giữ data trong bao lâu?
 
-Kafka **không phải database**. Không giữ data forever theo default.
+Kafka **KHÔNG phải database**. Mặc định không giữ data forever.
 
-> **Log retention policy** = quy tắc broker delete old messages.
+> **Log retention policy** = quy tắc broker xoá message cũ.
 
-Default: **168 hours = 7 days**.
+Default: **168 tiếng = 7 ngày**.
 
-### 2 trục:
+### 2 trục kiểm soát retention
 
-#### Time-based: `log.retention.hours`
+#### Theo thời gian: `log.retention.hours`
 
 ```text
-log.retention.hours = 168  (default)
-# hoặc
+log.retention.hours = 168  (mặc định)
+# hoặc đơn vị nhỏ hơn:
 log.retention.minutes
 log.retention.ms
 ```
 
-Message sau 168h → eligible for deletion.
+Message cũ hơn 168 giờ → đủ điều kiện bị xoá.
 
-#### Size-based: `log.retention.bytes`
+#### Theo dung lượng: `log.retention.bytes`
 
 ```text
-log.retention.bytes = -1  (default = unlimited)
-# hoặc set 10 GB
+log.retention.bytes = -1  (mặc định = không giới hạn)
+# hoặc set 10 GB:
 log.retention.bytes = 10737418240
 ```
 
-Topic vượt size → old segments deleted.
+Topic vượt quá dung lượng này → segment cũ bị xoá.
 
-### Whichever first
+### Cả 2 rule active — cái nào đến trước thì xoá
 
-Cả 2 rule active đồng thời. **Whichever met first** → deletion.
+Cả 2 quy tắc chạy đồng thời. **Quy tắc nào đạt trước → trigger xoá**.
 
 ```text
 Scenario A: log.retention.hours=168, log.retention.bytes=10GB
-  Topic grow 12GB sau 3 ngày → size hit trước → delete oldest segments.
+  Topic tăng đến 12GB sau 3 ngày → đạt dung lượng trước
+  → xoá segment cũ nhất.
 
 Scenario B: log.retention.hours=168, log.retention.bytes=10GB
-  Topic 5GB sau 8 ngày → time hit trước → delete oldest.
+  Topic 5GB sau 8 ngày → đạt thời gian trước
+  → xoá segment cũ nhất.
 ```
 
-### Background cleanup
+### Background cleanup — broker tự động xoá định kỳ
 
-Broker periodically scan (default every 5 min) → delete eligible segments.
+Broker scan định kỳ (mặc định 5 phút 1 lần) → xoá những segment đủ điều kiện.
 
-`log.retention.check.interval.ms = 300000` (5 min).
+Property: `log.retention.check.interval.ms = 300000` (5 phút).
 
-### Per-topic override
+### Per-topic override — set retention riêng cho từng topic
 
 ```bash
 ./kafka-configs.sh \
@@ -166,35 +169,41 @@ Broker periodically scan (default every 5 min) → delete eligible segments.
   --entity-type topics \
   --entity-name critical-events \
   --alter \
-  --add-config retention.ms=2592000000   # 30 days for this topic only
+  --add-config retention.ms=2592000000   # 30 ngày, chỉ áp dụng topic này
 ```
 
-Critical events giữ lâu hơn. Trivial events giữ ngắn để tiết kiệm disk.
+Topic critical (financial events, audit log) → giữ lâu hơn.
+Topic trivial (clickstream, log debug) → giữ ngắn để tiết kiệm disk.
 
-### `log.retention.bytes = -1` + long retention = unlimited storage
+### `log.retention.bytes = -1` + retention dài = storage không giới hạn
 
-Some teams treat Kafka as event store (Event Sourcing pattern):
+Một số team coi Kafka như event store vĩnh viễn (pattern **Event Sourcing**):
 ```text
-log.retention.ms = -1   (forever)
-log.retention.bytes = -1 (no size limit)
+log.retention.ms = -1   (giữ mãi mãi)
+log.retention.bytes = -1 (không giới hạn dung lượng)
 ```
 
-→ Kafka thành event log permanent. Cần disk planning kỹ.
+→ Kafka trở thành event log permanent. Khi đó phải plan disk rất kỹ — dung lượng có thể tăng theo TB sau vài năm.
 
-### Compaction — alternative cho retention
+### Compaction — pattern thay thế retention
 
-Mode khác: **log compaction**.
+Mode khác hoàn toàn: **log compaction**.
 
 ```text
-Topic "user-profile" - key = userId, value = latest profile.
+Topic "user-profile":
+  key = userId, value = thông tin profile hiện tại của user.
 
-Standard retention: delete cũ sau 7 ngày.
-Compaction: keep only LATEST value per key, drop older entries with same key.
+Standard retention: xoá theo thời gian/dung lượng — bất kể key.
+Compaction: chỉ giữ VALUE MỚI NHẤT cho mỗi key,
+            xoá những entry cũ cùng key.
 
-Use case: store "current state" trong Kafka.
+Use case: lưu "current state" trong Kafka.
+  user 123 update profile lần 1 → message 1 (offset 5)
+  user 123 update profile lần 2 → message 2 (offset 120)
+  Compaction: xoá message 1, giữ message 2 (vì cùng key user 123).
 ```
 
-Set `cleanup.policy=compact`. Detail ở Phase 9.
+Set `cleanup.policy=compact`. Chi tiết ở Phase 9.
 
 ## Offset — vị trí trong topic
 
@@ -214,27 +223,27 @@ oldest                     newest (next: offset 9)
 ```
 
 Tính chất:
-- **Sequential**: 0, 1, 2, ... tăng dần khi message append.
-- **Unique within topic** (within partition — detail bài sau).
-- **Immutable**: message ở offset 5 không bao giờ đổi.
-- **Long type**: max = `Long.MAX_VALUE`.
+- **Sequential** (tuần tự): 0, 1, 2, ... tăng dần khi có message mới được append.
+- **Unique trong topic** (chính xác hơn: unique trong partition — chi tiết bài sau khi học partition).
+- **Immutable** (bất biến): message ở offset 5 KHÔNG BAO GIỜ thay đổi sau khi đã ghi.
+- **Long type**: giá trị tối đa = `Long.MAX_VALUE`.
 
-### Max offset bao lớn?
+### Max offset lớn cỡ nào?
 
-`Long.MAX_VALUE = 9,223,372,036,854,775,807`.
+`Long.MAX_VALUE = 9,223,372,036,854,775,807` (9.2 tỷ tỷ).
 
-Producer 1M msg/sec → 9.2 quintillion / 1M = 9.2 trillion seconds = **292,000 years** để overflow.
+Tính: producer phát 1 triệu message/giây → cần 9.2 nghìn tỷ giây = **292,000 năm** để hết offset.
 
-→ Thực tế không overflow.
+→ Thực tế **không bao giờ overflow** trong đời thực.
 
 ### Vì sao offset quan trọng?
 
 3 use case chính:
-1. **Order preservation**: messages delivered to consumer **theo thứ tự offset** (within partition).
-2. **Consumer position tracking**: consumer "ở offset 100" = đã đọc đến đó, lần sau pull từ 101.
-3. **Replay**: consumer reset offset về 0 → đọc lại từ đầu.
+1. **Order preservation** (giữ thứ tự): message delivered cho consumer **theo đúng thứ tự offset** (trong cùng partition).
+2. **Consumer position tracking** (theo dõi vị trí consumer): consumer "đang ở offset 100" nghĩa là đã đọc đến đó, lần poll tiếp theo lấy từ offset 101.
+3. **Replay** (đọc lại): consumer reset offset về 0 → đọc lại toàn bộ từ đầu (dùng cho debug, build state mới).
 
-Phase sau (offset tracking) deep-dive cách consumer commit offset, reset, etc.
+Phase sau (bài 8 offset tracking) sẽ đi sâu cách consumer commit offset, reset, etc.
 
 ## Demo: print offset trong console consumer
 
@@ -306,23 +315,26 @@ date -r 1717153425  # macOS
 # Fri May 31 10:23:45 +07 2026
 ```
 
-### Timestamp use case
+### Use case của timestamp
 
-- **Filter time range**: "show me messages from last hour".
-- **Reset consumer offset by time**: `--to-datetime 2026-05-31T10:00:00` (Phase later).
-- **Audit**: when was this order placed exactly?
-- **Lag calculation**: now - oldest unprocessed timestamp = lag.
+- **Filter theo time range**: "show me messages từ 1 giờ trước".
+- **Reset consumer offset theo thời gian**: `--to-datetime 2026-05-31T10:00:00` (bài 8 sẽ học).
+- **Audit**: order này đặt vào lúc nào chính xác?
+- **Lag calculation** (đo độ trễ): hiện tại - timestamp của message cũ nhất chưa process = lag.
 
-### 2 timestamp types
+### 2 kiểu timestamp
 
-Kafka stores 1 timestamp per message, type controlled by `message.timestamp.type`:
+Kafka lưu 1 timestamp cho mỗi message. Kiểu được kiểm soát bằng property `message.timestamp.type`:
 
-| Type | Meaning |
+| Type | Ý nghĩa |
 |---|---|
-| `CreateTime` (default) | Time producer created the record |
-| `LogAppendTime` | Time broker received and appended |
+| `CreateTime` (default) | Thời điểm producer tạo record |
+| `LogAppendTime` | Thời điểm broker nhận và append vào log |
 
-CreateTime reflects business time. LogAppendTime reflects broker time. Most use CreateTime.
+`CreateTime` phản ánh **business time** (lúc event xảy ra thực sự).
+`LogAppendTime` phản ánh **broker time** (lúc broker lưu message).
+
+Hầu hết use case nên dùng `CreateTime`. `LogAppendTime` dùng khi không tin tưởng clock của producer (vd producer ở client device có thể bị set sai giờ).
 
 ## Recap
 
@@ -354,15 +366,15 @@ Consumer App
 
 ## Tóm tắt bài 4
 
-- **Kafka chỉ store + transport bytes**. Serialize/deserialize là **app's responsibility**.
-- Built-in serializers cho primitive. Complex objects → **JSON (Jackson)**, **Avro**, or **Protobuf**.
-- Console tools hard-code `StringSerializer/Deserializer` — chỉ cho debug.
-- **Retention default 168h (7 ngày)**. Có thể by time hoặc size, whichever first.
-- Per-topic override qua `kafka-configs.sh --alter`.
-- **Log compaction** = alternative giữ chỉ latest value per key (state store pattern).
-- **Offset** = index của message trong topic, sequential, immutable, `Long.MAX_VALUE` không bao giờ overflow.
-- Offset → order preservation, consumer tracking, replay.
-- Console option: `print.offset=true`, `print.timestamp=true` để debug.
-- Timestamp: `CreateTime` (default, producer time) vs `LogAppendTime` (broker time).
+- **Kafka chỉ lưu + chuyển bytes**. Serialize/deserialize là **trách nhiệm của app**, không phải broker.
+- Built-in serializer cho primitive type (String, Integer, Long, UUID, ...). Complex object → **JSON (Jackson)**, **Avro**, hoặc **Protobuf**.
+- Console tool hard-code `StringSerializer/Deserializer` — chỉ dùng cho debug, production app phải config explicit.
+- **Retention default 168 giờ (7 ngày)**. Có thể set theo time hoặc size — cái nào đạt trước thì xoá.
+- Per-topic override qua `kafka-configs.sh --alter` để giữ riêng cho từng topic.
+- **Log compaction** = pattern thay thế retention, chỉ giữ latest value cho mỗi key (lưu state).
+- **Offset** = index của message trong partition, sequential, immutable, `Long.MAX_VALUE` không bao giờ overflow trong thực tế (292,000 năm để hết).
+- Offset cho 3 use case: order preservation, consumer position tracking, replay.
+- Console option khi debug: `print.offset=true`, `print.timestamp=true`.
+- Timestamp: `CreateTime` (default, producer time — business time) vs `LogAppendTime` (broker time).
 
 **Bài kế tiếp** → [Bài 5: Multiple consumers + Consumer Groups](05-consumer-groups.md)

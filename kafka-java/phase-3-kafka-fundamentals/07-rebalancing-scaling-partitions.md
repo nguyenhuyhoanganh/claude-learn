@@ -180,24 +180,24 @@ Kafka CLI cho phép **TĂNG** partition. **KHÔNG** thể giảm.
 # PartitionCount: 4
 ```
 
-Đơn giản, nhanh, no downtime.
+Đơn giản, nhanh, không downtime.
 
-**NHƯNG**: vấn đề lớn → **mất ordering tạm thời** cho 1 số key.
+**NHƯNG**: vấn đề lớn → **phá vỡ ordering tạm thời** cho một số key.
 
 #### Vấn đề ordering khi tăng partition
 
 ```text
-BEFORE (3 partitions):
+TRƯỚC (3 partition):
   hash(key=4) % 3 = 1 → Partition 1
   
-Producer history: 
-  Event "4:OrderCreated"   → Partition 1, offset 0
-  Event "4:PaymentReceived" → Partition 1, offset 1 (after OrderCreated)
+Producer đã publish:
+  Event "4:OrderCreated"    → Partition 1, offset 0
+  Event "4:PaymentReceived" → Partition 1, offset 1 (sau OrderCreated)
   
-AFTER alter to 4 partitions:
-  hash(key=4) % 4 = 0 → Partition 0  (DIFFERENT!)
+SAU khi alter lên 4 partition:
+  hash(key=4) % 4 = 0 → Partition 0  (KHÁC!)
 
-Producer mới:
+Producer publish event tiếp:
   Event "4:Shipped" → Partition 0, offset 0
   
 Consumer assignment:
@@ -205,105 +205,105 @@ Consumer assignment:
   Partition 1 → Consumer B
   
 Race condition:
-  - A receive "4:Shipped" first (Partition 0 quick to drain).
-  - B may still processing "4:PaymentReceived" (slow).
-  → A processes Shipped before B processes Payment.
-  → ORDER BROKEN cho key=4.
+  - A nhận "4:Shipped" trước (Partition 0 drain nhanh, ít message).
+  - B vẫn còn đang xử lý "4:PaymentReceived" (chậm).
+  → A xử lý Shipped trước khi B xử lý Payment.
+  → THỨ TỰ BỊ PHÁ cho key=4 (Shipped trước Payment — sai logic!).
 ```
 
-Same key trước/sau alter có thể land **partition khác** → cross-partition ordering broken.
+Cùng key trước và sau khi alter có thể land vào **partition khác** → ordering cross-partition bị phá vỡ.
 
-**Khi nào chấp nhận**:
-- Non-critical events (product view, analytics) — order không quan trọng tuyệt đối.
-- Short window of broken ordering, then steady state.
+**Khi nào chấp nhận được Approach A**:
+- Event không quan trọng (product view, analytics) — thứ tự không bắt buộc.
+- Chỉ có 1 window ngắn ordering bị phá, sau đó về steady state.
 
-**Khi nào KHÔNG dùng**:
-- Bank transaction.
+**Khi nào TUYỆT ĐỐI KHÔNG dùng**:
+- Bank transaction (deposit/withdraw).
 - Order lifecycle (created → paid → shipped).
-- Anything where wrong order = data corruption.
+- Bất kỳ scenario nào sai thứ tự = data corruption.
 
-### Approach B: Plan ahead (best practice)
+### Approach B: Plan ahead — chọn đúng số partition từ đầu (best practice)
 
-Avoid alter. Plan partition count from day 1.
+Tránh alter. Plan số partition từ ngày đầu deploy.
 
 ```text
-Estimate growth 3-5 years:
-  Year 1: 100 events/sec → 1 consumer
-  Year 3: 1000 events/sec → 5 consumers
-  Year 5: 5000 events/sec → 10 consumers
+Estimate tăng trưởng 3-5 năm:
+  Năm 1: 100 events/giây → 1 consumer
+  Năm 3: 1000 events/giây → 5 consumer
+  Năm 5: 5000 events/giây → 10 consumer
 
-→ Create topic với 10 partitions from start.
+→ Tạo topic với 10 partition ngay từ đầu.
 ```
 
-Lúc đầu 1 consumer ôm 10 partition. Lượng nhỏ, OK. Khi cần, scale up dần lên 10 consumers — không cần alter, không mất ordering.
+Ban đầu 1 consumer ôm cả 10 partition. Lượng nhỏ nên OK. Khi traffic tăng, scale up dần lên 10 consumer — **không cần alter**, **không phá ordering**.
 
-Đây là **recommended pattern**.
+Đây là **pattern được khuyến nghị nhất**.
 
-### Approach C: Downtime + drain (zero-data-loss)
+### Approach C: Downtime + drain (zero data loss, zero broken order)
 
-Strict ordering required, không thể tolerate broken state?
+Khi cần strict ordering, không thể tolerate broken state:
 
 ```text
-Step 1: Stop producer (hoặc route producer to temp staging).
-Step 2: Wait for consumers drain backlog.
-Step 3: Verify all partitions empty.
-Step 4: kafka-topics --alter to add partitions.
-Step 5: Restart producer.
+Bước 1: Stop producer (hoặc route producer sang temp staging).
+Bước 2: Đợi consumer drain hết backlog hiện tại.
+Bước 3: Verify mọi partition đều empty.
+Bước 4: Chạy kafka-topics --alter để thêm partition.
+Bước 5: Restart producer.
 
-Result:
-  - Zero broken ordering (no in-flight messages straddle alter).
-  - Trade-off: downtime in producer publishing.
+Kết quả:
+  - Zero broken ordering (không có message in-flight bị split giữa alter).
+  - Trade-off: producer downtime trong khoảng thời gian drain.
 ```
 
 Chỉ dùng khi maintenance window được approve.
 
-### Approach D: New topic, swap (production-grade)
+### Approach D: Tạo topic mới + swap (production-grade)
 
-Topic là **configuration**, không bound vào code. Tạo topic mới với # partition đúng:
+Topic là **config**, không bind vào code. Tạo topic mới với số partition đúng:
 
 ```bash
-# Create v2 with desired partitions
+# Tạo v2 với số partition mong muốn
 ./kafka-topics.sh --bootstrap-server localhost:9092 \
   --create --topic order-events-v2 --partitions 8
 ```
 
-Migration:
+Quy trình migration:
 1. Stop producer.
-2. Update producer config: topic = `order-events-v2`.
-3. Restart producer → writes to v2.
-4. Consumer vẫn read v1. Drain backlog.
-5. Update consumer config: topic = `order-events-v2`.
+2. Update config producer: topic = `order-events-v2`.
+3. Restart producer → bắt đầu write vào v2.
+4. Consumer vẫn đọc v1, drain hết backlog cũ.
+5. Update config consumer: topic = `order-events-v2`.
 6. Restart consumer.
-7. Delete `order-events` (old).
+7. Xoá topic `order-events` cũ.
 
-Or với Strangler-fig pattern: producer write to **both** v1 + v2 temporarily, drain consumers, switch off v1.
+Hoặc dùng pattern **Strangler-fig**: producer write vào **cả** v1 lẫn v2 trong giai đoạn transition, đợi consumer drain v1, rồi tắt write v1.
 
-Versioned topic names (`v1`, `v2`) là best practice trong production EDA.
+Đặt tên topic có version (`v1`, `v2`) là best practice trong production EDA.
 
-## Comparison
+## So sánh 4 approach
 
-| Approach | Downtime | Ordering integrity | Effort | Use when |
+| Approach | Downtime | Tính toàn vẹn ordering | Effort | Khi nào dùng |
 |---|---|---|---|---|
-| A: alter | None | Broken temporarily | Lowest | Non-critical events |
-| B: plan ahead | None | Perfect | Lowest (if foresee) | Always (recommended) |
-| C: stop + drain + alter | Producer downtime | Perfect | Medium | Strict ordering, maintenance window OK |
-| D: new topic | None (gradual swap) | Perfect | Highest | Production large scale, can manage config |
+| A: alter | Không | Phá tạm thời | Thấp nhất | Event không quan trọng |
+| B: Plan ahead | Không | Hoàn hảo | Thấp nhất (nếu lường trước được) | Luôn nên dùng (recommended) |
+| C: stop + drain + alter | Producer downtime | Hoàn hảo | Trung bình | Cần strict ordering, có window maintenance |
+| D: tạo topic mới | Không (swap dần) | Hoàn hảo | Cao nhất | Production large scale, quản lý được config |
 
-## Decreasing partition count?
+## Có thể giảm số partition không?
 
-**Kafka KHÔNG cho phép giảm partition count.**
+**Kafka KHÔNG cho phép giảm số partition.**
 
-Lý do: data trong partitions không thể merge sang ít partition hơn mà giữ key→partition deterministic.
+Lý do: data đã ghi vào N partition không thể merge xuống ít partition hơn mà vẫn giữ được mapping key→partition (vì hash function dùng `% N`, đổi N → mapping khác).
 
-Cần giảm? → tạo topic mới với ít partitions hơn + migrate (Approach D).
+Cần giảm? → tạo topic mới với ít partition hơn + migrate sang theo Approach D.
 
-## Partition rebalance pitfalls
+## Pitfall của rebalance
 
 ### Pitfall 1: Stop-the-world rebalance
 
-Classic rebalance (pre-Kafka 2.4): **mọi consumer** pause consuming, full reassignment, resume.
+Rebalance classic (Kafka trước version 2.4): **TẤT CẢ consumer** đều pause consuming, đợi reassignment xong rồi mới resume.
 
-→ Throughput drop. UX latency spike.
+→ Throughput drop xuống 0 trong vài giây. UX latency spike.
 
 Fix: **Cooperative rebalance** (Kafka 2.4+):
 ```yaml
@@ -311,43 +311,46 @@ spring.kafka.consumer.properties.partition.assignment.strategy:
   org.apache.kafka.clients.consumer.CooperativeStickyAssignor
 ```
 
-Chỉ partition affected mới pause. Others continue.
+Chỉ partition affected mới pause. Các partition khác vẫn tiếp tục consume.
 
-### Pitfall 2: Rebalance storm
+### Pitfall 2: Rebalance storm khi rolling deploy
 
-Rolling deploy 10 consumer = 10 rebalance liên tiếp.
+Rolling deploy 10 consumer = 10 lần rebalance liên tiếp.
 
 ```text
 Deploy consumer 1 → rebalance.
 Deploy consumer 2 → rebalance.
 ...
+Deploy consumer 10 → rebalance.
 ```
 
-Mỗi rebalance pause. 10 rebalance = significant disruption.
+Mỗi rebalance pause vài giây. 10 lần rebalance = đoạn disruption đáng kể (cả phút).
 
 Fix:
-- Static membership (`group.instance.id`) — Kafka 2.3+ — instance restart không trigger rebalance nếu rejoin trong session timeout.
-- Tune `session.timeout.ms` longer (default 45s).
+- **Static membership** (`group.instance.id`) — Kafka 2.3+ — instance restart KHÔNG trigger rebalance nếu rejoin trong session timeout (vì Kafka biết "consumer này đang restart, không phải leave").
+- Tăng `session.timeout.ms` dài hơn (default 45s) — Kafka chờ lâu hơn trước khi coi là consumer leave.
 - Cooperative assignor.
 
-### Pitfall 3: Long-running consumer kicked
+### Pitfall 3: Consumer xử lý dài bị kick khỏi group
 
-Consumer process 1 message takes 5 min. Default `max.poll.interval.ms = 5 min` → kicked → rebalance.
+Consumer xử lý 1 message mất 5 phút. Default `max.poll.interval.ms = 5 phút` → broker coi consumer "stuck" → kick khỏi group → rebalance.
 
-Fix: tăng `max.poll.interval.ms` hoặc batch ít records hơn (`max.poll.records`).
+Fix: tăng `max.poll.interval.ms` lên (vd 10 phút), hoặc giảm `max.poll.records` để batch nhỏ hơn (xử lý xong nhanh hơn, gọi poll() thường xuyên hơn).
 
 ## Tóm tắt bài 7
 
-- **Rebalancing** = Kafka re-distribute partitions khi consumer join/leave group.
-- Demo: 1 consumer ôm tất cả → join consumer thứ 2 → split → consumer thứ 2 crash → 1 ôm lại.
-- **Scaling rule**: max parallel consumer trong group = số partition.
-- Quá nhiều consumer → một số **idle** (không partition để assign).
-- **Modify partition** count:
-  - **A `--alter`**: tăng được, không giảm. **Broken ordering tạm thời** cho key cũ.
-  - **B Plan ahead**: tạo topic với # partition tương lai 3-5 năm. Best practice.
+- **Rebalancing** = Kafka tự động phân phối lại partition khi consumer join/leave group.
+- Demo: 1 consumer ôm tất cả → consumer thứ 2 join → split partition → consumer thứ 2 crash → consumer 1 ôm lại tất cả.
+- **Quy tắc scaling**: số consumer chạy song song trong group **tối đa = số partition**. Quá nhiều consumer → một số bị **idle** (không có partition để assign).
+- **Thay đổi số partition** có 4 approach:
+  - **A `--alter`**: tăng được, không giảm. **Phá ordering tạm thời** cho các key cũ.
+  - **B Plan ahead**: tạo topic với số partition đủ cho 3-5 năm. **Best practice**.
   - **C Stop + drain + alter**: zero data loss, có producer downtime.
-  - **D New topic + swap**: production-grade, versioned topic names.
-- Kafka **không support giảm** partition count.
-- Rebalance pitfalls: stop-the-world (fix: cooperative rebalance), rebalance storm (fix: static membership), long processing kicked (fix: tăng `max.poll.interval.ms`).
+  - **D Tạo topic mới + swap**: production-grade, dùng versioned topic name.
+- Kafka **không support** giảm số partition.
+- 3 pitfall rebalance:
+  - Stop-the-world → fix: cooperative rebalance.
+  - Rebalance storm khi rolling deploy → fix: static membership + tăng session timeout.
+  - Long processing bị kick → fix: tăng `max.poll.interval.ms`.
 
 **Bài kế tiếp** → [Bài 8: Offset tracking + Resetting offsets](08-offset-tracking.md)
