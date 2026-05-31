@@ -271,7 +271,7 @@ SCS có integration với `Function<T, Mono<T>>` reactive filter, hoặc Spring 
 
 Use case: 1 OrderEvent → 2 NotificationEvent (SMS + Email).
 
-### Naive (WRONG)
+### Cách viết SAI (naive)
 
 ```java
 @Bean
@@ -283,15 +283,15 @@ public Function<OrderEvent, List<NotificationEvent>> notificationProcessor() {
 }
 ```
 
-What happens?
+Chuyện gì xảy ra?
 
-SCS thinks: "returns 1 value of type `List<NotificationEvent>`" → **emit 1 message** with payload = entire list.
+SCS hiểu: "function trả về **1 giá trị** kiểu `List<NotificationEvent>`" → **emit 1 message** với payload là **toàn bộ List**.
 
-Consumer side: receive 1 message with `[NotificationEvent, NotificationEvent]` array.
+Consumer nhận được 1 message duy nhất, payload là array `[NotificationEvent, NotificationEvent]`.
 
-→ NOT 2 separate events.
+→ KHÔNG phải 2 message riêng biệt như mình muốn!
 
-### Correct: List<Message<T>>
+### Cách viết ĐÚNG: trả về `List<Message<T>>`
 
 ```java
 @Bean
@@ -307,9 +307,9 @@ public Function<OrderEvent, List<Message<NotificationEvent>>> notificationProces
 }
 ```
 
-Key: return type `List<Message<T>>` (not `List<T>`).
+Điểm khác: return type `List<Message<T>>` thay vì `List<T>`.
 
-SCS detects: "List of Message<T>" → treat each element as separate event → emit N messages.
+SCS detect: "đây là List of **Message<T>**" → coi mỗi element là **1 event riêng biệt** → emit N message.
 
 ### YAML
 
@@ -345,25 +345,25 @@ notification: NotificationEvent[orderId=3, channel=EMAIL, ...]
 
 ✅ Mỗi OrderEvent → 2 NotificationEvents. 1-to-many.
 
-## Why `List<Message<T>>` not `List<T>`?
+## Vì sao phải `List<Message<T>>` thay vì `List<T>`?
 
-SCS framework needs **explicit signal** "treat each element as separate message". Otherwise ambiguous:
-- `List<T>` could mean "1 message of list" (legitimate).
-- `List<Message<T>>` clearly means "multiple messages with metadata".
+SCS framework cần **tín hiệu rõ ràng** từ code để biết "mỗi element là 1 message riêng". Nếu không có Message wrapper, framework không biết phân biệt:
+- `List<T>` có thể là "1 message có payload kiểu list" (hợp lệ — có những use case như batch report).
+- `List<Message<T>>` rõ ràng nghĩa là "nhiều message với metadata riêng".
 
-Spring Cloud Stream chose: `Message<T>` wrap = each element 1 message.
+Spring Cloud Stream chọn convention: nếu wrap bằng `Message<T>` → mỗi element thành 1 message độc lập.
 
 Trade-off:
-- ✓ Clear intent.
-- ✗ Slightly verbose.
+- ✓ Rõ ràng intent của code.
+- ✗ Hơi verbose (phải dùng MessageBuilder).
 
-Same pattern with key/headers:
+Pattern này cũng dùng cùng key/header per-message:
 
 ```java
 return List.of(
     MessageBuilder
         .withPayload(smsNotif)
-        .setHeader(KafkaHeaders.KEY, order.customerId())     // per-event key
+        .setHeader(KafkaHeaders.KEY, order.customerId())     // mỗi message có key riêng
         .build(),
     MessageBuilder
         .withPayload(emailNotif)
@@ -372,18 +372,18 @@ return List.of(
 );
 ```
 
-## Comparison table
+## Bảng so sánh 3 pattern
 
-| Pattern | Java Stream | SCS Function signature | Output behavior |
+| Pattern | Tương tự Java Stream | Signature SCS Function | Hành vi output |
 |---|---|---|---|
-| 1-to-1 mapping | `map` | `Function<A, B>` | Always emit |
-| Filter | `filter` | `Function<A, B>` returning `null` to skip | Skip on null |
-| 1-to-many split | `flatMap` | `Function<A, List<Message<B>>>` | Multiple emits |
-| Async / reactive | reactive | `Function<Flux<A>, Flux<B>>` | Stream out |
+| 1-to-1 mapping | `map` | `Function<A, B>` | Luôn emit |
+| Filter | `filter` | `Function<A, B>` return `null` để skip | Skip khi null |
+| 1-to-many split | `flatMap` | `Function<A, List<Message<B>>>` | Emit nhiều message |
+| Async / reactive | reactive equivalent | `Function<Flux<A>, Flux<B>>` | Stream output |
 
-## All 3 processors in 1 app?
+## Cả 3 processor cùng 1 app được không?
 
-Hoàn toàn có thể. Activate qua `function.definition`:
+Hoàn toàn được. Activate qua `function.definition` với dấu chấm phẩy:
 
 ```yaml
 spring:
@@ -409,32 +409,32 @@ spring:
           destination: notification-events
 ```
 
-3 processor cùng app, 3 consumer groups khác nhau cùng consume `order-events`. Mỗi processor independently emit ra topic riêng.
+3 processor trong cùng app, 3 consumer group **khác nhau** cùng consume topic `order-events`. Mỗi processor độc lập emit ra topic riêng.
 
-→ Pattern fan-out cho 1 source event triggering nhiều downstream.
+→ Đây là pattern **fan-out**: 1 source event trigger nhiều downstream processing độc lập.
 
-Production: thường mỗi processor = 1 service (PaymentService, ShippingService) → tách app, không nhồi 1 app. Demo cho concept.
+Trong production: thường mỗi processor = 1 service riêng (PaymentService, ShippingService) → **tách thành app riêng**, không nhồi vào 1 app. Demo gộp 3 processor chỉ để minh hoạ concept.
 
-## Anti-patterns
+## Anti-pattern
 
-| Anti-pattern | Problem | Fix |
+| Anti-pattern | Vấn đề | Sửa |
 |---|---|---|
-| Return `List<T>` cho splitting | Emit 1 message with list payload | Use `List<Message<T>>` |
-| Filter logic in consumer | Duplicate logic across consumers | Filter at processor level |
-| Heavy business logic in lambda | Hard test, hard maintain | Delegate to `@Service` |
-| Different output topics from same processor based on type | Should be 2 processors | Split |
-| 1-to-many without explicit key on each | Lose ordering | Set key per Message<T> |
+| Return `List<T>` cho 1-to-many | Emit 1 message chứa list, không phải N message | Dùng `List<Message<T>>` |
+| Filter logic ở consumer thay vì processor | Duplicate logic trên nhiều consumer | Filter ngay tại processor |
+| Business logic phức tạp nhồi vào lambda | Khó test, khó maintain | Delegate sang `@Service` class |
+| Cùng processor route ra nhiều topic khác nhau theo type | Nên tách thành 2 processor riêng | Split processor |
+| 1-to-many không set key cho từng Message<T> | Mất ordering ở topic downstream | Set key trên từng Message<T> |
 
 ## Tóm tắt bài 1
 
-- Processor = Consumer + Producer = `Function<I, O>`.
-- 3 sub-patterns:
-  - **1-to-1**: standard `Function<A, B>`, always emit.
-  - **Filter**: return `null` to skip emit.
-  - **1-to-many**: return `List<Message<T>>` (not `List<T>`).
-- Same Java Stream API mental model: map, filter, flatMap.
-- Bindings: `processorBean-in-0` + `processorBean-out-0`.
-- All 3 processors can run in 1 app — different consumer groups, different output topics.
-- Production: extract business logic to `@Service`. Processor lambda thin.
+- **Processor = Consumer + Producer = `Function<I, O>`** trong SCS.
+- 3 sub-pattern chính:
+  - **1-to-1**: `Function<A, B>` chuẩn, luôn emit 1 output cho mỗi input.
+  - **Filter**: `Function<A, B>` return `null` để skip không emit.
+  - **1-to-many split**: `Function<A, List<Message<B>>>` — chú ý wrap `Message<T>`.
+- Mental model giống Java Stream API: `map`, `filter`, `flatMap`.
+- Binding tự derive: `processorBean-in-0` (input) + `processorBean-out-0` (output).
+- Cả 3 processor có thể chạy chung 1 app — config khác consumer group, khác output topic.
+- Production: extract business logic vào `@Service` class. Processor lambda **mỏng** (chỉ orchestrate, không chứa logic).
 
 **Bài kế tiếp** → [Bài 2: Reactive processor + Phase 7 summary](02-reactive-processor-summary.md)

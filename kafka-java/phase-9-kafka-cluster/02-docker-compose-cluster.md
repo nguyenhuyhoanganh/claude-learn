@@ -172,9 +172,9 @@ cd /opt/kafka/bin
   --replication-factor 3
 ```
 
-✅ Topic created.
+✅ Topic đã được tạo.
 
-### Describe — see distribution
+### Describe — xem partition phân tán thế nào trong cluster
 
 ```bash
 ./kafka-topics.sh --bootstrap-server kafka1:9092 \
@@ -186,13 +186,13 @@ cd /opt/kafka/bin
 #   Topic: demo-topic   Partition: 1   Leader: 2   Replicas: 2,3,1   Isr: 2,3,1
 ```
 
-Interpretation:
-- Partition 0: Leader = node 1. Replicas in nodes 1, 2, 3. ISR = 1, 2, 3 (all in-sync).
-- Partition 1: Leader = node 2. Replicas in nodes 2, 3, 1. ISR = 2, 3, 1.
+Đọc output:
+- **Partition 0**: Leader = node 1. Replica nằm ở các node 1, 2, 3. ISR = 1, 2, 3 (cả 3 đều đang đồng bộ).
+- **Partition 1**: Leader = node 2. Replica nằm ở các node 2, 3, 1. ISR = 2, 3, 1.
 
-**ISR** (In-Sync Replicas) = followers caught up with leader within tolerance.
+**ISR** (In-Sync Replicas) = follower đang theo kịp leader (trong khoảng tolerance cho phép). Khi 1 follower lag quá xa hoặc disconnect, nó bị loại khỏi ISR.
 
-## High availability demo
+## Demo High Availability
 
 ### Test 1: Stop broker 2
 
@@ -200,15 +200,16 @@ Interpretation:
 docker stop kafka2
 ```
 
-Describe again:
+Describe lại:
 ```text
-Partition 0: Leader: 1   Replicas: 1,2,3   Isr: 1,3       ← Node 2 missing
-Partition 1: Leader: 3   Replicas: 2,3,1   Isr: 3,1       ← Was Leader 2, now 3
+Partition 0: Leader: 1   Replicas: 1,2,3   Isr: 1,3       ← Node 2 mất khỏi ISR
+Partition 1: Leader: 3   Replicas: 2,3,1   Isr: 3,1       ← Trước Leader là 2, giờ thành 3
 ```
 
-✅ Node 2 was leader of partition 1 → controller elect node 3 as new leader.
-✅ ISR shrink (1, 3 instead of 1, 2, 3).
-✅ Producer/consumer still work.
+Quan sát:
+- ✅ Node 2 từng là leader của partition 1 → controller tự động elect node 3 làm leader mới.
+- ✅ ISR shrink (chỉ còn 1, 3 thay vì 1, 2, 3).
+- ✅ Producer + consumer vẫn chạy bình thường — không bị gián đoạn.
 
 ### Restart broker 2
 
@@ -216,43 +217,43 @@ Partition 1: Leader: 3   Replicas: 2,3,1   Isr: 3,1       ← Was Leader 2, now 
 docker start kafka2
 ```
 
-Wait few seconds. Describe:
+Đợi vài giây. Describe:
 ```text
-Partition 0: Leader: 1   Replicas: 1,2,3   Isr: 1,2,3    ← back to full ISR
+Partition 0: Leader: 1   Replicas: 1,2,3   Isr: 1,2,3    ← ISR full trở lại
 Partition 1: Leader: 3   Replicas: 2,3,1   Isr: 3,1,2
 ```
 
-Node 2 catches up → rejoins ISR.
+Node 2 catch up → rejoin ISR.
 
-**Leadership might not auto-rebalance** back to node 2 immediately. Kafka has "preferred leader election" running periodically.
+**Lưu ý**: leadership **có thể không tự động rebalance** về node 2 ngay lập tức. Kafka có cơ chế "**preferred leader election**" chạy định kỳ để đưa leadership về preferred leader (thường là replica đầu tiên trong list).
 
-### Test 2: Tolerate 2 broker failures? No.
+### Test 2: Có chịu được 2 broker chết cùng lúc không? KHÔNG.
 
-Cluster of 3 brokers, quorum = 2 (majority).
+Cluster 3 broker, quorum (đa số) = 2.
 
 ```bash
 docker stop kafka1
 docker stop kafka2
 ```
 
-Only kafka3 alive.
+Chỉ còn kafka3 alive.
 
-Result: **cluster unavailable**. Why? Controller election needs majority. 1 node alone can't elect itself.
+Kết quả: **cluster unavailable** (cluster không hoạt động được). Vì sao? Controller election cần **đa số** broker tham gia. 1 node không thể tự bầu chính mình làm controller (không đủ quorum).
 
-→ **Production rule**: 3-node cluster tolerates **1** failure simultaneously. For 2 simultaneous failures → need 5 nodes (quorum 3).
+→ **Quy tắc production**: cluster 3 node chịu được **1 broker fail đồng thời**. Muốn chịu được 2 fail đồng thời → cần 5 node (quorum 3).
 
 ```text
-Cluster size:  Quorum:  Tolerable failures:
-3              2        1
-5              3        2
-7              4        3
+Số broker  |  Quorum  |  Số fail chịu được đồng thời
+3          |  2       |  1
+5          |  3       |  2
+7          |  4       |  3
 ```
 
-Odd numbers preferred (avoid split-brain).
+Nên dùng **số lẻ** (tránh split-brain — khi cluster bị chia 2 nửa bằng nhau, không bên nào đủ quorum).
 
-## Application demo — survive broker restart
+## Demo Application — sống sót qua broker restart
 
-Run producer + consumer with **only 1 bootstrap server**:
+Chạy producer + consumer với **chỉ 1 bootstrap server**:
 
 ```yaml
 # section11/01-consumer.yaml
@@ -261,7 +262,7 @@ spring:
     stream:
       kafka:
         binder:
-          brokers: localhost:8081           # only Kafka1!
+          brokers: localhost:8081           # chỉ Kafka1!
       bindings:
         consumer-in-0:
           consumer:
@@ -273,18 +274,18 @@ spring:
           group: demo-group
 ```
 
-Bootstrap = `localhost:8081` only. But client **discovers all 3** after connecting (cluster metadata broadcast).
+Bootstrap chỉ `localhost:8081`. Nhưng client **tự khám phá ra cả 3 broker** sau khi connect (qua cluster metadata broadcast).
 
-Verify in consumer log:
+Verify trong log consumer:
 ```text
 [Consumer ...] Discovered cluster nodes: 1, 2, 3
 ```
 
-Even though we only configured 1, client knows all 3.
+Dù YAML chỉ config 1 broker, client biết đầy đủ về cả 3.
 
-### Stop bootstrap broker mid-flight
+### Stop bootstrap broker giữa lúc producer + consumer đang chạy
 
-Producer publishing 1 msg/50ms. Consumer reading.
+Producer publish 1 message mỗi 50ms. Consumer đang đọc.
 
 ```bash
 docker stop kafka1     # ← bootstrap server!
@@ -299,18 +300,18 @@ received: msg-634
 received: msg-635
 ```
 
-✅ **Application keeps working** dù bootstrap broker xuống. Client falls back to other brokers (kafka2, kafka3).
+✅ **Application vẫn chạy bình thường** dù bootstrap broker đã chết. Client tự động fall back sang các broker khác (kafka2, kafka3).
 
-Bootstrap server không phải runtime dependency. Chỉ initial connection.
+Bootstrap server **KHÔNG phải là runtime dependency**. Chỉ cần thiết cho **lần kết nối đầu tiên** để client học metadata của cluster.
 
-### Restart kafka1, stop kafka2
+### Test tiếp: restart kafka1, stop kafka2
 
 ```bash
 docker start kafka1
 docker stop kafka2
 ```
 
-Same result — consumer continues.
+Kết quả tương tự — consumer vẫn chạy bình thường.
 
 ### Stop kafka3
 
@@ -319,73 +320,73 @@ docker start kafka2
 docker stop kafka3
 ```
 
-Continues working.
+Vẫn chạy bình thường.
 
-**Producer + consumer never miss message** across all these failures.
+**Producer + consumer KHÔNG miss bất kỳ message nào** qua tất cả các lần broker failure này.
 
-## Cluster verification commands
+## Command verify cluster
 
 ```bash
-# Cluster metadata
+# Metadata cluster (Kafka 3.x KRaft mode)
 ./kafka-metadata-quorum.sh --bootstrap-server kafka1:9092 describe --status
 
-# Broker list
+# Danh sách broker đang alive
 ./kafka-broker-api-versions.sh --bootstrap-server kafka1:9092
 
-# Topic with ISR
+# Topic + ISR status
 ./kafka-topics.sh --bootstrap-server kafka1:9092 --describe --topic demo-topic
 
 # Consumer group lag
 ./kafka-consumer-groups.sh --bootstrap-server kafka1:9092 --describe --group demo-group
 ```
 
-## Phase 9 — toàn bộ summary
+## Tổng kết toàn Phase 9
 
 ### Concepts
 
-| Concept | What it provides |
+| Concept | Mang lại gì |
 |---|---|
-| **Multiple brokers** | Capacity (CPU, disk, RAM total) |
-| **Partitions** | Scalability (parallelism per topic) |
-| **Replication factor** | Availability (tolerate failures) |
-| **Listeners** | Multi-network communication (control / data / external) |
-| **Advertised listeners** | How clients reach each broker |
-| **Controller quorum** | Cluster management consensus |
-| **ISR** | In-sync followers, eligible for leader election |
+| **Nhiều broker** | Capacity (tổng CPU, disk, RAM) |
+| **Partition** | Scalability (parallel processing cho 1 topic) |
+| **Replication factor** | Availability (chịu được broker failure) |
+| **Listeners** | Network communication nhiều lớp (control / data / external) |
+| **Advertised listeners** | Cho client biết cách reach broker |
+| **Controller quorum** | Consensus quản lý cluster |
+| **ISR** | Follower đang đồng bộ, eligible làm leader khi cần |
 
 ### Cluster sizing
 
-| Brokers | Tolerable simultaneous failures | Replication factor recommendation |
+| Số broker | Số fail chịu được đồng thời | Replication factor khuyến nghị |
 |---|---|---|
-| 1 (dev) | 0 | 1 (no real choice) |
+| 1 (dev) | 0 | 1 (không có lựa chọn khác) |
 | 3 | 1 | 3 |
 | 5 | 2 | 3 |
-| 7 | 3 | 3 (or 5 for very critical) |
+| 7 | 3 | 3 (hoặc 5 cho data cực quan trọng) |
 
-`replication.factor=3` covers 99% production cases.
+`replication.factor=3` đủ cho 99% trường hợp production.
 
-### Production cluster config checklist
+### Checklist config cluster production
 
-- [ ] `replication.factor >= 3` for business topics.
-- [ ] `min.insync.replicas = 2` (Phase 12).
+- [ ] `replication.factor >= 3` cho business topic.
+- [ ] `min.insync.replicas = 2` (Phase 12 sẽ học).
 - [ ] `offsets.topic.replication.factor = 3`.
 - [ ] `transaction.state.log.replication.factor = 3`.
 - [ ] `auto.create.topics.enable = false`.
-- [ ] Multiple bootstrap servers in client config.
-- [ ] `advertised.listeners` correctly configured for client reachability.
-- [ ] Different listener for internal vs external traffic.
-- [ ] SSL/SASL for external in production.
-- [ ] Monitor ISR shrinking.
+- [ ] Config client với nhiều bootstrap server (3+).
+- [ ] `advertised.listeners` config đúng để client reach được.
+- [ ] Listener khác nhau cho internal vs external traffic.
+- [ ] SSL/SASL cho external listener ở production.
+- [ ] Monitor ISR shrinking (alert khi ISR < replication factor).
 
-## Phase 9 takeaways
+## Take-away của Phase 9
 
-- Cluster ≠ instant HA. Brokers + partitions + replication = 3 independent dimensions.
-- Multi-broker Docker compose = practical local cluster.
-- Env variable override convention: `KAFKA_<UPPER_PROPERTY_NAME_WITH_UNDERSCORES>`.
-- Listeners = multiple ports per broker for control/data/external traffic.
-- `advertised.listeners` = how clients reach broker, **per caller perspective**.
-- ISR tracks healthy followers. Shrinks during broker failure.
-- Client discovers full cluster from bootstrap. Bootstrap broker not runtime-critical.
-- 3-node cluster tolerates 1 simultaneous failure. 5-node tolerates 2.
+- Cluster KHÔNG tự động cho HA. **Broker + partition + replication = 3 trục độc lập**, plan từng cái.
+- Multi-broker Docker Compose = cách thực dụng có cluster local cho test.
+- Quy tắc override property qua env variable: `KAFKA_<TÊN_PROPERTY_UPPERCASE_VÀ_DẤU_DOTS_THÀNH_UNDERSCORES>`.
+- **Listeners** = nhiều port mỗi broker cho 3 loại traffic: control / data / external.
+- `advertised.listeners` = broker khai báo **cách client reach mình**, theo "góc nhìn của người gọi".
+- **ISR** track follower healthy. ISR sẽ shrink khi broker fail, expand lại khi broker recover.
+- Client tự discover full cluster từ bootstrap server. Bootstrap broker **không phải runtime-critical**.
+- Cluster 3 node chịu được **1 broker fail** đồng thời. Cluster 5 node chịu được 2.
 
 **Bài kế tiếp** → [Phase 10 - High-Throughput Batch Processing](../phase-10-batch-processing/01-batch-consumer.md)

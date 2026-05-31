@@ -227,23 +227,25 @@ spring:
 
 `key.deserializer` mirror producer side: `StringDeserializer`.
 
-## ⚠️ `KafkaHeaders.KEY` vs `KafkaHeaders.RECEIVED_KEY` — important quirk
+## ⚠️ `KafkaHeaders.KEY` vs `KafkaHeaders.RECEIVED_KEY` — quirk quan trọng cần nhớ
 
-Producer set:
+Producer set header với hằng số `KafkaHeaders.KEY`:
 ```java
-.setHeader(KafkaHeaders.KEY, "key-1")   // "kafka_messageKey"
+.setHeader(KafkaHeaders.KEY, "key-1")   // tên thực tế: "kafka_messageKey"
 ```
 
-Consumer extract:
+Consumer đọc với hằng số **khác**:
 ```java
-msg.getHeaders().get(KafkaHeaders.RECEIVED_KEY)   // "kafka_receivedMessageKey" — DIFFERENT name!
+msg.getHeaders().get(KafkaHeaders.RECEIVED_KEY)   // tên thực tế: "kafka_receivedMessageKey"
 ```
 
-Why? Spring **rename header on inbound** intentionally.
+→ Producer và consumer dùng **2 tên header khác nhau** cho cùng 1 khái niệm "key"!
 
-### Lý do — processor case
+Vì sao? Spring **cố ý rename header khi vào inbound**.
 
-Processor consumes → produces:
+### Lý do — trường hợp processor
+
+Processor consume từ 1 topic và emit ra topic khác:
 
 ```java
 @Bean
@@ -251,40 +253,42 @@ public Function<Message<OrderEvent>, Message<PaymentEvent>> paymentProcessor() {
     return inMsg -> {
         PaymentEvent paymentEvent = compute(inMsg.getPayload());
         
-        // Preserve trace headers
+        // Giữ lại các header cho trace context
         return MessageBuilder
             .withPayload(paymentEvent)
-            .copyHeaders(inMsg.getHeaders())     // ← copy ALL headers
+            .copyHeaders(inMsg.getHeaders())     // ← copy TẤT CẢ header
             .build();
     };
 }
 ```
 
-`copyHeaders` copies traceId, source, etc. — useful cho observability.
+`copyHeaders` copy `traceId`, `source`, ... — rất hữu ích cho observability (theo dõi flow request qua nhiều service).
 
-**Vấn đề**: nếu inbound key header name = outbound key header name = `KafkaHeaders.KEY`:
-- Input message: `KafkaHeaders.KEY = "order-123"` (key from OrderEvent topic).
-- Processor copyHeaders → output Message also has `KafkaHeaders.KEY = "order-123"`.
-- Output sent to PaymentEvent topic with key `"order-123"` — but **maybe accidental**, maybe PaymentEvent should use different key (paymentId).
+**Vấn đề**: nếu inbound key và outbound key dùng **CÙNG header name** = `KafkaHeaders.KEY`:
+- Input message: `KafkaHeaders.KEY = "order-123"` (key từ OrderEvent topic).
+- Processor gọi `copyHeaders` → output Message cũng có `KafkaHeaders.KEY = "order-123"`.
+- Output message gửi sang PaymentEvent topic với key `"order-123"` — nhưng **có thể là vô tình**! PaymentEvent có thể cần dùng key khác (vd `paymentId`).
 
-Spring's solution: rename inbound key to `RECEIVED_KEY`. `copyHeaders` won't accidentally set outbound key. Have to **explicitly** set outbound `KafkaHeaders.KEY` if want it.
+Giải pháp của Spring: **rename inbound key thành `RECEIVED_KEY`**. Khi đó:
+- `copyHeaders` chỉ copy header thường (traceId, source), KHÔNG copy key.
+- Muốn outbound message có key → phải **explicit** set `KafkaHeaders.KEY`.
 
 ```java
 Message<PaymentEvent> outMsg = MessageBuilder
     .withPayload(paymentEvent)
-    .copyHeaders(inMsg.getHeaders())              // traceId, source - safe
-    .setHeader(KafkaHeaders.KEY, paymentEvent.id) // explicit new key
+    .copyHeaders(inMsg.getHeaders())              // traceId, source — safe, không bị set key
+    .setHeader(KafkaHeaders.KEY, paymentEvent.id) // explicit set key mới
     .build();
 ```
 
-Defensive design. Avoids surprise.
+Đây là **defensive design** — tránh side effect không mong muốn.
 
-Pattern apply for:
-- `KafkaHeaders.KEY` outbound, `KafkaHeaders.RECEIVED_KEY` inbound.
-- `KafkaHeaders.TOPIC` outbound, `KafkaHeaders.RECEIVED_TOPIC` inbound.
-- `KafkaHeaders.PARTITION` outbound, `KafkaHeaders.RECEIVED_PARTITION` inbound.
+Pattern này áp dụng cho cả:
+- `KafkaHeaders.KEY` (outbound) ↔ `KafkaHeaders.RECEIVED_KEY` (inbound).
+- `KafkaHeaders.TOPIC` (outbound) ↔ `KafkaHeaders.RECEIVED_TOPIC` (inbound).
+- `KafkaHeaders.PARTITION` (outbound) ↔ `KafkaHeaders.RECEIVED_PARTITION` (inbound).
 
-## Run + observe consumer output
+## Chạy demo + quan sát output consumer
 
 ```text
 full message: GenericMessage [payload=message-32, headers={
@@ -300,19 +304,19 @@ full message: GenericMessage [payload=message-32, headers={
 key=key-32 payload=message-32 traceId=req-abc-123 topic=demo-topic partition=1 offset=45
 ```
 
-✅ Full visibility into message metadata.
+✅ Truy cập đầy đủ metadata của message.
 
-### 2 partitions → distribution
+### 2 partition → distribution theo hash key
 
-Tạo topic 2 partitions:
+Tạo topic 2 partition:
 ```bash
 ./kafka-topics.sh ... --delete --topic demo-topic
 ./kafka-topics.sh ... --create --topic demo-topic --partitions 2
 ```
 
-Producer sends with keys `key-1`, `key-2`, ...
+Producer gửi với key `key-1`, `key-2`, `key-3`, ...
 
-Consumer log:
+Log consumer:
 ```text
 key=key-1   partition=0   offset=0
 key=key-2   partition=1   offset=0
@@ -321,11 +325,11 @@ key=key-4   partition=1   offset=1
 ...
 ```
 
-Same key → same partition (hash deterministic). Demo Phase 3 bài 6 confirmed.
+Cùng key → cùng partition (hash deterministic). Đã xác nhận trong demo Phase 3 bài 6.
 
-## Consumer flexible — accept payload OR Message
+## Consumer linh hoạt — nhận payload hoặc Message
 
-If consumer doesn't care about key/headers:
+Nếu consumer không cần key/header, có thể chỉ nhận payload:
 
 ```java
 @Bean
@@ -334,11 +338,11 @@ public Consumer<String> consumer() {
 }
 ```
 
-Spring extract payload only. **Producer can still send with key + headers** — consumer just ignores.
+Spring chỉ extract payload, bỏ qua header. **Producer vẫn có thể gửi với key + header** — consumer chỉ ignore phần đó.
 
-→ Producer always `Message<T>` to set key. Consumer choose `Message<T>` or `T` based on needs.
+→ Pattern khuyến nghị: **producer luôn dùng `Message<T>`** để set key + header. **Consumer chọn `Message<T>` hoặc `T`** tuỳ nhu cầu.
 
-## Processor cũng theo pattern
+## Processor — pattern tương tự
 
 ```java
 @Bean
@@ -349,34 +353,34 @@ public Function<Message<OrderEvent>, Message<PaymentEvent>> paymentProcessor() {
         
         return MessageBuilder
             .withPayload(payment)
-            .copyHeaders(inMsg.getHeaders())        // preserve traceId etc.
-            .setHeader(KafkaHeaders.KEY, payment.id)
+            .copyHeaders(inMsg.getHeaders())        // giữ traceId
+            .setHeader(KafkaHeaders.KEY, payment.id) // key mới cho payment topic
             .build();
     };
 }
 ```
 
-Function<Message<A>, Message<B>>. Both sides Message-typed. Pattern uniform.
+Signature: `Function<Message<A>, Message<B>>`. Cả input và output đều dạng Message — pattern uniform.
 
 ## Best practices
 
-| Practice | Why |
+| Best practice | Lý do |
 |---|---|
-| Always send producer messages as `Message<T>` | Cho phép thêm key + headers sau |
-| Choose meaningful key (entity ID) | Ordering + partition distribution |
-| Explicit `key.serializer` / `key.deserializer` | Spring không guess. Avoid runtime SerializationException. |
-| Use `copyHeaders` cho processor (trace propagation) | Observability across services |
-| `KafkaHeaders.RECEIVED_KEY` to read, `KafkaHeaders.KEY` to write | Avoid accidental key copy in processors |
-| Custom headers cho metadata (traceId, source, user-id) | Debug + audit |
+| Producer luôn gửi qua `Message<T>` | Sau này muốn thêm key + header thì dễ |
+| Chọn key có ý nghĩa (entity ID) | Ordering + phân bố partition đều |
+| Set explicit `key.serializer` / `key.deserializer` | Spring KHÔNG tự đoán. Tránh `SerializationException` runtime |
+| Dùng `copyHeaders` ở processor | Giữ trace context (traceId, source) qua nhiều service |
+| Đọc inbound key qua `KafkaHeaders.RECEIVED_KEY`, set outbound qua `KafkaHeaders.KEY` | Tránh accidental copy key trong processor |
+| Custom header cho metadata (traceId, source, userId) | Debug + audit |
 
-## Anti-patterns
+## Anti-pattern
 
-| Anti-pattern | Problem | Fix |
+| Anti-pattern | Vấn đề | Sửa |
 |---|---|---|
-| Send `String` from producer when key needed | Lost partition ordering | Use `Message<String>` + `KafkaHeaders.KEY` |
-| Forget `key.serializer` config | `SerializationException` runtime | Add to YAML |
-| Use random key (UUID) "for distribution" | Lose ordering semantic | Choose entity ID |
-| Read inbound key via `KafkaHeaders.KEY` | Wrong header name → null | Use `RECEIVED_KEY` |
+| Producer gửi `String` khi cần key | Mất ordering theo partition | Dùng `Message<String>` + `KafkaHeaders.KEY` |
+| Quên config `key.serializer` | Runtime báo `SerializationException` | Thêm vào YAML |
+| Dùng key random (UUID) "để phân bố đều" | Mất ý nghĩa ordering | Chọn entity ID làm key |
+| Đọc inbound key qua `KafkaHeaders.KEY` | Sai tên header → trả về null | Dùng `RECEIVED_KEY` ở consumer/processor input |
 | Hardcode header names as strings | Typo prone | Use `KafkaHeaders.*` constants |
 | Heavy logic in producer supplier | Blocks poller | Compute outside, supplier returns ready |
 
