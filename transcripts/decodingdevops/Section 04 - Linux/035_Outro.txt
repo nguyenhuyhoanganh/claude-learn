@@ -1,0 +1,3 @@
+# Outro
+
+You have completed this section thoroughly. Well done. By now you should already feel confident with the command line and your Linux skills. Don't leave any doubt in your mind. If you feel unsure about any exercise, simply repeat it. Practice once more, get comfortable and then move ahead in the section. Things get even more exciting. You will be hosting websites, hosting blogs, and doing a lot of fun hands on activities. I'll see you there!

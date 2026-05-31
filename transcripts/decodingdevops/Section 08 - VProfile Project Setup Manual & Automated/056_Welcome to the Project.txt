@@ -1,0 +1,3 @@
+# Welcome to the Project
+
+Welcome to the project section. This is your first project. We have a product called VProfile. It is a website written in Java. Consists of multiple services. You will be deploying this product on five virtual machines. Like we have WordPress, where we have Apache and MySQL service running on the same VM. Here you will be having five services running in five different virtual machines. In real time. You will be working in a product and you should have a local copy of that product where you can do your experiments. This project is created keeping this scenario in mind. Take a look.

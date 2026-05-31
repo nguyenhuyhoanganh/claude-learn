@@ -1,0 +1,3 @@
+# Integrating Loki and Alloy for Logs and Metrics
+
+[No English transcript available]
