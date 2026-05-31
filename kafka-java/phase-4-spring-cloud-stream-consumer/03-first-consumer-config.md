@@ -1,10 +1,13 @@
-# Bài 3: First Functional Consumer + auto-offset-reset + group name
+# Bài 3: Consumer đầu tiên + auto-offset-reset + group name
 
-Đến lúc viết consumer Java thật. Bài này: code **3 dòng** cho consumer đầu tiên, run + observe, rồi config 2 properties quan trọng nhất: **auto-offset-reset** (= `--from-beginning` CLI) và **group name**.
+Đến lúc viết consumer Java thật. Bài này: viết **3 dòng code** cho consumer đầu tiên, chạy + quan sát, rồi config 2 property quan trọng nhất:
+
+1. **`auto-offset-reset`** (tương đương `--from-beginning` ở CLI).
+2. **`group name`** (tên consumer group).
 
 ## Code consumer #1
 
-### Package layout
+### Cấu trúc package
 
 ```text
 src/main/java/com/calmvinsguru/playground/section01_consumer/
@@ -13,7 +16,7 @@ src/main/java/com/calmvinsguru/playground/section01_consumer/
     └── ConsumerConfig.java
 ```
 
-Convention: tách `consumer/`, `producer/`, `processor/`, `dto/` subpackages cho clean.
+Convention: tách subpackage `consumer/`, `producer/`, `processor/`, `dto/` cho clean. Xuyên suốt các section sau, pattern này lặp lại.
 
 ### ConsumerConfig.java
 
@@ -38,20 +41,20 @@ public class ConsumerConfig {
 }
 ```
 
-3 lines core. Đó là **toàn bộ consumer application**.
+3 dòng cốt lõi. Đây là **toàn bộ consumer application**.
 
-Breakdown:
-- `@Configuration` → Spring config class.
-- `@Bean public Consumer<String> consumer()` → expose Java `Consumer<String>` bean.
+Phân tích:
+- `@Configuration` — class chứa Spring config.
+- `@Bean` — expose Java `Consumer<String>` bean.
 - Bean name **mặc định = method name** = `"consumer"`.
-- Lambda `message -> log.info(...)` = body.
+- Lambda `message -> log.info(...)` = body xử lý mỗi message.
 
-SCS:
-- Scan beans `Consumer<T>` → "đây là consumer."
-- Wire bean tới Kafka topic theo binding config.
-- Khi message arrive → deserialize → call `accept(message)`.
+Spring Cloud Stream (SCS) làm gì phía sau:
+- Scan thấy bean kiểu `Consumer<T>` → nhận ra "đây là consumer."
+- Wire bean với Kafka topic theo binding config trong YAML.
+- Khi message đến → deserialize từ bytes → gọi `accept(message)`.
 
-KHÔNG có `KafkaConsumer`, không poll loop, không offset management. SCS handle hết.
+**KHÔNG có `KafkaConsumer`**, không có poll loop, không có offset management trong code. SCS handle hết.
 
 ## Config YAML #1 — simple consumer
 
@@ -67,60 +70,60 @@ spring:
           destination: demo-topic
 ```
 
-3 settings:
-- `function.definition: consumer` → bean name `consumer`.
-- `bindings.consumer-in-0.destination: demo-topic` → Kafka topic.
-- Bootstrap server default `localhost:9092` (SCS Kafka binder default).
+3 setting tối thiểu:
+- `function.definition: consumer` — list bean names mà SCS phải activate.
+- `bindings.consumer-in-0.destination: demo-topic` — map binding name (auto-derived từ bean name) → Kafka topic name.
+- Bootstrap server lấy default `localhost:9092` (SCS Kafka binder default).
 
-## Run + observe
+## Chạy + quan sát
 
-### Step 1: Fresh Kafka
+### Bước 1: Fresh Kafka container
 
 ```bash
 docker compose down && docker compose up -d
 docker exec -it kafka bash
 cd /opt/kafka/bin
 ./kafka-topics.sh --bootstrap-server localhost:9092 --list
-# (empty)
+# (rỗng — chưa có topic nào)
 ```
 
-### Step 2: Run Section01Runner
+### Bước 2: Chạy Section01Runner
 
 IDE run config:
 ```text
 Program arguments: --section=section01 --config=01-simple-consumer.yaml
 ```
 
-Console output:
+Console output (rút gọn):
 
 ```text
 Started Section01Runner in 3.2 seconds
-[Consumer clientId=consumer-anonymous.xxx, groupId=anonymous.xxx] 
+[Consumer clientId=consumer-anonymous.xxx, groupId=anonymous.xxx]
   Successfully joined group with generation Generation{...}
 [Consumer ...] Adding newly assigned partitions: demo-topic-0
 [Consumer ...] Setting offset for partition demo-topic-0 to the committed offset FetchPosition{...}
 ```
 
-Observations:
-1. ✅ Topic `demo-topic` **auto-created** (default behavior of Kafka in dev mode).
-2. ✅ Consumer assigned to partition 0 of `demo-topic`.
-3. ⚠️ Group name: `anonymous.xxx` (random UUID). Same as no `--group` ở CLI.
+Quan sát 3 điểm:
+1. ✅ Topic `demo-topic` **tự được tạo** (default Kafka dev mode).
+2. ✅ Consumer được assign partition 0 của `demo-topic`.
+3. ⚠️ Group name: `anonymous.xxx` (UUID random). Giống y hệt lúc CLI không chỉ định `--group`.
 
-### Step 3: Verify topic created
+### Bước 3: Kiểm tra topic đã tạo
 
 ```bash
 ./kafka-topics.sh --bootstrap-server localhost:9092 --list
-# __consumer_offsets
-# demo-topic
+# __consumer_offsets        ← internal topic của Kafka
+# demo-topic                 ← topic vừa được auto-create
 ```
 
-Topic xuất hiện. SCS triggered Kafka auto-create.
+Topic xuất hiện. SCS đã trigger Kafka tạo topic.
 
-> **Production note**: `auto.create.topics.enable` thường set `false` ở production (vd typo gửi sai topic name → tạo topic ma). Dev/Docker default `true`.
+> **Lưu ý production**: property `auto.create.topics.enable` thường set `false` ở production. Lý do: nếu code typo topic name (vd `oder-events` thay vì `order-events`) → broker auto-create topic ma "oder-events", producer publish vào đó mà không ai consume → silent bug. Dev/Docker mặc định `true` cho tiện.
 
-### Step 4: Produce messages
+### Bước 4: Produce vài message để test
 
-Terminal mới:
+Mở terminal mới:
 ```bash
 docker exec -it kafka bash
 cd /opt/kafka/bin
@@ -132,7 +135,7 @@ cd /opt/kafka/bin
 > 5
 ```
 
-Spring app log:
+Log của Spring app:
 
 ```text
 received: 1
@@ -142,25 +145,25 @@ received: 4
 received: 5
 ```
 
-Consumer working. Done.
+Consumer chạy đúng. Xong.
 
-## Problem: restart app → not see old messages
+## Vấn đề: restart app → không thấy message cũ
 
 Stop Section01Runner. Restart.
 
-Producer history: 5 messages (1-5).
+Producer đã có history: 5 message (1-5).
 
-App log:
+App log sau khi restart:
 ```text
 [Consumer ...] Setting offset to the latest offset
-(no "received: 1" ... etc)
+(không có dòng "received: 1" ... etc)
 ```
 
-Why? Bài Phase 3:
-- Anonymous group → **mỗi restart = new group**.
-- New group + no `--from-beginning` (default behavior) → start from latest LEO → skip old messages.
+Vì sao? Quay lại lý thuyết Phase 3:
+- **Anonymous group** → mỗi restart = **group hoàn toàn mới** (UUID random khác).
+- New group + KHÔNG `--from-beginning` (default behavior của Kafka) → bắt đầu đọc từ **latest LEO** (Log End Offset = offset tiếp theo Kafka sẽ ghi vào) → bỏ qua mọi message cũ.
 
-Sửa: config `auto-offset-reset` + `group`.
+Sửa: cần config 2 thứ — **`auto-offset-reset`** + **`group` name cố định**.
 
 ## Property 1: auto-offset-reset
 
@@ -180,16 +183,19 @@ spring:
           consumer-in-0:
             consumer:
               configuration:
-                auto.offset.reset: earliest    # ← KEY
+                auto.offset.reset: earliest    # ← QUAN TRỌNG
       bindings:
         consumer-in-0:
           destination: demo-topic
 ```
 
-Values:
-- `earliest` = bắt đầu từ offset 0 (= CLI `--from-beginning`).
-- `latest` (default) = bắt đầu từ LEO.
-- `none` = throw exception if no offset committed for group.
+3 giá trị có thể set:
+
+| Value | Ý nghĩa |
+|---|---|
+| `earliest` | Bắt đầu từ offset 0 (tương đương `--from-beginning` CLI) |
+| `latest` (default) | Bắt đầu từ LEO (chỉ thấy message mới) |
+| `none` | Throw exception nếu không có offset đã commit cho group |
 
 Re-run với config này:
 ```text
@@ -206,27 +212,27 @@ received: 4
 received: 5
 ```
 
-✅ Đọc lại từ đầu mỗi restart (vì anonymous group reset mỗi lần).
+✅ Đọc lại từ đầu mỗi lần restart (vì anonymous group bị reset mỗi lần restart, nên Kafka coi như group mới và áp dụng `earliest`).
 
-### ⚠️ `auto.offset.reset` chỉ effective LẦN ĐẦU group join
+### ⚠️ `auto.offset.reset` chỉ có hiệu lực LẦN ĐẦU group join
 
-Recap từ Phase 3 bài 8: **ledger là source of truth**.
+Recap từ Phase 3 bài 8: **ledger nội bộ của Kafka là source of truth** (nguồn sự thật).
 
 ```text
-Lần 1: new group joins.
-  - Ledger empty → check auto.offset.reset.
-  - earliest → start at 0.
-  - latest → start at LEO.
-  - Then write to ledger.
+Lần 1: group mới join.
+  - Ledger trống cho group này → check auto.offset.reset.
+  - earliest → bắt đầu offset 0.
+  - latest → bắt đầu offset LEO (cuối cùng).
+  - Sau đó ghi vào ledger.
 
 Lần 2+: same group rejoins.
-  - Ledger has entry → resume from committed offset.
-  - auto.offset.reset IGNORED.
+  - Ledger đã có entry cho group này → resume từ committed offset.
+  - auto.offset.reset BỊ IGNORED hoàn toàn.
 ```
 
-→ Trong demo trên, anonymous group **mỗi lần = NEW group** → `earliest` activate mỗi restart → đọc lại.
+→ Trong demo trên, anonymous group **mỗi lần = NEW group** (UUID khác) → `earliest` activate mỗi lần restart → đọc lại.
 
-Nếu group fixed name → chỉ lần đầu earliest, sau đó committed offset wins.
+Nếu group có name cố định → chỉ lần đầu earliest activate, sau đó committed offset wins.
 
 ## Property 2: Consumer group name
 
@@ -248,10 +254,10 @@ spring:
       bindings:
         consumer-in-0:
           destination: demo-topic
-          group: demo-group              # ← KEY
+          group: demo-group              # ← QUAN TRỌNG: tên cố định
 ```
 
-Run:
+Chạy:
 ```text
 --section=section01 --config=03-consumer-group.yaml
 ```
@@ -269,7 +275,7 @@ received: 4
 received: 5
 ```
 
-### Test: restart app
+### Test: restart app với group cố định
 
 Stop. Restart.
 
@@ -279,9 +285,9 @@ Adding newly assigned partitions: demo-topic-0
 Setting offset for partition demo-topic-0 to FetchPosition{offset=5, ...}   ← Resume!
 ```
 
-KHÔNG `received` cũ. Vì sao? Ledger entry tồn tại cho `demo-group`. Resume từ offset 5 (next unconsumed).
+**KHÔNG có dòng `received` cũ**. Vì sao? Ledger đã có entry cho `demo-group` (offset 5). Resume từ offset 5 (message tiếp theo chưa consume).
 
-Producer thêm:
+Producer gửi thêm:
 ```text
 > 6
 > 7
@@ -295,9 +301,9 @@ received: 7
 received: 8
 ```
 
-✅ Pick up new messages from offset 5.
+✅ Pick up message mới từ offset 5 trở đi. Không replay cũ.
 
-### Verify ledger via CLI
+### Verify ledger qua CLI
 
 ```bash
 ./kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group demo-group
@@ -307,9 +313,9 @@ received: 8
 # demo-group   demo-topic   0          8               8               0
 ```
 
-Current = 8 = LEO. Lag 0. Caught up.
+Current offset = 8 = LEO. Lag = 0. Consumer đã catch up đến message mới nhất.
 
-### Restart and produce → only get NEW messages
+### Restart và produce → chỉ nhận message MỚI
 
 Stop app. Producer:
 ```text
@@ -324,82 +330,99 @@ received: 9
 received: 10
 ```
 
-✅ Resume from where left off. NOT replay 1-8.
+✅ Resume từ chỗ dừng. **KHÔNG replay** 1-8.
 
-## Tổng kết flow
+## Tổng kết 3 scenario
 
 ```text
-Scenario A: anonymous group, latest (default)
-  Producer: 1 2 3 4 5
-  Start consumer → group anonymous-aaa → start at LEO=5 → no received
-  Stop. Producer: 6
-  Restart → group anonymous-bbb → start at LEO=6 → no received
-  Producer: 7
-  → received: 7
+SCENARIO A: anonymous group, latest (default Kafka)
+  Producer publish: 1 2 3 4 5
+  Start consumer → group anonymous-aaa → start at LEO=5 → KHÔNG nhận gì
+  Stop. Producer publish: 6
+  Restart → group anonymous-bbb (UUID khác) → start at LEO=6 → KHÔNG nhận gì
+  Producer publish: 7
+  → received: 7 (chỉ message mới sau khi start)
 
-Scenario B: anonymous group + earliest
-  Producer: 1 2 3 4 5
+SCENARIO B: anonymous group + earliest
+  Producer publish: 1 2 3 4 5
   Start consumer → group anonymous-ccc → earliest → received: 1 2 3 4 5
   Stop.
-  Restart → group anonymous-ddd → earliest → received: 1 2 3 4 5 (re-process!)
+  Restart → group anonymous-ddd (UUID khác) → earliest → received: 1 2 3 4 5 (re-process!)
+  → MỖI LẦN restart replay từ đầu — duplicate processing!
 
-Scenario C: fixed group + earliest
-  Producer: 1 2 3 4 5
+SCENARIO C: fixed group + earliest
+  Producer publish: 1 2 3 4 5
   Start consumer → group demo-group → first join → earliest → received: 1-5
-  Ledger: demo-group offset 5
+  Ledger ghi: demo-group offset 5.
   Stop.
-  Restart → group demo-group → resume offset 5 → no replay
-  Producer: 6
+  Restart → group demo-group → ledger có entry → resume offset 5 → KHÔNG replay
+  Producer publish: 6
   → received: 6
 ```
 
-**Scenario C** = production pattern. Anonymous = chỉ debug.
+**Scenario C** = production pattern chuẩn. Anonymous group chỉ dùng cho debug nhanh.
 
-## Bean naming gotcha
+## Lưu ý về tên bean
 
-Method name = bean name = part of binding name.
+Method name = bean name = một phần của binding name.
 
 ```java
 @Bean
-public Consumer<String> consumer() { ... }     // bean name "consumer"
-                                                  // binding "consumer-in-0"
+public Consumer<String> consumer() { ... }
+// → bean name = "consumer"
+// → binding name = "consumer-in-0"
 
 @Bean
-public Consumer<String> paymentEventHandler() { ... }   // bean name "paymentEventHandler"
-                                                          // binding "paymentEventHandler-in-0"
+public Consumer<String> paymentEventHandler() { ... }
+// → bean name = "paymentEventHandler"
+// → binding name = "paymentEventHandler-in-0"
 ```
 
-Đổi method name → đổi binding name. Cẩn thận khi rename.
+Đổi method name → đổi binding name → YAML cũng phải update theo. **Cẩn thận khi rename**.
 
-Override bean name:
+Override bean name bằng cách truyền vào `@Bean`:
 
 ```java
 @Bean("customName")
-public Consumer<String> someMethod() { ... }    // bean name "customName"
-                                                   // binding "customName-in-0"
+public Consumer<String> someMethod() { ... }
+// → bean name = "customName"
+// → binding name = "customName-in-0"
 ```
 
 ## Best practices từ bài này
 
-| Practice | Why |
+| Best practice | Lý do |
 |---|---|
-| Always explicit `group:` | Avoid anonymous, ensure resume across restart |
-| `auto.offset.reset: latest` default in prod | New consumers don't unexpectedly replay history |
-| `earliest` chỉ cho new feature backfill / dev | Replay expensive in production |
-| Explicit `brokers:` config | Visibility (vs implicit localhost) |
-| Method names = bean names → choose meaningful | `paymentEventConsumer` not `consumer` |
-| Naming convention `service-env` cho group | `payment-service-prod`, `payment-service-staging` |
+| Luôn set `group:` cố định trong YAML | Tránh anonymous, đảm bảo resume sau restart |
+| Production dùng `auto.offset.reset: latest` | Consumer mới deploy không vô tình replay history cũ |
+| `earliest` chỉ dùng cho backfill / dev | Replay tốn resource trong production |
+| Set `brokers:` explicit thay vì rely default | Visibility — đọc code thấy ngay broker nào |
+| Method name = bean name → chọn tên có ý nghĩa | `paymentEventConsumer` thay vì `consumer` |
+| Convention naming group: `service-env` | `payment-service-prod`, `payment-service-staging` |
+
+## Anti-patterns
+
+| Anti-pattern | Vấn đề | Sửa |
+|---|---|---|
+| Anonymous group ở production | Mất offset mỗi restart, duplicate processing | Set `group:` cố định |
+| `auto.offset.reset: earliest` ở production | Consumer mới deploy replay toàn bộ history → spike load | `latest` default, chỉ `earliest` cho specific use case |
+| Quên `function.definition` | SCS không discover bean, silent no-op | Luôn list bean names |
+| Sai naming convention binding (`consumer_in_0`) | SCS không match | Đúng format `consumer-in-0` (kebab-case dash) |
+| Hardcode topic name trong code | Mất flexibility config | Luôn qua `destination:` YAML |
 
 ## Tóm tắt bài 3
 
-- **First consumer**: 3 lines code with `@Bean public Consumer<String>`.
-- SCS auto-wire bean tới Kafka topic via binding name `{bean}-in-0`.
-- App start → topic auto-created (`auto.create.topics.enable=true` default in dev).
-- **No group name** → anonymous group per app instance → reset offset mỗi restart.
-- **`auto.offset.reset`**: `earliest` (start 0), `latest` (default, start LEO), `none` (error if no offset).
-- Effective **only when no committed offset for group** (first join). Sau đó committed offset wins.
-- **`group:`** explicit → fixed consumer group → resume from committed offset across restart.
-- **Production pattern**: fixed group + `latest` auto-offset-reset (or earliest only for backfill).
-- Bean name = method name (default). Override via `@Bean("name")`.
+- **Consumer đầu tiên**: 3 dòng code với `@Bean public Consumer<String>`.
+- SCS auto-wire bean với Kafka topic qua binding name `{beanName}-in-0`.
+- App start → topic được auto-create (`auto.create.topics.enable=true` mặc định ở dev).
+- **Không có group name** → anonymous group per restart → reset offset mỗi lần restart.
+- **`auto.offset.reset`**:
+  - `earliest` (bắt đầu từ offset 0).
+  - `latest` (default, bắt đầu từ LEO).
+  - `none` (throw error nếu không có offset đã commit).
+- Property này chỉ effective **lần đầu group join** (khi ledger trống). Sau đó committed offset trong ledger wins.
+- **`group:` cố định** → fixed consumer group → resume từ committed offset qua mỗi lần restart.
+- **Production pattern**: fixed group + `latest` auto-offset-reset (hoặc `earliest` chỉ cho backfill).
+- Bean name = method name (default). Override qua `@Bean("name")`.
 
-**Bài kế tiếp** → [Bài 4: Consuming from multiple topics + best practices](04-multi-topic-consumption.md)
+**Bài kế tiếp** → [Bài 4: Consume từ nhiều topic + best practices](04-multi-topic-consumption.md)
