@@ -1,23 +1,31 @@
 # Bài 1: Setup Kafka local bằng Docker Compose
 
-Để học Kafka, bạn cần 1 Kafka broker chạy được. Không cần cluster 3 node, không cần ZooKeeper setup phức tạp. **1 container Docker** là đủ cho học + dev + local test.
+Để học Kafka, bạn cần 1 Kafka broker chạy được. Mục tiêu của section này rất đơn giản: **dùng Docker Compose để chạy Kafka ở local** phục vụ học, dev và test. Không cần cluster 3 node, không cần ZooKeeper setup phức tạp. **1 container Docker** là đủ.
+
+Lưu ý: ở giai đoạn này có thể bạn sẽ không hiểu hết mọi command/property — Kafka có rất nhiều thành phần, mọi concept cần được giới thiệu **từng cái một theo thứ tự cụ thể**. Hãy kiên nhẫn. Càng học càng sáng tỏ.
 
 Bài này: chọn image phù hợp, viết Docker Compose, launch container, exec vào CLI tools.
 
 ## Apache Kafka có 2 image chính thức
 
+Apache Kafka project cung cấp 2 official Docker image. Hiểu sự khác biệt rất quan trọng.
+
 | Image | Tech | Use case |
 |---|---|---|
-| **apache/kafka** | JVM-based | General use, **production**, học. Bao gồm full CLI tools |
-| **apache/kafka-native** | GraalVM native | Faster startup. **Experimental**. KHÔNG có CLI tools. CI/CD integration test |
+| **apache/kafka** | JVM-based (Java standard) | General use, **production**, học. **Bao gồm CLI tools** đầy đủ |
+| **apache/kafka-native** | GraalVM compile sang native binary | Faster startup. **Experimental** (đang thử nghiệm). **KHÔNG** có CLI tools. Chủ yếu cho integration test trong CI/CD pipeline |
 
-**Khoá này dùng `apache/kafka`** (chuẩn). Sau này lúc viết integration test (Section 15) mới dùng `apache/kafka-native` cho fast startup.
+**Khoá học này dùng `apache/kafka`** (standard image) cho việc học. Sau này khi viết integration test (Section 15) mới dùng `apache/kafka-native` cho startup nhanh.
 
-> Lưu ý version: Kafka team release thường xuyên. Core concepts ổn định từ version 1+. Bài học sẽ dùng version mới nhất theo repo GitHub kèm khoá.
+### Về version Kafka
+
+Kafka team release version mới khá thường xuyên. Đôi khi là bug fix, đôi khi là thay đổi architecture internal. Tuy nhiên **các core concept ổn định từ Kafka version 1+** — những gì học hôm nay vẫn dùng được cho năm sau.
+
+GitHub repo của khoá học sẽ chứa toàn bộ source code, được update mỗi 3-6 tháng để giữ current. Khi học, **dùng version trong repo** thay vì version cũ trên slide video.
 
 ## Docker Compose YAML
 
-Tạo file `docker-compose.yml`:
+Tạo file `docker-compose.yml` ở thư mục project:
 
 ```yaml
 services:
@@ -29,24 +37,24 @@ services:
       - "9092:9092"
 ```
 
-Giải thích:
+Giải thích từng field:
 
-| Field | Nghĩa |
+| Field | Ý nghĩa |
 |---|---|
-| `image: apache/kafka:latest` | Pull standard JVM image. Production thay `:latest` bằng specific version (vd `:3.8.0`). |
-| `container_name: kafka` | Đặt tên container `kafka` để `docker exec` dễ. |
-| `working_dir: /opt/kafka` | Khi `docker exec ... bash`, mặc định landing ở đây — chứa `bin/` (CLI tools) + `config/` (properties). |
-| `ports: 9092:9092` | Map port broker. Producer/consumer trên host kết nối qua `localhost:9092`. |
+| `image: apache/kafka:latest` | Pull standard JVM image. Production nên thay `:latest` bằng version cụ thể (vd `:3.8.0`) để reproducible. |
+| `container_name: kafka` | Đặt tên container là `kafka` để `docker exec` cho ngắn. |
+| `working_dir: /opt/kafka` | Khi `docker exec ... bash`, mặc định landing ở đây. Path này chứa `bin/` (CLI tools) + `config/` (file properties). |
+| `ports: 9092:9092` | Map port của broker. Producer/consumer trên host (máy của bạn) sẽ kết nối qua `localhost:9092`. |
 
-Đơn giản. Không ZooKeeper riêng — Kafka 3.x dùng **KRaft mode** internal, embedded controller.
+Setup cực kỳ đơn giản. **Không cần ZooKeeper riêng** — Kafka 3.x dùng **KRaft mode** (Kafka Raft) với controller embedded ngay trong broker.
 
 ## Launch container
 
-Terminal trong thư mục chứa `docker-compose.yml`:
+Mở terminal ở thư mục chứa `docker-compose.yml`:
 
 ```bash
 docker compose up
-# hoặc detached
+# hoặc detached mode (chạy nền)
 docker compose up -d
 ```
 
@@ -54,16 +62,16 @@ Output (foreground mode):
 ```text
 [+] Running 1/1
  ✓ Container kafka  Started
-kafka | [2026-05-31 10:23:45,123] INFO Starting controller (kafka.server.ControllerServer)
-kafka | [2026-05-31 10:23:45,234] INFO ...
-kafka | [2026-05-31 10:23:46,012] INFO Kafka Server started (kafka.server.KafkaServer)
+kafka | [2026-06-01 10:23:45,123] INFO Starting controller (kafka.server.ControllerServer)
+kafka | [2026-06-01 10:23:45,234] INFO ...
+kafka | [2026-06-01 10:23:46,012] INFO Kafka Server started (kafka.server.KafkaServer)
 ```
 
-Khi thấy `Kafka Server started` → broker ready.
+Khi thấy dòng `Kafka Server started` → broker đã sẵn sàng.
 
-> Scroll lên: Kafka log tất cả internal config properties dùng. Tạm thời không cần đọc hết — sẽ học dần.
+> Nếu scroll log lên: Kafka in ra **toàn bộ properties** mà nó dùng khi start. Rất nhiều. Tạm thời không cần đọc hết — sẽ học dần dần xuyên suốt khoá.
 
-### Kiểm tra container
+### Kiểm tra container đang chạy
 
 ```bash
 docker ps
@@ -71,27 +79,27 @@ docker ps
 # abc123...      apache/kafka:latest  ...         0.0.0.0:9092->9092/tcp   kafka
 ```
 
-### Stop
+### Stop container
 
 ```bash
-docker compose down       # stop + remove container
-docker compose stop       # chỉ stop, giữ container
+docker compose down       # stop + xoá container
+docker compose stop       # chỉ stop, giữ container (data tạm vẫn còn)
 ```
 
-## Exec vào container — explore CLI
+## Exec vào container — explore CLI tools
 
-CLI tools nằm trong container, không có sẵn trên host. Phải exec vào:
+CLI tools nằm **trong container**, không có sẵn trên host. Phải exec vào:
 
 ```bash
 docker exec -it kafka bash
 ```
 
 - `-i` interactive (giữ stdin mở).
-- `-t` allocate TTY.
-- `kafka` = container name.
-- `bash` = command chạy bên trong.
+- `-t` allocate TTY (terminal giả).
+- `kafka` = tên container.
+- `bash` = command chạy bên trong (mở shell bash).
 
-Bạn sẽ landing trong `/opt/kafka`:
+Bạn sẽ landing trong `/opt/kafka` (vì đặt `working_dir` ở compose):
 
 ```bash
 [appuser@abc123 kafka]$ pwd
@@ -106,7 +114,7 @@ drwxr-xr-x  logs/
 ...
 ```
 
-### `bin/` — CLI tools
+### Thư mục `bin/` — CLI tools
 
 ```bash
 [appuser@abc123 kafka]$ ls bin/
@@ -116,12 +124,18 @@ kafka-console-consumer.sh
 kafka-consumer-groups.sh
 kafka-configs.sh
 kafka-producer-perf-test.sh
-... (~30 scripts)
+... (~30 script .sh)
 ```
 
-Mỗi tool = 1 wrapper Java cho task admin/test khác nhau. Sẽ dùng trong các bài sau.
+Mỗi tool là 1 wrapper Java cho task admin/test khác nhau:
+- `kafka-topics.sh` — quản lý topic (create, list, describe, delete).
+- `kafka-console-producer.sh` — producer dòng lệnh, gửi message text.
+- `kafka-console-consumer.sh` — consumer dòng lệnh, đọc message.
+- `kafka-consumer-groups.sh` — xem/reset offset của consumer group.
 
-### `config/` — properties files
+Sẽ dùng tools này trong các bài tiếp theo.
+
+### Thư mục `config/` — properties files
 
 ```bash
 [appuser@abc123 kafka]$ ls config/
@@ -133,11 +147,19 @@ server.properties
 ...
 ```
 
-Mỗi file = 1 nhóm config (broker, consumer, etc.). Tạm thời không đụng — Kafka default cho học OK.
+Mỗi file là 1 nhóm config:
+- `broker.properties` — config khi node chạy role broker only.
+- `controller.properties` — config khi node chạy role controller only.
+- `server.properties` — config khi node chạy cả 2 role (broker + controller). Default Docker container dùng file này.
+- `producer.properties` / `consumer.properties` — reference cho producer/consumer app (không phải config cho server).
 
-> Doc reference: kafka.apache.org/documentation/#configuration. Mỗi property có giải thích chi tiết.
+Tạm thời không đụng các file này — Kafka default cho việc học đã OK.
 
-## Quirks: gọi CLI tool phải `./script.sh`
+> Doc reference đầy đủ: kafka.apache.org/documentation/#configuration. Mỗi property có mô tả chi tiết.
+
+## Lưu ý: gọi CLI tool phải dùng `./script.sh`
+
+Thử chạy:
 
 ```bash
 [appuser@abc123 kafka]$ cd bin/
@@ -145,15 +167,17 @@ Mỗi file = 1 nhóm config (broker, consumer, etc.). Tạm thời không đụn
 bash: kafka-topics.sh: command not found
 ```
 
-Tại sao? Check `PATH`:
+Lỗi. Tại sao? Check biến `PATH`:
 
 ```bash
 [appuser@abc123 bin]$ echo $PATH
 /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# /opt/kafka/bin KHÔNG có
+# /opt/kafka/bin KHÔNG có trong PATH
 ```
 
-Phải dùng `./` prefix:
+Bash chỉ tìm command trong các path liệt kê. `/opt/kafka/bin` không có → không tìm thấy.
+
+Fix: dùng `./` prefix để bash hiểu "chạy file ở thư mục hiện tại":
 
 ```bash
 [appuser@abc123 bin]$ ./kafka-topics.sh --help
@@ -164,16 +188,16 @@ Option                                   Description
 ...
 ```
 
-Hoặc full path:
+Hoặc dùng full path:
 ```bash
 /opt/kafka/bin/kafka-topics.sh --help
 ```
 
-> Khoá học sau này sẽ dùng `./` cho ngắn.
+> Khoá học từ giờ sẽ dùng `./` cho ngắn gọn.
 
-## Multi-container setup (Kafka + app)
+## Multi-container setup (Kafka + Spring Boot app)
 
-Bạn sẽ thêm Spring Boot app + Kafka cùng compose:
+Sau này bạn sẽ thêm Spring Boot app vào cùng `docker-compose.yml`:
 
 ```yaml
 services:
@@ -189,43 +213,48 @@ services:
     depends_on:
       - kafka
     environment:
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092   # ← container-internal hostname
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092   # ← dùng tên service, KHÔNG localhost
 ```
 
-Trong cùng compose network, services gọi nhau bằng service name (`kafka`), không phải `localhost`.
+Trong cùng compose network, services gọi nhau bằng **tên service** (`kafka`), không phải `localhost`.
 
-## Production note — đây CHỈ là dev setup
+Tại sao? `localhost` bên trong container `consumer-app` = chính container `consumer-app`, không phải Kafka. Dùng tên service → Docker DNS resolve sang IP của container kafka.
+
+## Setup này CHỈ dành cho dev — KHÔNG production
 
 1-broker setup chỉ phù hợp:
 - ✓ Local learning.
 - ✓ Unit test, integration test trong dev.
-- ✓ Demo.
+- ✓ Demo, POC.
 
 KHÔNG dùng cho production vì:
-- ✗ Single point of failure (1 broker chết = data inaccessible).
-- ✗ Replication factor max = 1.
-- ✗ Không có rolling upgrade.
+- ✗ **Single point of failure** — 1 broker chết = data inaccessible, hệ thống down.
+- ✗ Replication factor max = 1 → không có backup data.
+- ✗ Không có rolling upgrade (không upgrade Kafka mà không downtime được).
 - ✗ Không có high availability.
 
-Production: 3+ brokers, replication factor 3, min in-sync replicas 2. Detail ở Phase 9 (Kafka Cluster Architecture).
+Production phải dùng cluster: **3+ broker, replication factor 3, min in-sync replicas 2**. Chi tiết ở Phase 9 (Kafka Cluster Architecture Deep Dive).
 
-## Troubleshoot phổ biến
+## Troubleshoot các vấn đề phổ biến
 
-| Issue | Fix |
+| Vấn đề | Cách fix |
 |---|---|
-| Port 9092 đã bind | `docker ps`, stop service đang dùng port. Hoặc đổi mapping `9093:9092`. |
-| Container exit ngay | Check `docker logs kafka`. Thường missing config hoặc Java OOM. |
-| `docker exec` báo not running | Container không up. `docker compose up -d` lại. |
-| Disk full sau vài tuần | Kafka log accumulate. Set retention hoặc cleanup. |
-| Apple Silicon (M1/M2) slow | Image multi-arch hỗ trợ ARM. Pull lại nếu emulated x86_64. |
+| Port 9092 đã bị bind | `docker ps`, stop service đang dùng port. Hoặc đổi mapping `9093:9092`. |
+| Container exit ngay lập tức | Check `docker logs kafka`. Thường do missing config hoặc Java OOM. |
+| `docker exec` báo "container is not running" | Container không up. Chạy `docker compose up -d` lại. |
+| Disk đầy sau vài tuần | Kafka log accumulate. Set retention hoặc xoá thư mục `/opt/kafka/logs` định kỳ trong dev. |
+| Apple Silicon (M1/M2/M3) chạy chậm | Image multi-arch hỗ trợ ARM. Pull lại nếu đang emulated x86_64. |
 
 ## Tóm tắt bài 1
 
-- 2 image official: **apache/kafka** (standard, dùng cho học + prod) vs **apache/kafka-native** (GraalVM, experimental, CI/CD test).
-- Docker Compose 1 service đủ chạy local Kafka — KRaft mode, không cần ZooKeeper.
-- `docker exec -it kafka bash` để vào container, landing `/opt/kafka`.
-- `bin/` chứa CLI tools, gọi bằng `./script.sh` (không trong PATH).
-- `config/` chứa properties files, doc reference ở kafka.apache.org.
-- Setup này CHỈ cho dev — production cần cluster 3+ broker.
+- Apache Kafka có **2 image official**:
+  - `apache/kafka` (standard JVM) — dùng cho học + production. Bao gồm CLI tools.
+  - `apache/kafka-native` (GraalVM, experimental) — startup nhanh, dùng cho CI/CD integration test. Không có CLI tools.
+- Docker Compose **1 service đơn giản** đủ chạy local Kafka — dùng KRaft mode, không cần ZooKeeper riêng.
+- `docker exec -it kafka bash` để vào container, landing tại `/opt/kafka`.
+- Thư mục `bin/` chứa CLI tools (~30 script), gọi bằng `./script.sh` (vì không trong PATH).
+- Thư mục `config/` chứa properties files reference.
+- Multi-container: services gọi nhau bằng **tên service**, không `localhost`.
+- Setup này **CHỈ cho dev** — production cần cluster 3+ broker với replication.
 
-**Bài kế tiếp** → [Phase 3 - Bài 1: Kafka topics — cấu trúc lưu trữ event](../phase-3-kafka-fundamentals/01-topics-partitions.md)
+**Bài kế tiếp** → [Phase 3 - Bài 1: Kafka core concepts — event, topic, broker, cluster](../phase-3-kafka-fundamentals/01-core-concepts-cluster.md)
