@@ -1,0 +1,3 @@
+# Core Concepts - Section Introduction
+
+-: Hello. In the first section, we start with the core concepts. We look at the cluster architecture at a high level and then look at some of the API primitives, such as the basic concepts like Pods, ReplicaSets, Deployments, followed by services. If you have attended the beginner's course or other certification course for application developers, then you might want to skip some of these topics or maybe just go through the practice tests alone. We will now start with the cluster architecture.

@@ -1,0 +1,3 @@
+# Troubleshooting - Section Introduction
+
+-: Hello and welcome to this section. In this section, we look at some of the troubleshooting techniques for Kubernetes. We start with troubleshooting application failures, then move on to troubleshooting control plane failures, and then to worker node failures, and finally network related issues. This section is full of hands-on labs where you are given a broken cluster and are asked to troubleshoot and fix issues. Good luck.

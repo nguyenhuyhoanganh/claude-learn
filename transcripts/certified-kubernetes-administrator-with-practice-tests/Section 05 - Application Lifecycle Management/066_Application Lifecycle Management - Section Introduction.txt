@@ -1,0 +1,3 @@
+# Application Lifecycle Management - Section Introduction
+
+-: Hello, my name is Mumshad Mannambeth and we are going through the certified Kubernetes Administrator's Course. In this section, we discuss about application life cycle management. We start at rolling updates and rollbacks, the different ways to configure applications, scale applications, before finally looking at the primitives office health healing application. We discuss a lot of these in the certified Kubernetes Application Developers Course. So if you have attended that already, some of these may be repetitive for you. If these topics seem familiar to you, skip them or simply go through the practice desk. We will start with rolling updates and rollbacks.

@@ -1,0 +1,3 @@
+# Demo: Listing Consumer Groups
+
+if we go back to our document 06 consumer group here I have added one command so we can see the list of consumer groups we have sometimes you might be interested what are all the consumer groups we have okay so for that we have a command so let's simply just copy this and ensure that you have accessed the Kafka container so now if I paste this command hit enter here I can see payment service inventory service

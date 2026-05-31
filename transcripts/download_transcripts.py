@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 
-COURSE_SLUG = "the-complete-microservices-event-driven-architecture"
+COURSE_SLUG = "learn-golang-like-google-engineers-do"
 OUTPUT_DIR = Path(__file__).parent
 COOKIES_FILE = OUTPUT_DIR / "cookies.json"
 PREFERRED_LOCALE = "en_US"

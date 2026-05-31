@@ -1,0 +1,3 @@
+# Logging and Monitoring - Section Introduction
+
+In this section, we discuss about the various logging and monitoring options available. We first see how to monitor the Kubernetes cluster components as well as the applications hosted on them. We then see how to view and manage the logs for the cluster components as well as the applications. We practice what we learn through a set of fun and challenging exercises. Well, I hope you like the upcoming lectures and practice tests. So let's get started.
