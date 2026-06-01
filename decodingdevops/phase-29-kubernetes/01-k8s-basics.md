@@ -1,27 +1,27 @@
-# Bài 1: Kubernetes — architecture và core objects
+# Bài 1: Kubernetes — Kiến trúc và các object cốt lõi
 
-**Kubernetes (K8s)** = container orchestrator chuẩn ngành. Khi container > 5, app cần scale + HA → K8s. Bài này learn fundamentals.
+**Kubernetes (K8s)** = container orchestrator chuẩn của ngành. Khi số container vượt 5, app cần scale + HA → cần K8s. Bài này học fundamentals.
 
-## Vì sao K8s?
+## Vì sao cần K8s?
 
-Docker Compose limit:
-- Single host.
-- No auto-recover.
-- No rolling deploy.
-- No multi-node scaling.
+Docker Compose có giới hạn:
+- Chỉ chạy trên single host.
+- Không auto-recover.
+- Không hỗ trợ rolling deploy.
+- Không scale qua nhiều node.
 
-K8s solves:
-- **Multi-host cluster** — 100s node.
-- **Auto-scaling** pods + nodes.
-- **Self-healing** — restart crashed pod, reschedule failed node.
+K8s giải quyết:
+- **Multi-host cluster** — hàng trăm node.
+- **Auto-scaling** pod + node.
+- **Self-healing** — restart pod crash, reschedule pod khi node fail.
 - **Rolling deploy** + rollback.
 - **Service discovery** + load balancing.
 - **Storage orchestration**.
 - **Secret + config management**.
 
-K8s = **operating system for cluster**.
+K8s đóng vai trò như **operating system cho cluster**.
 
-## Architecture
+## Architecture (Kiến trúc)
 
 ```text
 +──────────────────────────────────────────────────────+
@@ -50,23 +50,23 @@ K8s = **operating system for cluster**.
     +──────────────+ +──────────────+ +──────────────+
 ```
 
-### Control plane components
+### Control plane components (Thành phần control plane)
 
-| Component | Role |
+| Component | Vai trò |
 |---|---|
-| **kube-apiserver** | REST API endpoint, single entry point |
-| **etcd** | Distributed key-value store, "source of truth" cluster state |
-| **kube-scheduler** | Decide pod nào chạy node nào |
-| **kube-controller-manager** | Run controllers (Deployment, ReplicaSet, ...) |
-| **cloud-controller-manager** | Integrate cloud provider (LB, volume) |
+| **kube-apiserver** | REST API endpoint duy nhất, mọi tương tác đi qua đây |
+| **etcd** | Distributed key-value store, "source of truth" lưu state cluster |
+| **kube-scheduler** | Quyết định pod chạy trên node nào |
+| **kube-controller-manager** | Chạy các controller (Deployment, ReplicaSet, ...) |
+| **cloud-controller-manager** | Tích hợp cloud provider (LB, volume) |
 
-### Node components
+### Node components (Thành phần trên worker node)
 
-| Component | Role |
+| Component | Vai trò |
 |---|---|
-| **kubelet** | Agent, manage pod trên node |
-| **kube-proxy** | Network rules cho Service |
-| **container runtime** | containerd / cri-o (Docker engine deprecated K8s 1.24+) |
+| **kubelet** | Agent, quản pod trên node |
+| **kube-proxy** | Network rule cho Service |
+| **container runtime** | containerd / cri-o (Docker engine đã deprecated từ K8s 1.24+) |
 
 ## Setup K8s local
 
@@ -81,7 +81,7 @@ kubectl get nodes
 # minikube   Ready    control-plane   1m
 ```
 
-### Kind (K8s in Docker)
+### Kind (K8s chạy trong Docker)
 
 ```bash
 brew install kind
@@ -96,17 +96,17 @@ nodes:
 EOF
 ```
 
-### k3s — lightweight K8s
+### k3s — K8s nhẹ
 
 ```bash
-# Server
+# Trên server
 curl -sfL https://get.k3s.io | sh -
 
-# Worker
+# Trên worker
 curl -sfL https://get.k3s.io | K3S_URL=https://server:6443 K3S_TOKEN=xxx sh -
 ```
 
-K3s = full K8s ~50 MB. Edge/IoT-friendly.
+k3s = full K8s nhưng chỉ ~50 MB. Phù hợp cho edge / IoT.
 
 ### Cloud
 
@@ -121,10 +121,10 @@ gcloud container clusters create vprofile --num-nodes 3 --zone us-central1-a
 az aks create --resource-group myRG --name vprofile --node-count 3
 ```
 
-## kubectl — vũ khí chính
+## kubectl — Vũ khí chính
 
 ```bash
-# Cluster info
+# Thông tin cluster
 kubectl cluster-info
 kubectl get nodes
 kubectl get componentstatuses
@@ -134,41 +134,41 @@ kubectl get ns
 kubectl create ns vprofile
 kubectl config set-context --current --namespace=vprofile
 
-# Resource shortcut
+# Shortcut cho resource
 kubectl get pods
 kubectl get po                # = pods
 kubectl get svc               # = services
 kubectl get deploy            # = deployments
-kubectl get all               # Common types
-kubectl get all -A            # All namespaces
+kubectl get all               # Các resource thông thường
+kubectl get all -A            # Tất cả namespace
 
-# Describe (detailed)
+# Describe (chi tiết)
 kubectl describe pod my-pod
 
-# Logs
+# Log
 kubectl logs my-pod
 kubectl logs -f my-pod
 kubectl logs my-pod -c container-name
 
-# Exec
+# Exec vào pod
 kubectl exec -it my-pod -- bash
 
 # Apply manifest
 kubectl apply -f deployment.yaml
 kubectl delete -f deployment.yaml
 
-# Edit live
+# Edit trực tiếp resource đang chạy
 kubectl edit deploy my-app
 
 # Port forward (test local)
 kubectl port-forward svc/my-app 8080:80
 ```
 
-Cheatsheet: `kubectl cheatsheet` — search Google.
+Cheatsheet: search "kubectl cheatsheet" trên Google để có bảng tham khảo đầy đủ.
 
-## Core objects
+## Core objects (Các object cốt lõi)
 
-### Pod — smallest unit
+### Pod — Đơn vị nhỏ nhất
 
 ```yaml
 apiVersion: v1
@@ -192,9 +192,9 @@ spec:
           cpu: "200m"
 ```
 
-Pod = 1+ container chia sẻ network + storage. Hiếm khi tạo Pod trực tiếp — dùng Deployment.
+Pod = 1 hoặc nhiều container cùng chia sẻ network + storage. **Hiếm khi tạo Pod trực tiếp** — luôn dùng Deployment để manage hộ.
 
-### Deployment — manage pod replicas + rolling deploy
+### Deployment — Quản lý pod replica + rolling deploy
 
 ```yaml
 apiVersion: apps/v1
@@ -218,7 +218,7 @@ spec:
             - containerPort: 80
 ```
 
-Deployment manages ReplicaSet manages Pods. **Always use Deployment for stateless app**.
+Hierarchy: **Deployment → quản lý → ReplicaSet → quản lý → Pod**. **Luôn dùng Deployment cho app stateless**.
 
 ```bash
 kubectl apply -f deployment.yaml
@@ -228,9 +228,9 @@ kubectl rollout history deploy/nginx-deployment
 kubectl rollout undo deploy/nginx-deployment
 ```
 
-### Service — stable network endpoint
+### Service — Endpoint mạng ổn định
 
-Pod có IP nhưng đổi khi recreate. Service cung cấp **stable IP + DNS**:
+Pod có IP nhưng đổi mỗi khi recreate. Service cung cấp **IP + DNS ổn định** cho client:
 
 ```yaml
 apiVersion: v1
@@ -239,23 +239,23 @@ metadata:
   name: nginx-service
 spec:
   selector:
-    app: nginx              # Match pod label
+    app: nginx              # Match pod theo label
   ports:
     - port: 80
       targetPort: 80
-  type: ClusterIP           # Default: internal only
+  type: ClusterIP           # Mặc định: internal only
 ```
 
-Service types:
+Các loại Service:
 
 | Type | Mục đích |
 |---|---|
-| **ClusterIP** | Internal only, default |
+| **ClusterIP** | Chỉ internal, mặc định |
 | **NodePort** | Expose port trên mọi node (30000-32767) |
 | **LoadBalancer** | Cloud LB (AWS ALB/NLB, GCP LB) |
-| **ExternalName** | DNS CNAME alias |
+| **ExternalName** | DNS CNAME alias đến tên ngoài cluster |
 
-DNS auto: `nginx-service.default.svc.cluster.local`.
+DNS tự động: `nginx-service.default.svc.cluster.local`.
 
 ### Ingress — HTTP routing
 
@@ -287,7 +287,7 @@ spec:
       secretName: vprofile-tls
 ```
 
-Need **Ingress controller** installed: nginx-ingress, Traefik, AWS Load Balancer Controller.
+Cần **Ingress controller** được cài trước: nginx-ingress, Traefik, AWS Load Balancer Controller.
 
 ### ConfigMap + Secret
 
@@ -314,7 +314,7 @@ metadata:
   name: vprofile-secrets
 type: Opaque
 data:
-  db-password: YWRtaW4xMjM=         # base64 encoded
+  db-password: YWRtaW4xMjM=         # đã encode base64
 ```
 
 Mount vào pod:
@@ -337,11 +337,11 @@ spec:
         name: vprofile-config
 ```
 
-Secret encode base64 nhưng **không encrypt**. Production: SealedSecrets, External Secrets Operator, Vault.
+Secret chỉ encode base64, **KHÔNG encrypt**. Production cần: SealedSecrets, External Secrets Operator, Vault.
 
 ### PersistentVolume + PersistentVolumeClaim
 
-Storage tách khỏi pod (pod ephemeral, data persist):
+Storage tách rời khỏi pod (pod ephemeral, nhưng data phải persist):
 
 ```yaml
 apiVersion: v1
@@ -357,9 +357,9 @@ spec:
   storageClassName: gp3
 ```
 
-Cloud StorageClass auto-provision EBS/PD/Azure Disk.
+Cloud StorageClass tự provision EBS / Persistent Disk / Azure Disk.
 
-Mount:
+Mount vào pod:
 
 ```yaml
 spec:
@@ -374,9 +374,9 @@ spec:
         claimName: db-pvc
 ```
 
-### StatefulSet — stateful app
+### StatefulSet — App có state
 
-Deployment cho stateless. StatefulSet cho DB, message queue, anything với stable identity + ordered:
+Deployment dành cho stateless. StatefulSet dành cho DB, message queue, bất kỳ thứ gì cần **stable identity + ordered start**:
 
 ```yaml
 apiVersion: apps/v1
@@ -410,9 +410,9 @@ spec:
             storage: 10Gi
 ```
 
-Pod name stable: `mariadb-0`, `mariadb-1`, `mariadb-2`. Each gets own PVC.
+Tên pod ổn định: `mariadb-0`, `mariadb-1`, `mariadb-2`. Mỗi pod có PVC riêng.
 
-### DaemonSet — 1 pod per node
+### DaemonSet — 1 pod trên mỗi node
 
 ```yaml
 apiVersion: apps/v1
@@ -431,7 +431,7 @@ spec:
           image: prom/node-exporter
 ```
 
-Use case: log collector (Fluentd), metrics exporter (node_exporter), network plugin.
+Use case: log collector (Fluentd), metric exporter (node_exporter), network plugin.
 
 ### Job + CronJob
 
@@ -457,7 +457,7 @@ kind: CronJob
 metadata:
   name: backup-db
 spec:
-  schedule: "0 2 * * *"            # Daily 2am
+  schedule: "0 2 * * *"            # Hàng ngày 2h sáng
   jobTemplate:
     spec:
       template:
@@ -468,11 +468,11 @@ spec:
           restartPolicy: OnFailure
 ```
 
-CronJob = managed cron for K8s.
+CronJob = cron job nhưng được K8s manage hộ.
 
-## Labels và selectors
+## Labels và Selectors
 
-Label = key-value gắn object:
+Label = cặp key-value gắn vào object:
 
 ```yaml
 metadata:
@@ -482,7 +482,7 @@ metadata:
     tier: frontend
 ```
 
-Service select pod by label:
+Service select pod theo label:
 
 ```yaml
 selector:
@@ -498,22 +498,22 @@ kubectl get pods -l 'env in (prod,staging)'
 kubectl get pods --show-labels
 ```
 
-## Namespace — isolation
+## Namespace — Cô lập logic
 
 ```bash
 kubectl create ns vprofile-prod
 kubectl create ns vprofile-staging
 
-# Apply resource to ns
+# Apply resource vào namespace cụ thể
 kubectl apply -f deploy.yaml -n vprofile-prod
 
-# Set default ns
+# Set namespace mặc định
 kubectl config set-context --current --namespace=vprofile-prod
 ```
 
-Built-in: `default`, `kube-system`, `kube-public`.
+Namespace có sẵn: `default`, `kube-system`, `kube-public`.
 
-ResourceQuota + LimitRange per namespace cho multi-tenant.
+ResourceQuota + LimitRange áp dụng per-namespace cho mô hình multi-tenant (nhiều team chia chung cluster).
 
 ## Quick reference
 
@@ -528,7 +528,7 @@ kubectl describe POD NAME
 kubectl logs -f POD NAME
 kubectl exec -it POD -- bash
 
-# Manage
+# Quản lý
 kubectl apply -f FILE
 kubectl delete -f FILE
 kubectl scale deploy NAME --replicas=N
@@ -547,24 +547,24 @@ kubectl port-forward svc/NAME 8080:80
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Pod no resource limit | OOM, noisy neighbor | Always limit |
-| No readiness probe | Traffic to non-ready pod | Define probe |
-| Single-node cluster | SPOF | Multi-node + multi-AZ |
-| Secret base64 = encrypted | Lộ trong etcd | Sealed Secret, Vault |
-| Deployment cho DB | StatefulSet needed | StatefulSet + PVC |
-| Latest tag | Rollback khó | Pin SHA |
-| Manual etcd backup miss | Restore không được | Automated etcd snapshot |
+| Pod không có resource limit | OOM, ảnh hưởng pod khác trên node | Luôn set limit |
+| Không có readiness probe | Traffic đến pod chưa ready | Define probe |
+| Single-node cluster | Single Point of Failure | Multi-node + multi-AZ |
+| Tưởng Secret base64 = encrypted | Lộ trong etcd | Sealed Secret, Vault |
+| Dùng Deployment cho DB | DB cần StatefulSet | StatefulSet + PVC |
+| Tag `latest` | Khó rollback chính xác | Pin SHA |
+| Backup etcd thủ công, hay quên | Không restore được khi mất | Automated etcd snapshot |
 
 ## Tóm tắt bài 1
 
-- **K8s** = orchestrator container, control plane (API + etcd + scheduler + ctrl-mgr) + worker (kubelet + container runtime).
-- **Pod** = smallest unit. **Deployment** = manage stateless pod.
-- **Service** = stable network endpoint, types ClusterIP / NodePort / LoadBalancer.
-- **Ingress** = HTTP routing (need controller).
-- **ConfigMap + Secret** cho config/credential.
-- **PVC + StatefulSet** cho stateful workload.
-- **DaemonSet** = pod per node, **Job/CronJob** = batch.
-- **Label + selector** = primary mechanism connecting objects.
-- **Namespace** = isolation logical.
+- **K8s** = orchestrator container, control plane (API + etcd + scheduler + controller-manager) + worker (kubelet + container runtime).
+- **Pod** = đơn vị nhỏ nhất. **Deployment** = quản lý pod stateless.
+- **Service** = endpoint mạng ổn định, các loại: ClusterIP / NodePort / LoadBalancer.
+- **Ingress** = HTTP routing (cần controller).
+- **ConfigMap + Secret** cho config / credential.
+- **PVC + StatefulSet** cho workload có state.
+- **DaemonSet** = 1 pod trên mỗi node, **Job/CronJob** = batch task.
+- **Label + selector** = cơ chế chính để liên kết các object.
+- **Namespace** = cô lập logic.
 
 **Phase kế tiếp** → [Phase 30 — Bài 1: Deploy vProfile lên Kubernetes](../phase-30-app-on-k8s/01-deploy-vprofile-k8s.md)

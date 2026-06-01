@@ -1,12 +1,12 @@
 # Bài 2: Workflow nâng cao — reusable, composite, matrix, environments
 
-Bài 1 cơ bản. Bài này deep-dive **advanced features**: reusable workflow, composite action, matrix optimization, environments + protection rules.
+Bài 1 đã đi qua phần cơ bản. Bài này deep-dive các **tính năng nâng cao**: reusable workflow, composite action, matrix optimization, environments + protection rule.
 
 ## Reusable workflow
 
-Single workflow gọi từ nhiều repo:
+1 workflow duy nhất được gọi từ nhiều repo khác nhau.
 
-### Define reusable workflow
+### Định nghĩa reusable workflow
 
 `.github/workflows/build-java.yml` (trong repo `acme/ci-workflows`):
 
@@ -75,7 +75,7 @@ jobs:
           path: target/*.jar
 ```
 
-### Call reusable workflow
+### Gọi reusable workflow
 
 `.github/workflows/ci.yml` (trong repo app):
 
@@ -103,16 +103,16 @@ jobs:
       - run: echo "Built version ${{ needs.build.outputs.version }}"
 ```
 
-Lợi:
-- 50 app dùng cùng workflow → maintain 1 chỗ.
-- Version reusable workflow (`@v1.2.0`).
-- Centralized security scan, quality gate.
+Lợi ích:
+- 50 app dùng chung 1 workflow → maintain 1 chỗ.
+- Version reusable workflow theo tag (`@v1.2.0`).
+- Tập trung security scan, quality gate.
 
 ## Composite Action
 
-Đóng gói nhiều step thành 1 step reusable:
+Đóng gói nhiều step thành 1 step có thể tái sử dụng:
 
-### Define composite action
+### Định nghĩa composite action
 
 `.github/actions/deploy-k8s/action.yml`:
 
@@ -185,7 +185,7 @@ runs:
         exit 1
 ```
 
-### Use composite
+### Dùng composite
 
 ```yaml
 - uses: ./.github/actions/deploy-k8s
@@ -203,15 +203,15 @@ runs:
 
 | | Composite Action | Reusable Workflow |
 |---|---|---|
-| Scope | Group of steps | Full workflow with jobs |
-| Caller | step level | job level |
-| Multiple jobs | No | Yes |
-| Matrix | Inherit caller | Define own |
-| Best for | Common step sequence | Full pipeline template |
+| Phạm vi | Nhóm các step | Cả workflow với nhiều job |
+| Mức caller | step level | job level |
+| Nhiều job | Không | Có |
+| Matrix | Kế thừa từ caller | Tự define |
+| Phù hợp | Chuỗi step phổ biến | Template pipeline đầy đủ |
 
 ## Matrix strategy nâng cao
 
-### Basic matrix
+### Matrix cơ bản
 
 ```yaml
 strategy:
@@ -220,9 +220,9 @@ strategy:
     java: ['11', '17', '21']
 ```
 
-2 × 3 = 6 jobs parallel.
+2 × 3 = 6 job chạy song song.
 
-### Include / Exclude
+### Include / Exclude (Loại trừ / thêm trường hợp đặc biệt)
 
 ```yaml
 strategy:
@@ -244,14 +244,14 @@ strategy:
 
 ```yaml
 strategy:
-  fail-fast: false      # Continue other matrix even if 1 fails
-  max-parallel: 4       # Limit concurrent matrix jobs
+  fail-fast: false      # Tiếp tục các matrix job khác kể cả khi 1 job fail
+  max-parallel: 4       # Giới hạn số matrix job chạy song song
   matrix: ...
 ```
 
-`fail-fast: false` quan trọng cho test matrix — biết tất cả cái nào pass/fail.
+`fail-fast: false` quan trọng cho test matrix — biết được **tất cả** test case nào pass/fail (không bị cắt sớm).
 
-### Dynamic matrix from script
+### Dynamic matrix (Sinh matrix động từ script)
 
 ```yaml
 jobs:
@@ -275,21 +275,21 @@ jobs:
       - run: echo "Building ${{ matrix.module }}"
 ```
 
-Dynamic generate matrix → flexible.
+Sinh matrix động → flexibility cao (vd: dựa trên file config thay đổi).
 
-## Environments + protection
+## Environments + Protection rule
 
-Environments cho dev/staging/prod với rules khác nhau:
+Cấu hình environment (dev/staging/prod) với rule khác nhau:
 
 ### Define environment
 
 Settings → Environments → New environment "production":
-- **Required reviewers**: 2 reviewers (alice, bob).
-- **Wait timer**: 5 min.
-- **Deployment branches**: only `main`.
-- **Environment secrets**: scoped to environment only.
+- **Required reviewers**: 2 người (alice, bob).
+- **Wait timer**: 5 phút.
+- **Deployment branches**: chỉ `main`.
+- **Environment secrets**: scoped (chỉ truy cập được từ environment này).
 
-### Use trong workflow
+### Dùng trong workflow
 
 ```yaml
 jobs:
@@ -303,19 +303,19 @@ jobs:
     steps:
       - name: Deploy
         env:
-          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}      # Env-scoped secret
+          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}      # Secret scoped theo environment
         run: ./deploy.sh prod
 ```
 
-Workflow đến `deploy-prod` job → wait reviewer approve → wait timer → run.
+Khi workflow đến job `deploy-prod` → chờ reviewer approve → chờ wait timer → chạy.
 
-## OIDC — cloudless credential
+## OIDC — Auth không cần lưu cloud credential
 
-Thay vì lưu AWS access key:
+Thay vì lưu AWS access key trong GitHub secret:
 
 ```yaml
 permissions:
-  id-token: write    # OIDC mandatory
+  id-token: write    # OIDC bắt buộc quyền này
   contents: read
 
 jobs:
@@ -330,7 +330,7 @@ jobs:
       - run: aws s3 cp build/ s3://acme-deploy/ --recursive
 ```
 
-AWS IAM role trust GitHub Actions OIDC:
+AWS IAM role trust GitHub Actions OIDC provider:
 
 ```json
 {
@@ -347,11 +347,11 @@ AWS IAM role trust GitHub Actions OIDC:
 }
 ```
 
-Workflow assume role → temporary credential. No static AWS key.
+Workflow assume role → nhận credential tạm thời. **Không lưu AWS key tĩnh** ở đâu cả.
 
-Apply pattern cho GCP, Azure tương tự.
+Pattern này áp dụng tương tự cho GCP, Azure.
 
-## Concurrency control
+## Concurrency control (Kiểm soát chạy song song)
 
 ```yaml
 concurrency:
@@ -359,23 +359,23 @@ concurrency:
   cancel-in-progress: true
 ```
 
-- `group`: identifier for concurrency limit.
-- `cancel-in-progress`: cancel running workflow nếu new push.
+- `group`: định danh để giới hạn concurrency.
+- `cancel-in-progress`: cancel workflow đang chạy khi có push mới.
 
 Use case:
-- Deploy job: chỉ 1 deploy/branch cùng lúc.
-- PR check: cancel old check khi push mới.
+- Deploy job: chỉ cho 1 deploy mỗi branch chạy cùng lúc.
+- PR check: cancel check cũ khi push commit mới.
 
 ```yaml
-# Production deploy serial (queue)
+# Production deploy queue (xếp hàng) thay vì cancel
 concurrency:
   group: production-deploy
-  # cancel-in-progress: false  (queue thay vì cancel)
+  # cancel-in-progress: false  → queue thay vì cancel
 ```
 
 ## Artifacts + caching
 
-### Cache deps
+### Cache dependency
 
 ```yaml
 - uses: actions/cache@v4
@@ -388,9 +388,9 @@ concurrency:
       ${{ runner.os }}-maven-
 ```
 
-`restore-keys` fallback nếu exact key miss.
+`restore-keys` = fallback khi exact key miss (vẫn lấy cache cũ tương đối phù hợp).
 
-### Artifacts pass
+### Pass artifact giữa các job
 
 ```yaml
 jobs:
@@ -413,9 +413,9 @@ jobs:
       - run: scp *.jar user@server:/opt/
 ```
 
-## Workflow_run trigger
+## workflow_run trigger (Trigger từ workflow khác)
 
-Trigger workflow từ workflow khác kết thúc:
+Trigger workflow khi workflow khác kết thúc:
 
 ```yaml
 # .github/workflows/notify.yml
@@ -433,13 +433,13 @@ jobs:
         ...
 ```
 
-Pattern: separate quick check workflow + slow security scan workflow_run.
+Pattern: tách CI nhanh + security scan chậm chạy sau qua `workflow_run`.
 
-## Self-hosted runner advanced
+## Self-hosted runner nâng cao
 
-### Auto-scaling self-hosted
+### Auto-scaling self-hosted runner
 
-EKS + Actions Runner Controller (ARC):
+Dùng EKS + Actions Runner Controller (ARC):
 
 ```yaml
 # RunnerDeployment
@@ -458,21 +458,21 @@ spec:
         limits: {cpu: 2, memory: 4Gi}
 ```
 
-HPA auto-scale theo queue length.
+HPA tự động scale theo độ dài queue.
 
-### Security cho self-hosted
+### Security cho self-hosted runner
 
-- Public repo + self-hosted = **DANGEROUS**: any PR can run arbitrary code on runner.
-- Restrict workflow run trên fork PR:
+- Public repo + self-hosted = **NGUY HIỂM**: bất kỳ PR nào cũng có thể chạy code tuỳ ý trên runner.
+- Hạn chế workflow chạy trên fork PR:
 
 ```yaml
 on:
-  pull_request_target:    # Run on base commit, not PR commit (safer)
+  pull_request_target:    # Chạy trên base commit, không phải PR commit (an toàn hơn)
 ```
 
-- Use ephemeral runner (re-create after each job).
+- Dùng ephemeral runner (tạo mới sau mỗi job).
 
-## Reusable + Composite combined
+## Kết hợp Reusable + Composite
 
 ```text
 acme/ci-workflows (repo)
@@ -493,7 +493,7 @@ jobs:
       lang: java
 ```
 
-Inside reusable workflow:
+Bên trong reusable workflow:
 
 ```yaml
 - uses: acme/ci-workflows/.github/actions/lint@v1
@@ -501,20 +501,20 @@ Inside reusable workflow:
 - uses: acme/ci-workflows/.github/actions/deploy@v1
 ```
 
-Hierarchy: app → reusable workflow → composite actions.
+Hierarchy 3 tầng: app → reusable workflow → composite action.
 
 ## Performance tips
 
-- **Cache aggressively** (deps, Docker layers).
+- **Cache aggressively** (dependency, Docker layer).
 - **Parallel** với matrix + needs.
-- **Skip unchanged**: `paths-ignore`, `changed-files` action.
+- **Skip khi không thay đổi**: dùng `paths-ignore`, hoặc `changed-files` action.
 - **Concurrency cancel-in-progress** cho PR check.
-- **Use larger runner** for slow jobs ($0.008/min for 4-core).
-- **Avoid `ubuntu-latest`**: pin major version để cache stable.
+- **Dùng runner lớn hơn** cho job chạy chậm ($0.008/phút cho 4-core).
+- **Tránh dùng `ubuntu-latest`**: pin major version để cache ổn định.
 
 ```yaml
-# Faster runner
-runs-on: ubuntu-22.04-large    # 4-core, paid
+# Runner mạnh hơn (trả phí)
+runs-on: ubuntu-22.04-large    # 4-core
 runs-on: macos-13-large
 ```
 
@@ -522,24 +522,24 @@ runs-on: macos-13-large
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Secret in workflow YAML | Lộ | Always `${{ secrets.X }}` |
-| Default GITHUB_TOKEN permissions | Excessive | Set `permissions:` block strict |
-| `pull_request` for fork without restriction | Run untrusted code | Use `pull_request_target` cẩn thận |
-| OIDC role trust * | Anyone assume role | Strict sub condition |
-| Cache key without lockfile hash | Stale cache | Include `hashFiles` |
-| Reusable workflow without version | Break when update | Pin `@v1.2.0` |
-| No retention for artifact | Storage full | Set `retention-days: 7` |
+| Hardcode secret trong YAML | Lộ secret | Luôn dùng `${{ secrets.X }}` |
+| GITHUB_TOKEN có permission mặc định quá rộng | Quyền vượt mức cần | Set `permissions:` block strict |
+| `pull_request` cho fork không restrict | Chạy code không tin cậy | Dùng `pull_request_target` cẩn thận |
+| OIDC role trust * (không limit sub) | Bất kỳ ai cũng assume được | Strict điều kiện `sub` |
+| Cache key không có lockfile hash | Cache cũ, sai dependency | Dùng `hashFiles` |
+| Reusable workflow không pin version | Bị break khi reusable update | Pin `@v1.2.0` cụ thể |
+| Artifact không set retention | Storage tốn nhiều | Set `retention-days: 7` |
 
 ## Tóm tắt bài 2
 
-- **Reusable workflow** (`workflow_call`): job-level, full pipeline template.
-- **Composite action** (`uses: composite`): step-level, group steps.
+- **Reusable workflow** (`workflow_call`): cấp job, template pipeline đầy đủ.
+- **Composite action** (`uses: composite`): cấp step, nhóm các step.
 - **Matrix include/exclude** + `fail-fast: false` cho test matrix.
-- **Dynamic matrix** from JSON output.
+- **Dynamic matrix** từ JSON output.
 - **Environments** + reviewer + wait timer + scoped secret cho production.
-- **OIDC** → AWS IAM role assume, no static credential.
-- **Concurrency** group cancel-in-progress hoặc queue.
-- **Cache** với restore-keys fallback.
-- **Self-hosted runner** với ARC scale K8s.
+- **OIDC** → AWS IAM role assume, không cần lưu credential tĩnh.
+- **Concurrency** group: cancel-in-progress hoặc queue.
+- **Cache** với `restore-keys` fallback.
+- **Self-hosted runner** với ARC scale trên K8s.
 
 **Bài kế tiếp** → [Bài 3: vProfile CI/CD với GitHub Actions](03-vprofile-actions.md)
