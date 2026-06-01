@@ -1,42 +1,44 @@
 # Bài 3: GitOps với ArgoCD + observability cho Kubernetes
 
-Bài cuối khoá. **GitOps** = state cluster declared trong Git, controller sync. Cùng monitoring + logging cho K8s production.
+Bài cuối của toàn khoá. **GitOps** = trạng thái cluster được declare (khai báo) trong Git, controller tự sync về cluster. Kết hợp với observability stack đầy đủ cho K8s production.
 
-## GitOps principles
+## GitOps principles (Nguyên tắc GitOps)
 
-1. **Declarative**: state described declaratively (YAML).
-2. **Versioned**: source of truth in Git.
-3. **Automated**: controller pull state → cluster.
-4. **Continuous reconciliation**: detect drift + correct.
+1. **Declarative** (khai báo): Mọi state được mô tả bằng YAML.
+2. **Versioned** (có version): Git là source of truth (nguồn sự thật).
+3. **Automated** (tự động): Controller pull state → áp dụng vào cluster.
+4. **Continuous reconciliation** (đối chiếu liên tục): Detect drift (lệch state) + tự sửa.
 
-Tools: **ArgoCD** (most popular), **Flux** (CNCF graduated), **Fleet** (Rancher).
+Các tool phổ biến: **ArgoCD** (phổ biến nhất), **Flux** (CNCF graduated — đã trưởng thành), **Fleet** (của Rancher).
 
 ## ArgoCD setup
 
 ```bash
-# Install
+# Cài đặt
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-# CLI
+# Cài CLI
 brew install argocd
 
-# Access UI
+# Truy cập UI
 kubectl port-forward svc/argocd-server -n argocd 8080:443
-# https://localhost:8080
+# Mở: https://localhost:8080
 
-# Get admin password
+# Lấy admin password mặc định
 kubectl -n argocd get secret argocd-initial-admin-secret \
     -o jsonpath="{.data.password}" | base64 -d
 ```
 
-Or via Helm:
+Hoặc cài qua Helm chart:
 
 ```bash
 helm install argocd argo/argo-cd --namespace argocd --create-namespace
 ```
 
-## Application — basic
+## Application — Khái niệm cơ bản
+
+`Application` là CRD chính của ArgoCD — mô tả 1 ứng dụng cần sync:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -58,8 +60,8 @@ spec:
 
   syncPolicy:
     automated:
-      prune: true              # Delete resources removed from Git
-      selfHeal: true           # Auto-correct manual change
+      prune: true              # Xoá resource đã bị xoá khỏi Git
+      selfHeal: true           # Tự sửa khi có thay đổi thủ công
       allowEmpty: false
     syncOptions:
       - CreateNamespace=true
@@ -73,11 +75,11 @@ spec:
         maxDuration: 3m
 ```
 
-ArgoCD continuous watch Git → apply manifests to cluster.
+ArgoCD liên tục watch Git → tự apply manifest vào cluster.
 
-## App of Apps pattern
+## App of Apps pattern (Mẫu "App của App")
 
-Manage multiple apps with single root:
+Quản lý nhiều app với 1 root application duy nhất — dạng cây phân cấp:
 
 ```yaml
 # apps/root.yaml
@@ -89,18 +91,18 @@ metadata:
 spec:
   source:
     repoURL: https://github.com/acme/k8s-manifests
-    path: apps/                 # Folder of Application manifests
+    path: apps/                 # Folder chứa các Application manifest con
     targetRevision: HEAD
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
 ```
 
-`apps/vprofile.yaml`, `apps/monitoring.yaml`, `apps/ingress.yaml` each define Application.
+Trong folder `apps/`: `vprofile.yaml`, `monitoring.yaml`, `ingress.yaml` — mỗi file là 1 Application con.
 
-Root sync → child apps sync → cluster manifests sync. Hierarchical.
+Khi root sync → child app sync → cluster manifest sync. Phân cấp gọn gàng.
 
-## ApplicationSet — many apps from template
+## ApplicationSet — Nhiều app sinh ra từ template
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -109,7 +111,7 @@ metadata:
   name: cluster-addons
 spec:
   generators:
-    - clusters: {}              # All registered clusters
+    - clusters: {}              # Tất cả cluster đã đăng ký
   template:
     metadata:
       name: '{{name}}-addons'
@@ -127,9 +129,11 @@ spec:
           selfHeal: true
 ```
 
-Auto-create Application per registered cluster.
+Tự động tạo 1 Application cho mỗi cluster đã đăng ký — không cần copy paste thủ công.
 
 ## Helm + ArgoCD
+
+ArgoCD hỗ trợ render Helm chart:
 
 ```yaml
 spec:
@@ -152,6 +156,8 @@ spec:
 
 ## Kustomize + ArgoCD
 
+Tương tự với Kustomize:
+
 ```yaml
 spec:
   source:
@@ -165,19 +171,21 @@ spec:
         environment: production
 ```
 
-## Sync waves + hooks
+## Sync waves + hooks (Sóng sync và hook)
+
+Điều khiển thứ tự apply resource:
 
 ```yaml
 metadata:
   annotations:
-    argocd.argoproj.io/sync-wave: "1"      # Order
+    argocd.argoproj.io/sync-wave: "1"      # Thứ tự
 ```
 
-Sync order: lower waves first. Use case:
-- Wave -1: Namespace, CRD.
-- Wave 0: ConfigMap, Secret.
-- Wave 1: Deployment.
-- Wave 2: Service, Ingress.
+Resource có wave thấp được apply trước. Use case thực tế:
+- **Wave -1**: Namespace, CRD (Custom Resource Definition) — cần có trước nhất.
+- **Wave 0**: ConfigMap, Secret.
+- **Wave 1**: Deployment.
+- **Wave 2**: Service, Ingress (đặt sau cùng để traffic chỉ chuyển khi Deployment đã sẵn sàng).
 
 ### Pre/Post sync hooks
 
@@ -198,11 +206,11 @@ spec:
           command: [./migrate.sh]
 ```
 
-Hooks: `PreSync`, `Sync`, `PostSync`, `SyncFail`.
+Các loại hook: `PreSync` (trước sync), `Sync` (trong sync), `PostSync` (sau sync), `SyncFail` (khi sync thất bại).
 
 ## Progressive Delivery — Argo Rollouts
 
-Replace Deployment với Rollout for advanced strategies:
+Thay thế Deployment thường bằng Rollout để có chiến lược triển khai cao cấp (canary, blue/green):
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -223,9 +231,9 @@ spec:
   strategy:
     canary:
       steps:
-        - setWeight: 10
-        - pause: {duration: 5m}
-        - analysis:
+        - setWeight: 10                          # 10% traffic vào version mới
+        - pause: {duration: 5m}                  # Chờ 5 phút quan sát
+        - analysis:                              # Phân tích metric tự động
             templates:
               - {templateName: success-rate}
             args:
@@ -234,7 +242,7 @@ spec:
         - pause: {duration: 10m}
         - setWeight: 50
         - pause: {duration: 10m}
-        - setWeight: 100
+        - setWeight: 100                          # 100% chuyển sang version mới
       canaryService: vprofile-canary
       stableService: vprofile-stable
       trafficRouting:
@@ -242,9 +250,9 @@ spec:
           stableIngress: vprofile-stable
 ```
 
-Auto-progress canary deploy with metric analysis.
+→ Tự động tăng dần traffic sang version mới, kèm phân tích metric — nếu lỗi thì rollback.
 
-### AnalysisTemplate
+### AnalysisTemplate — kiểm tra metric tự động
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -257,8 +265,8 @@ spec:
   metrics:
     - name: success-rate
       interval: 1m
-      successCondition: result[0] > 0.95
-      failureLimit: 3
+      successCondition: result[0] > 0.95            # Success rate > 95%
+      failureLimit: 3                               # Cho phép 3 lần fail trước khi abort
       provider:
         prometheus:
           address: http://prometheus.monitoring:9090
@@ -267,11 +275,11 @@ spec:
               / sum(rate(http_requests_total{service="{{args.service-name}}"}[5m]))
 ```
 
-Query Prometheus → if success rate < 95%, abort canary + rollback.
+Logic: Query Prometheus → nếu success rate < 95% → abort canary + rollback. Tự động hoá hoàn toàn việc kiểm tra.
 
-## Observability stack for K8s
+## Observability stack cho K8s
 
-### kube-prometheus-stack
+### kube-prometheus-stack (Bộ monitoring tích hợp)
 
 ```bash
 helm install monitoring prometheus-community/kube-prometheus-stack \
@@ -326,16 +334,16 @@ alertmanager:
             channel: '#alerts'
 ```
 
-Includes:
-- Prometheus.
-- Alertmanager.
-- Grafana.
-- node-exporter (DaemonSet).
-- kube-state-metrics.
-- Pre-built dashboards.
-- Pre-built ServiceMonitors for K8s components.
+Stack này bao gồm:
+- **Prometheus** — metrics store + query engine.
+- **Alertmanager** — gửi alert.
+- **Grafana** — UI cho dashboard.
+- **node-exporter** (DaemonSet — chạy trên mọi node) — thu thập metric host.
+- **kube-state-metrics** — metric về state K8s object (deployment, pod, ...).
+- **Pre-built dashboards** sẵn cho K8s.
+- **Pre-built ServiceMonitors** cho component K8s.
 
-### ServiceMonitor — auto-discover
+### ServiceMonitor — Auto-discover scrape target
 
 ```yaml
 apiVersion: monitoring.coreos.com/v1
@@ -355,9 +363,9 @@ spec:
       interval: 30s
 ```
 
-Prometheus auto-scrape services with matching labels.
+Prometheus tự discover và scrape các service có label phù hợp — không cần update Prometheus config khi thêm service mới.
 
-### PrometheusRule
+### PrometheusRule — Định nghĩa alert bằng YAML
 
 ```yaml
 apiVersion: monitoring.coreos.com/v1
@@ -381,6 +389,8 @@ spec:
             summary: "P99 latency > 1s"
 ```
 
+Quản lý alert as code — version control đầy đủ.
+
 ## Logging — Loki
 
 ```bash
@@ -390,13 +400,15 @@ helm install loki grafana/loki-stack \
     --set promtail.enabled=true
 ```
 
-Promtail DaemonSet → ship logs from all pods → Loki.
+Cách hoạt động: Promtail (DaemonSet) chạy trên mọi node → ship log từ tất cả pod → Loki lưu trữ.
 
-Query in Grafana:
+Query log trong Grafana với ngôn ngữ LogQL:
 
 ```logql
 {namespace="vprofile", app="vprofile"} |= "ERROR"
 ```
+
+So với ELK, Loki rẻ hơn nhiều vì chỉ index label, không index full text.
 
 ## Tracing — Tempo + OpenTelemetry
 
@@ -405,7 +417,7 @@ helm install tempo grafana/tempo \
     --namespace monitoring
 ```
 
-Instrument app với OpenTelemetry SDK or auto-instrumentation:
+Instrument (gắn telemetry) app với OpenTelemetry SDK hoặc auto-instrumentation:
 
 ```yaml
 apiVersion: opentelemetry.io/v1alpha1
@@ -419,7 +431,7 @@ spec:
     endpoint: http://tempo:4317
 ```
 
-Pod annotation:
+Pod muốn auto-instrument chỉ cần thêm annotation:
 
 ```yaml
 metadata:
@@ -427,9 +439,11 @@ metadata:
     instrumentation.opentelemetry.io/inject-java: "true"
 ```
 
-Auto-inject Java agent → instrument app → send traces.
+OpenTelemetry Operator tự inject Java agent → instrument app → gửi trace lên Tempo.
 
 ## Cluster autoscaling — Karpenter
+
+Karpenter là cluster autoscaler thế hệ mới — nhanh hơn và linh hoạt hơn Cluster Autoscaler truyền thống:
 
 ```bash
 helm install karpenter oci://public.ecr.aws/karpenter/karpenter \
@@ -437,7 +451,7 @@ helm install karpenter oci://public.ecr.aws/karpenter/karpenter \
     --namespace karpenter --create-namespace
 ```
 
-NodePool:
+NodePool — định nghĩa loại node Karpenter được phép tạo:
 
 ```yaml
 apiVersion: karpenter.sh/v1beta1
@@ -458,7 +472,7 @@ spec:
     expireAfter: 168h
 ```
 
-Karpenter watch unscheduled pods → provision exact instance type needed. Faster than Cluster Autoscaler.
+Cách hoạt động: Karpenter watch pod chưa được schedule → tự provision instance đúng loại cần thiết (size, instance family, spot/on-demand). Nhanh hơn Cluster Autoscaler vì không phụ thuộc ASG.
 
 ## Backup — Velero
 
@@ -470,7 +484,7 @@ helm install velero vmware-tanzu/velero \
     --set configuration.backupStorageLocation.config.region=us-east-1
 ```
 
-Backup:
+Tạo backup:
 
 ```bash
 velero backup create vprofile-prod-2026-05-31 \
@@ -482,15 +496,15 @@ velero schedule create daily-backup \
     --include-namespaces vprofile
 ```
 
-Restore:
+Restore khi cần:
 
 ```bash
 velero restore create --from-backup vprofile-prod-2026-05-31
 ```
 
-Disaster recovery production essential.
+Velero backup cả K8s resource (YAML) và Persistent Volume (data). Essential cho disaster recovery ở production.
 
-## Security — Falco runtime
+## Security — Falco runtime detection
 
 ```bash
 helm install falco falcosecurity/falco \
@@ -499,24 +513,24 @@ helm install falco falcosecurity/falco \
     --set falcosidekick.webui.enabled=true
 ```
 
-Detect runtime threats:
-- Privileged container spawn.
-- Shell in container.
-- Sensitive file access.
-- Network anomaly.
+Falco detect các threat (mối đe doạ) runtime:
+- Privileged container spawn (container chạy với quyền cao).
+- Shell trong container (có người đang exec vào).
+- Sensitive file access (truy cập file nhạy cảm).
+- Network anomaly (bất thường về mạng).
 
-Alert to Slack/SIEM.
+Alert được gửi đến Slack / SIEM để team security xử lý.
 
-## Cost — OpenCost / Kubecost
+## Cost monitoring — OpenCost / Kubecost
 
 ```bash
 helm install kubecost kubecost/cost-analyzer \
     --namespace kubecost --create-namespace
 ```
 
-Show cost per namespace/deployment/label.
+Hiển thị chi phí phân bổ theo namespace / deployment / label — biết được team / service nào đang tốn tiền nhất.
 
-## End-to-end flow
+## End-to-end flow (Toàn bộ pipeline DevOps)
 
 ```text
 Developer push code → GitHub
@@ -524,61 +538,62 @@ Developer push code → GitHub
                           ▼ Webhook
                   GitHub Actions
                           │
-                          ▼ Build + push
-                       ECR/GHCR image
+                          ▼ Build + push image
+                       ECR/GHCR
                           │
-                          ▼ Update manifest
+                          ▼ Update manifest tag
                   GitHub k8s-manifests repo
                           │
-                          ▼ Watch by ArgoCD
-                       ArgoCD sync
+                          ▼ ArgoCD watch + sync
+                       ArgoCD
                           │
-                          ▼ Apply
+                          ▼ Apply manifest
                        Kubernetes cluster
                           │
                           ▼ Monitor
               Prometheus + Loki + Tempo
                           │
-                          ▼ Alert
+                          ▼ Alert khi có vấn đề
               Alertmanager → Slack/PagerDuty
                           │
                           ▼ Daily backup
                        Velero → S3
 ```
 
-Full DevOps pipeline production-grade.
+Đây là pipeline DevOps production-grade hoàn chỉnh.
 
-## Tổng kết toàn khoá
+## Tổng kết toàn khoá học
 
 30 phase đã cover:
-1. **Foundations** (1-5): DevOps culture, SDLC, CI/CD concepts, tools setup.
-2. **Infrastructure basics** (6-10): Vagrant, vProfile, networking, containers intro.
+
+1. **Foundations** (1-5): DevOps culture, SDLC, CI/CD concept, setup tool.
+2. **Infrastructure basics** (6-10): Vagrant, vProfile, networking, intro container.
 3. **Programming** (11-12): Bash + AI scripting.
-4. **AWS Cloud** (13-15, 24-26): IAM/EC2/VPC, lift-shift, refactor, advanced services, GCP.
+4. **AWS Cloud** (13-15, 24-26): IAM/EC2/VPC, lift-shift, refactor, dịch vụ nâng cao, GCP.
 5. **CI/CD platforms** (16-19, 25): Maven, Jenkins, GitHub Actions, GitLab, AWS CodePipeline.
 6. **Languages & IaC** (20-22): Python, Terraform, Ansible.
-7. **Observability** (23): Prometheus/Grafana/Loki/Tempo.
+7. **Observability** (23): Prometheus / Grafana / Loki / Tempo.
 8. **Container** (27-28): Docker deep, vProfile containerize.
-9. **Kubernetes** (29-30): K8s architecture, vProfile on K8s, GitOps.
+9. **Kubernetes** (29-30): K8s architecture, vProfile trên K8s, GitOps.
 
-**You are now a production-ready DevOps Engineer**.
+**Bạn đã sẵn sàng làm DevOps Engineer production-grade.**
 
 ## Tóm tắt bài 3
 
 - **GitOps**: declarative + versioned + automated + continuous reconciliation.
-- **ArgoCD** sync Git → cluster với Application + ApplicationSet.
+- **ArgoCD** sync Git → cluster qua Application + ApplicationSet.
 - **Argo Rollouts** progressive delivery: canary + analysis.
-- **kube-prometheus-stack** comprehensive observability.
-- **ServiceMonitor + PrometheusRule** declarative monitoring config.
-- **Loki + Promtail** logs cheap.
+- **kube-prometheus-stack** observability toàn diện.
+- **ServiceMonitor + PrometheusRule** quản lý monitoring as code.
+- **Loki + Promtail** logs giá rẻ.
 - **Tempo + OpenTelemetry** distributed tracing.
-- **Karpenter** modern cluster autoscaler.
+- **Karpenter** cluster autoscaler hiện đại.
 - **Velero** backup + disaster recovery.
 - **Falco** runtime threat detection.
 
 ## Lời kết khoá học
 
-Bạn đã đi qua hành trình từ **chưa biết DevOps** → **production-grade DevOps engineer**:
+Bạn đã đi qua hành trình từ **chưa biết DevOps** → **DevOps engineer production-grade**:
 
 - Cài đặt tool, setup môi trường.
 - Linux + Git + Bash + Python.
@@ -590,13 +605,13 @@ Bạn đã đi qua hành trình từ **chưa biết DevOps** → **production-gr
 - Orchestration (Kubernetes + Helm + ArgoCD).
 - Observability (Prometheus + Grafana + Loki + Tempo).
 
-**Bước tiếp theo**:
-- Apply project thực: deploy product cá nhân theo stack đã học.
+**Bước tiếp theo cho sự nghiệp:**
+- Apply project thực tế: deploy product cá nhân theo stack đã học.
 - Certificate: AWS SAA → AWS DevOps Pro → CKA → CKAD → Terraform Associate.
 - Contribute open source.
-- Join community: CNCF Slack, DevOps Vietnam.
+- Tham gia community: CNCF Slack, DevOps Vietnam.
 - Apply DevOps Engineer / Platform Engineer / SRE jobs.
 
-**Chúc bạn thành công trong sự nghiệp DevOps! 🚀**
+**Chúc bạn thành công trong sự nghiệp DevOps!**
 
-(Phase tiếp → ngoài khoá này, tự khám phá: Service Mesh, eBPF, AI/MLOps, Platform Engineering.)
+(Phase tiếp theo — ngoài khoá này, tự khám phá: Service Mesh, eBPF, AI/MLOps, Platform Engineering.)

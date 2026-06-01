@@ -1,41 +1,53 @@
-# Bài 5: Unstructured Data Storage
+# Bài 5: Unstructured Data Storage (Lưu trữ dữ liệu phi cấu trúc)
 
 ## Unstructured Data là gì?
 
-> **Unstructured Data** = Data không theo schema hoặc model cụ thể — thường là **binary blobs** (BLOB - Binary Large Object).
+> **Unstructured Data** (dữ liệu phi cấu trúc) = Dữ liệu không tuân theo schema hay model cụ thể — thường là **binary blob** (Binary Large Object — đối tượng nhị phân lớn).
 
-**Ví dụ:**
-- Video files (.mp4, .mkv)
-- Images (.jpg, .png)
-- Audio files (.mp3, .wav)
-- PDF documents
-- Raw logs
-- Database backups
+**Ví dụ thực tế:**
 
-**Vấn đề khi lưu vào traditional databases:**
-- Size limits nghiêm ngặt (thường MBs)
-- Performance và scalability kém với large binary objects
-- Databases không được tối ưu cho loại data này
+- Video files (.mp4, .mkv, .mov)
+- Hình ảnh (.jpg, .png, .webp, .avif)
+- File audio (.mp3, .wav, .flac)
+- Tài liệu PDF, Word, Excel
+- Log dạng raw (chưa parse)
+- Database backup (file .sql, .bak)
+- Machine learning model files
+- Container images (Docker)
 
-## Use Cases phổ biến
+**Vấn đề khi lưu loại data này vào relational/NoSQL database thông thường:**
 
-| Use Case | Ví dụ |
+- **Size limits** nghiêm ngặt — đa số DB giới hạn vài MB / record.
+- Performance kém với binary objects lớn (DB không tối ưu cho streaming bytes).
+- Tốn tài nguyên DB cho việc không cần dùng đến SQL.
+- Khó scale (DB không sinh ra để chứa hàng petabyte file).
+
+→ Cần **giải pháp chuyên dụng** cho loại dữ liệu này.
+
+## Các Use Cases phổ biến
+
+| Use Case | Ví dụ thực tế |
 |----------|-------|
-| **User uploads** | Photos, videos lên social media |
-| **Database backup/archiving** | Periodic snapshots cho disaster recovery |
-| **Web hosting** | Images, JS, CSS cho website |
-| **Big Data & ML** | Training datasets, IoT sensor data |
+| **User uploads** | Photo, video user upload lên social media (Instagram, TikTok) |
+| **Database backup / archiving** | Snapshot định kỳ phục vụ disaster recovery |
+| **Web hosting** | Hình ảnh, JS, CSS cho website |
+| **Big Data & ML** | Training dataset, dữ liệu IoT sensor, log analytics |
+| **Content delivery** | Asset cho video streaming, OTT platform |
 
-**Đặc điểm chung:** Data volumes rất lớn (TBs → PBs), objects lớn (GBs mỗi file).
+**Đặc điểm chung của các use case này:**
+- Tổng dung lượng cực lớn (TB → PB).
+- Mỗi object có thể rất lớn (vài GB / file).
+- Truy cập theo dạng read-heavy (đọc nhiều hơn ghi nhiều lần).
 
-## Hai giải pháp
+## Hai giải pháp lớn cho Unstructured Data
 
-### 1. Distributed File System
+### 1. Distributed File System (Hệ thống file phân tán)
 
-> Cùng abstraction như local file system nhưng data phân tán trên nhiều storage nodes.
+> Cùng abstraction (cách nhìn) như local file system, nhưng dữ liệu được **phân tán trên nhiều storage node** trong cluster.
 
-```
-Files organized trong folders/directories:
+```text
+Files được tổ chức trong folders / directories (như Linux filesystem):
+
 /videos/2024/01/
     ├── user123_upload.mp4
     ├── user456_upload.mp4
@@ -46,140 +58,195 @@ Files organized trong folders/directories:
 ```
 
 **Ưu điểm:**
-- Familiar API (same as local filesystem)
-- Có thể **modify files** (append, partial update)
-- Performance cho Big Data processing (Hadoop, Spark chạy trực tiếp trên HDFS)
-- Replication, consistency guarantees tùy loại
+
+- **API quen thuộc**: dùng như local filesystem (open, read, write, seek).
+- Có thể **sửa file** (append, partial update, random write).
+- **Performance tốt cho Big Data processing**: Hadoop, Spark có thể chạy trực tiếp trên HDFS — đọc theo block parallel.
+- Hỗ trợ replication, consistency guarantee tuỳ implementation.
 
 **Nhược điểm:**
-- Giới hạn số lượng files (inodes)
-- Khó expose qua web API
-- Phải build thêm abstraction cho external access
 
-**Popular:** HDFS (Hadoop), GlusterFS, Ceph, Google Colossus
+- Giới hạn số lượng file (inodes — metadata về mỗi file chiếm RAM ở namenode).
+- Khó expose qua web API (không có REST sẵn).
+- Phải build thêm abstraction layer cho external access.
+- Vận hành phức tạp.
 
-### 2. Object Store
+**Các sản phẩm phổ biến:**
+- **HDFS** (Hadoop Distributed File System) — nền tảng Big Data từ Hadoop ecosystem.
+- **GlusterFS** — open-source distributed FS.
+- **Ceph** — distributed storage hỗ trợ cả file, block, object.
+- **Google Colossus** — successor của GFS, dùng nội bộ Google.
 
-> Storage service thiết kế cho **unstructured data ở internet scale**.
+### 2. Object Store (Kho lưu trữ object)
 
-**Cấu trúc:**
-```
-Bucket (Container)
-├── Object 1: {name: "video.mp4", value: binary, metadata: {size, type, ...}}
-├── Object 2: {name: "profile.jpg", value: binary, metadata: {ACL, ...}}
+> Storage service được thiết kế chuyên cho **unstructured data ở quy mô Internet**.
+
+**Cấu trúc dữ liệu:**
+
+```text
+Bucket (Container — thùng chứa)
+├── Object 1: {name: "video.mp4",        value: binary, metadata: {size, type, ...}}
+├── Object 2: {name: "profile.jpg",      value: binary, metadata: {ACL, owner, ...}}
 └── Object 3: {name: "backup_2024-01.sql", value: binary}
 
-(Flat structure — không có folders thực sự, dùng prefix để simulate)
+Cấu trúc PHẲNG (flat) — không có folder thực sự, chỉ có prefix trong tên object
+                       để giả lập folder (vd: "videos/2024/01/file.mp4")
 ```
 
 **Ưu điểm:**
-- **HTTP REST API** → dễ integrate với web apps
-- Virtually **unlimited objects** và sizes (đến TB/object)
-- **Built-in versioning** → dễ rollback
-- **Access Control Lists** mỗi object
-- **Managed replication** → high durability (11 nines!)
+
+- **HTTP REST API** → dễ tích hợp với web app, mobile app.
+- **Số lượng object và size gần như không giới hạn** (S3 cho phép tới 5 TB / object).
+- **Versioning** built-in → có thể rollback về version cũ của object.
+- **Access Control List (ACL)** từng object → phân quyền chi tiết.
+- **Managed replication** → S3 quảng cáo **11 nines** (99.999999999%) durability.
+- **Storage tier** đa dạng (sẽ giải thích bên dưới) → tối ưu chi phí.
 
 **Nhược điểm:**
-- Objects **immutable** → không modify, chỉ replace
-- Không append vào file
-- Cần special API (không dùng như local filesystem)
-- Slower throughput so với distributed filesystem cho big data processing
 
-**Popular:** AWS S3, Google Cloud Storage, Azure Blob, MinIO (self-hosted)
+- Object là **immutable** (bất biến) → không sửa được, chỉ replace toàn bộ.
+- Không thể append vào file đã có.
+- Cần dùng API đặc biệt (không dùng được như local filesystem trực tiếp).
+- Throughput chậm hơn distributed FS cho big data processing (overhead của HTTP).
 
-## Object Store Storage Tiers (AWS S3 example)
+**Các sản phẩm phổ biến:**
+- **AWS S3** (Simple Storage Service) — chuẩn de-facto của ngành.
+- **Google Cloud Storage**.
+- **Azure Blob Storage**.
+- **MinIO** — self-hosted, S3-compatible.
+- **Cloudflare R2** — không tính egress fee.
 
-| Tier | Availability | Access | Use Case | Cost |
+## Object Store Storage Tiers (ví dụ AWS S3)
+
+Object store thường có nhiều **tier (cấp)** lưu trữ với mức giá và độ truy cập khác nhau. Ý tưởng: data ít truy cập → lưu ở tier rẻ hơn.
+
+| Tier | Availability | Truy cập | Use Case | Cost |
 |------|-------------|--------|----------|------|
-| **Standard** | 99.99% | Frequent | Production data, user content | Cao |
-| **Standard-IA** | 99.9% | Infrequent | Backups accessed monthly | Medium |
-| **Glacier Instant** | 99.9% | Milliseconds | Archives, rarely accessed | Thấp |
-| **Glacier Deep Archive** | 99.99% | 12 hours | Long-term compliance | Rất thấp |
+| **Standard** | 99.99% | Thường xuyên | Production data, user content | Cao |
+| **Standard-IA** (Infrequent Access) | 99.9% | Ít, có phí retrieval | Backup truy cập hàng tháng | Trung bình |
+| **Glacier Instant Retrieval** | 99.9% | Milliseconds, nhưng tính phí cao mỗi lần | Archive nhưng đôi khi cần | Thấp |
+| **Glacier Flexible Retrieval** | 99.99% | Vài phút đến vài giờ | Archive ít cần | Rất thấp |
+| **Glacier Deep Archive** | 99.99% | 12 giờ để retrieve | Lưu trữ compliance dài hạn (luật pháp) | Cực thấp |
+
+**Lifecycle policy** trên S3 cho phép tự động chuyển object từ tier này sang tier khác sau N ngày — ví dụ: object > 30 ngày → Standard-IA, > 180 ngày → Glacier.
 
 ## Khi nào dùng gì?
 
 ### Distributed File System
 
-✅ Best for:
-- Big Data processing (Spark, Hadoop workloads)
-- IoT sensor data analysis
-- Data lakes
-- Khi cần modify/append files
-- Khi cần low-latency streaming access
+✅ **Phù hợp khi:**
+- Big Data processing với Spark, Hadoop, Hive, Presto.
+- Phân tích dữ liệu IoT sensor (cần block-level access).
+- Xây Data Lake cho analytics nội bộ.
+- Cần sửa / append file (vd: append log file).
+- Cần low-latency streaming access (đọc tuần tự cực nhanh).
 
 ### Object Store
 
-✅ Best for:
-- Web content (images, CSS, JS) → HTTP API
-- Video streaming assets
-- Database backups
-- User-uploaded content
-- Static website hosting
-- Cross-region replication
-- Long-term archiving
+✅ **Phù hợp khi:**
+- Lưu web content (image, CSS, JS) — phục vụ qua HTTP/CDN.
+- Asset cho video streaming (segment HLS, DASH).
+- Database backup, application backup.
+- User-uploaded content (avatar, post media).
+- Static website hosting (S3 + CloudFront).
+- Cross-region replication cho disaster recovery.
+- Lưu trữ dài hạn (Glacier tiers).
 
 ## Ví dụ Architecture: Video Streaming Platform
 
-```
-User uploads video
-    ↓
+Một ví dụ thực tế kết hợp Object Store với CDN và các service xử lý:
+
+```text
+User upload video
+    │
+    ▼
 API Gateway → Upload Service
-                   ↓
-              Raw video → S3 (Standard tier)
-                               ↓
-                      Transcoding Service
-                      (FFmpeg: HLS 1080p, 720p, 480p)
-                               ↓
-                      Processed segments → S3 (Standard)
-                               ↓
-                      CDN Edge Servers (globally cached)
-                               ↓
-                      User streams video (fast!)
+                   │
+                   ▼
+            Raw video → S3 (Standard tier)
+                                │
+                                ▼
+                    Transcoding Service
+                    (FFmpeg: tách thành nhiều resolution:
+                     1080p, 720p, 480p, định dạng HLS / DASH)
+                                │
+                                ▼
+                    Processed segments → S3 (Standard)
+                                │
+                                ▼
+                    CDN Edge Servers (cache toàn cầu)
+                                │
+                                ▼
+                    User streams video (cực nhanh, gần edge)
 ```
 
-**Thumbnail storage:**
-```
-User uploads photo → S3 → Image Processing Service
-                               ↓
-                       Resize (100x100, 300x300, 1024x1024)
-                               ↓
-                       Multiple sizes → S3
-                               ↓
-                       CDN serves thumbnails
+**Quy trình thumbnail tương tự:**
+
+```text
+User upload photo → S3 → Image Processing Service
+                              │
+                              ▼
+                  Resize thành nhiều kích cỡ:
+                  100x100, 300x300, 1024x1024
+                              │
+                              ▼
+                  Lưu nhiều version vào S3 (key khác nhau)
+                              │
+                              ▼
+                  CDN phục vụ thumbnail tương ứng theo
+                  thiết bị / vị trí (responsive image)
 ```
 
-## Hybrid: Database + Object Store
+## Hybrid: Database + Object Store — pattern phổ biến nhất
 
-```
+Trong thực tế, **không lưu** binary content trực tiếp vào database — pattern chuẩn là **lưu metadata trong DB, lưu binary trong Object Store**:
+
+```text
 PostgreSQL (structured metadata):
-products: {id, name, price, category, image_url, video_url}
-                                              ↓
-                                    image_url → S3 Object
-                                    video_url → S3 Object
-
-→ DB lưu metadata + reference
-→ Object Store lưu binary content
+┌─────────────────────────────────────────────────┐
+│ products: {                                     │
+│   id, name, price, category,                    │
+│   image_url:  "s3://bucket/products/123.jpg",   │ ─┐
+│   video_url:  "s3://bucket/videos/123.mp4"      │ ─┤
+│ }                                               │  │
+└─────────────────────────────────────────────────┘  │
+                                                     │
+S3 Object Store (binary content):                    │
+┌─────────────────────────────────────────────────┐  │
+│ products/123.jpg (binary 2MB)  ◄─────────────────┘ (image_url trỏ về)
+│ videos/123.mp4   (binary 500MB) ◄────────────────  (video_url trỏ về)
+└─────────────────────────────────────────────────┘
 ```
 
-## Tóm tắt
+Lợi ích:
+- DB nhỏ gọn, query nhanh.
+- Binary content tận dụng được CDN.
+- Có thể scale 2 phần độc lập.
+- Chi phí storage tối ưu (chỉ pay cho object store ở binary lớn).
 
-```
-Unstructured Data Storage:
+## Tóm tắt bài 5
 
-Distributed File System:
-├── Familiar filesystem API
-├── Good for Big Data processing
-└── Limited number of files
+```text
+Unstructured Data Storage — 2 lựa chọn:
 
-Object Store (AWS S3, GCS):
-├── HTTP REST API
-├── Unlimited objects, up to TBs each
+Distributed File System (HDFS, Ceph, Colossus):
+├── API filesystem quen thuộc (open, read, write)
+├── Modifiable: append, partial update
+├── Tốt cho Big Data processing (Spark, Hadoop)
+└── ❌ Giới hạn số file, khó expose qua web
+
+Object Store (AWS S3, GCS, Azure Blob):
+├── HTTP REST API → dễ tích hợp web/mobile
+├── Unlimited objects, lên đến vài TB/object
 ├── Built-in versioning, replication, ACL
-├── Multiple storage tiers (cost optimization)
-└── Best for web content, backups, user uploads
+├── Nhiều storage tier (tối ưu chi phí)
+└── ❌ Immutable: không sửa được, chỉ replace
 
-Key difference: File System → mutable; Object Store → immutable
+Pattern chuẩn: Database lưu metadata + Object Store lưu binary
+              + CDN phục vụ binary cho user
 ```
+
+Hoàn thành Phase 5. Bạn đã nắm được toàn bộ về data storage: SQL, NoSQL, các kỹ thuật scale, CAP, và unstructured data. Phase 6 sẽ tổng hợp tất cả thành **architecture patterns** — các kiến trúc mẫu để áp dụng vào hệ thống thực tế.
 
 ---
-**Tiếp theo:** Phase 6 - Software Architecture Patterns →
+**Bài kế tiếp**: [Phase 6 - Software Architecture Patterns](../phase-6/01-architecture-patterns-gioi-thieu.md) →

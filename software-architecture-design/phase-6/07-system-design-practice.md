@@ -1,332 +1,427 @@
-# Bài 7: System Design Practice - Quy trình và Ví dụ
+# Bài 7: System Design Practice — Quy trình và Ví dụ thực hành
 
-## Quy trình System Design
+Bài cuối của Phase 6 (và của toàn bộ course Software Architecture Design). Bài này tổng hợp tất cả kiến thức từ Phase 1 → Phase 6 thành **quy trình thiết kế hệ thống thực tế** — kỹ năng mà bạn sẽ dùng trong system design interview và trong công việc hằng ngày.
 
-Dù cho bất kỳ hệ thống nào, luôn follow quy trình 4 bước:
+## Quy trình System Design — 4 bước
 
-```
-Bước 1: Thu thập Requirements
-    ├── Functional Requirements (Use Cases & User Flows)
-    ├── Non-functional Requirements (Quality Attributes)
-    └── System Constraints
+Bất kể bạn được giao thiết kế hệ thống gì (Twitter, Uber, Netflix, hay một internal tool), luôn follow quy trình 4 bước này:
+
+```text
+Bước 1: Thu thập Requirements (yêu cầu)
+    ├── Functional Requirements (use case & user flow)
+    ├── Non-functional Requirements (quality attributes)
+    └── System Constraints (ràng buộc)
 
 Bước 2: Định nghĩa API
-    ├── Xác định entities
-    ├── Map entities → URIs
-    ├── Chọn representation (JSON)
-    └── Assign HTTP methods
+    ├── Xác định các entity
+    ├── Map entity → URI
+    ├── Chọn representation (thường là JSON)
+    └── Gán HTTP method (POST, GET, PUT, DELETE)
 
-Bước 3: Functional Architecture
-    └── Thiết kế diagram đáp ứng functional requirements
-        (chưa quan tâm đến scale/perf)
+Bước 3: Functional Architecture (kiến trúc chức năng)
+    └── Vẽ diagram đáp ứng functional requirement
+        (chưa cần quan tâm scale / performance)
 
-Bước 4: Non-functional Refinement
-    └── Refine diagram để đạt quality attributes
+Bước 4: Non-functional Refinement (tinh chỉnh phi chức năng)
+    └── Tinh chỉnh diagram để đạt quality attributes
         (scalability, availability, performance)
 ```
 
+**Lý do của thứ tự này**: Nếu bạn nhảy thẳng vào "tôi dùng Redis + Cassandra + Kafka" mà chưa hiểu requirements → bạn đang **over-engineer** hoặc **giải sai bài toán**. Hỏi requirements trước, kiến trúc sau.
+
 ---
 
-## Ví dụ 1: Highly Scalable Discussion Forum (như Reddit/HackerNews)
+## Ví dụ 1: Highly Scalable Discussion Forum (giống Reddit / Hacker News)
 
 ### Bước 1: Requirements
 
-**Functional Requirements:**
-- User signup/login
-- Create post (title, tags, body with text/images)
-- Comment on posts (flat chronological list)
-- Upvote/downvote posts và comments (mỗi user chỉ vote một lần)
-- Delete own posts/comments
-- Homepage: Top 20 most popular posts (by votes trong 24h)
+**Functional Requirements (chức năng):**
 
-**Non-functional Requirements:**
-- **Scalability**: Từ low traffic → millions of users, handle spikes
-- **Performance**: Response < vài trăm ms
-- **Availability**: 3 nines (99.9%)
-- **Consistency vs Availability**: Prioritize availability (eventual consistency OK cho posts/votes)
-- **Durability**: Data không bao giờ mất (trừ khi explicitly deleted)
+- User signup / login.
+- Tạo post (title, tags, body với text/image).
+- Comment trên post (flat chronological list — danh sách phẳng theo thời gian).
+- Upvote / downvote post và comment (mỗi user chỉ vote 1 lần / 1 đối tượng).
+- Xoá post / comment của chính mình.
+- Homepage: Top 20 post phổ biến nhất (theo vote trong 24h).
+
+**Non-functional Requirements (chất lượng):**
+
+- **Scalability**: Từ traffic thấp ban đầu → hàng triệu user, chịu được spike traffic.
+- **Performance**: Response < vài trăm ms.
+- **Availability**: 3 nines (99.9%).
+- **Consistency vs Availability**: **Ưu tiên availability** (eventual consistency chấp nhận được cho post / vote).
+- **Durability**: Data không bao giờ mất (trừ khi user chủ động xoá).
 
 ### Bước 2: API Design (REST)
 
-**Entities:** Users, Posts, Images, Comments, Votes
+**Các entity chính:** Users, Posts, Images, Comments, Votes.
 
-**URIs:**
-```
-/users                    ← Independent collection
-/posts                    ← Independent collection
-/posts/{id}/images        ← Sub-resource
-/posts/{id}/comments      ← Sub-resource
-/posts/{id}/votes         ← Sub-resource
+**URI structure:**
+
+```text
+/users                            ← Collection độc lập
+/posts                            ← Collection độc lập
+/posts/{id}/images                ← Sub-resource
+/posts/{id}/comments              ← Sub-resource
+/posts/{id}/votes                 ← Sub-resource
 /posts/{id}/comments/{cid}/votes  ← Nested
 ```
 
 **HTTP Methods:**
+
+```text
+POST   /users                            → Signup
+POST   /sessions                         → Login (tạo auth token)
+
+POST   /posts                            → Tạo post mới
+GET    /posts                            → List post (paginated)
+GET    /posts/{id}                       → Lấy 1 post cụ thể
+DELETE /posts/{id}                       → Xoá post của chính mình
+
+POST   /posts/{id}/images                → Upload image
+GET    /posts/{id}/images/{img_id}       → Lấy image
+
+POST   /posts/{id}/comments              → Thêm comment
+GET    /posts/{id}/comments              → Lấy danh sách comment (paginated)
+DELETE /posts/{id}/comments/{cid}        → Xoá comment
+
+POST   /posts/{id}/votes                 → Upvote / downvote post
+POST   /posts/{id}/comments/{cid}/votes  → Vote comment
 ```
-POST /users              → Sign up
-POST /sessions           → Login (tạo auth token)
 
-POST /posts              → Create post
-GET  /posts              → List posts (paginated)
-GET  /posts/{id}         → Get post
-DELETE /posts/{id}       → Delete own post
+**Các cân nhắc về API:**
 
-POST /posts/{id}/images  → Upload image
-GET  /posts/{id}/images/{img_id} → Get image
-
-POST /posts/{id}/comments → Add comment
-GET  /posts/{id}/comments → Get comments (paginated)
-DELETE /posts/{id}/comments/{cid} → Delete comment
-
-POST /posts/{id}/votes   → Upvote/downvote
-POST /posts/{id}/comments/{cid}/votes → Vote comment
-```
-
-**API Considerations:**
-- **Pagination**: Home page top posts → limit=20, offset-based
-- **Infinite scrolling**: Comments load theo page, frontend ẩn pagination
+- **Pagination**: Home page top post → `limit=20`, dùng offset-based hoặc cursor-based.
+- **Infinite scrolling**: Comment load theo page, frontend ẩn pagination phía sau infinite scroll.
+- **Idempotency** cho vote: Vote 2 lần phải có cùng kết quả (không cộng dồn).
 
 ### Bước 3: Functional Architecture
 
-```
-Browser/Client
-    ↓
-API Gateway (auth, routing)
-    ↓
+```text
+Browser / Client
+    │
+    ▼
+API Gateway (auth, routing, rate limit)
+    │
+    ▼
 ┌─────────────────────────────────────────────────────┐
-│  Web App Service (serve static frontend)            │
-│  User Service ←→ [Users DB (SQL)]                  │
-│  Post & Comment Service ←→ [Posts/Comments DB]     │
-│                           ←→ [Object Store (images)]│
-│  Voting Service ←→ [Votes DB]                      │
-│  Ranking Service ←→ [Ranking DB (read-optimized)]  │
+│  Web App Service        (serve static frontend)      │
+│  User Service           ←→ [Users DB (SQL)]          │
+│  Post & Comment Service ←→ [Posts/Comments DB]       │
+│                         ←→ [Object Store (image)]    │
+│  Voting Service         ←→ [Votes DB]                │
+│  Ranking Service        ←→ [Ranking DB (read-opt)]   │
 └─────────────────────────────────────────────────────┘
 ```
 
-**Key design decisions:**
+**Các quyết định thiết kế chính:**
 
-**Posts + Comments trong 1 service:**
-- Comments có structure tương tự post nhưng đơn giản hơn
-- Combine → dễ load post với comments (same DB)
+**Post + Comment trong 1 service (không tách):**
+- Comment có cấu trúc tương tự post nhưng đơn giản hơn.
+- Combine → dễ load post kèm comment cùng 1 DB call.
 
-**Voting Service riêng biệt:**
-- Cần track who voted on what (not just a counter)
-- Cần timestamp để tính votes trong 24h window
-- Schema: `{user_id, post_id, vote (+1/-1), timestamp}`
+**Voting Service riêng:**
+- Cần track ai vote cái gì (không chỉ counter — vì cần ngăn vote nhiều lần).
+- Cần timestamp để tính vote trong window 24h cho homepage.
+- Schema: `{user_id, post_id, vote (+1/-1), timestamp}`.
 
 **Ranking Service với Batch Processing:**
-```
-Ranking Service runs every 10-30 minutes:
-1. Query Voting Service: all votes trong 24h
-2. Sum upvotes - downvotes per post
-3. Sort by popularity
+
+```text
+Ranking Service chạy mỗi 10-30 phút:
+1. Query Voting Service: tất cả vote trong 24h gần nhất
+2. Tính (upvote - downvote) cho mỗi post
+3. Sort theo độ phổ biến
 4. Pull post content từ Post Service
-5. Store sorted list → Ranking DB
+5. Lưu sorted list vào Ranking DB
 
-User request home page:
-→ Ranking DB → Return top 20 posts instantly
+Khi user vào home page:
+→ Đọc trực tiếp từ Ranking DB → trả về top 20 post ngay
 ```
 
-**CQRS Pattern cho Ranking:**
-```
-Post Service ──events──> [Broker] ──> Ranking Service
-Voting Service ──events──> [Broker] ──┘
+**CQRS Pattern cho Ranking** (đã học ở Phase 6 Bài 4):
 
-Ranking Service:
-- Materialized view = sorted posts với vote counts
-- Read-optimized DB (fast for home page queries)
+```text
+Post Service ──events──► [Broker] ──► Ranking Service
+Voting Service ──events──► [Broker] ──┘
+
+Ranking Service maintain:
+- Materialized view = sorted post với vote count
+- Read-optimized DB (vd: Redis sorted set)
+- Home page query cực nhanh
 ```
 
-**Images trong Object Store:**
-- Upload: Client → Post Service → Object Store
-- View: Browser → Object Store (direct, public URLs)
+**Image trong Object Store:**
+- Upload: Client → Post Service → Object Store (S3).
+- View: Browser → Object Store trực tiếp (public URL, qua CDN).
 
 ### Bước 4: Non-functional Refinement
 
 **Scalability:**
-```
-Tất cả services → Load Balancer → Multiple instances
-Database → Replication + Sharding
-Object Store → Already scalable (S3)
-CDN → Cache images, static assets
+
+```text
+Tất cả service → Load Balancer → nhiều instance
+Database     → Replication + Sharding (Phase 5 Bài 3)
+Object Store → đã scalable sẵn (S3)
+CDN          → cache image, static asset (Phase 4 Bài 4)
 ```
 
-**Availability (3 nines):**
-```
-Replication cho tất cả databases
-Active-Active cho services
-Monitoring + auto-restart
+**Availability (3 nines = 8.76 giờ downtime/năm):**
+
+```text
+Replication cho mọi database (active-passive cho SQL, active-active cho NoSQL)
+Active-Active cho service tier (multi-instance sau LB)
+Monitoring + health check + auto-restart
 ```
 
 **Performance:**
-```
-CDN → Serve images/static assets nhanh
-Ranking Service → Pre-computed → Home page load instant
-Pagination → Giảm data transfer
-Post/Comments DB → Index on post_id, timestamp
+
+```text
+CDN → phục vụ image / static asset nhanh
+Ranking Service → pre-computed → home page load instant
+Pagination → giảm data transfer
+Post/Comment DB → index trên (post_id, timestamp) cho query nhanh
+Cache (Redis) cho hot post được xem nhiều
 ```
 
-**Eventual Consistency (chấp nhận được):**
-```
-Votes → không cần perfect real-time count
-Popular posts ranking → update mỗi 10-30 phút → OK
+**Eventual Consistency được chấp nhận:**
+
+```text
+Vote count: không cần real-time chính xác tuyệt đối
+Popular post ranking: cập nhật mỗi 10-30 phút → OK
+→ Đánh đổi consistency lấy availability + performance
 ```
 
 ---
 
-## Ví dụ 2: E-Commerce Marketplace Platform (như Amazon/Shopify)
+## Ví dụ 2: E-Commerce Marketplace Platform (giống Amazon / Shopify)
 
-### Requirements Summary
+### Tóm tắt Requirements
 
-**Actors:** Merchants (sell products), Buyers (purchase products), Admins
+**Actor chính:**
+- **Merchant** (người bán): tạo và quản lý sản phẩm.
+- **Buyer** (người mua): mua sản phẩm.
+- **Admin**: quản lý hệ thống.
 
 **Functional Requirements:**
-- Merchant: signup, create/manage products, manage inventory, view orders
-- Buyer: search products, view details, manage cart, checkout, track orders
-- System: handle payments (3rd party), shipping (3rd party), notifications
+
+- **Merchant**: Signup, create / manage product, manage inventory, xem order.
+- **Buyer**: Search product, xem chi tiết, manage cart, checkout, track order.
+- **System**: Xử lý payment (qua bên thứ ba — Stripe, PayPal), shipping (3rd party), notification.
 
 **Non-functional Requirements:**
-- **Scalability**: Hàng triệu users, traffic spikes (flash sales)
-- **Performance**: Search results < 500ms
-- **Availability**: High (thương mại điện tử = revenue)
-- **Data Durability**: Orders không được mất
+
+- **Scalability**: Hàng triệu user, chịu được spike traffic (flash sale, Black Friday).
+- **Performance**: Search result < 500ms.
+- **Availability**: Cao (e-commerce = revenue trực tiếp, downtime = mất tiền).
+- **Data Durability**: Order **không được mất** (consequences nghiêm trọng).
 
 ### Key Architecture Decisions
 
-**Microservices theo domain:**
-```
+**Chia microservice theo domain (Domain-Driven Design):**
+
+```text
 Merchant Domain:
-  - Merchant Service (accounts, profiles)
-  - Product Service (catalog, descriptions)
-  - Inventory Service (stock counts)
+  - Merchant Service     (account, profile)
+  - Product Service      (catalog, description)
+  - Inventory Service    (stock count)
 
 Buyer Domain:
-  - User Service (accounts)
-  - Product Search Service (search/browse)
-  - Cart Service
-  - Order Service
+  - User Service             (account user)
+  - Product Search Service   (search / browse)
+  - Cart Service             (giỏ hàng)
+  - Order Service            (đơn hàng)
 
-Infrastructure:
+Infrastructure (cross-cutting):
   - API Gateway
-  - Notification Service
-  - Payment Service (3rd party integration)
-  - Shipping Service (3rd party integration)
+  - Notification Service     (email, push, SMS)
+  - Payment Service          (tích hợp 3rd party như Stripe)
+  - Shipping Service         (tích hợp FedEx, UPS, Grab Express)
 ```
 
-**Event-Driven cho Checkout Flow:**
-```
-User checkout → Order Service → [order_placed event]
-                                        ↓
-                              Payment Service ──────> [payment_completed event]
-                                                               ↓
-                                                    Inventory Service (decrement stock)
-                                                    Shipping Service (schedule delivery)
-                                                    Notification Service (email/push)
+**Event-Driven cho Checkout Flow** (Phase 6 Bài 4):
 
-User nhận confirmation ngay lập tức!
-Billing/shipping xảy ra asynchronously.
+```text
+User checkout → Order Service publish event "order_placed"
+                                    │
+                                    ▼
+                          Payment Service xử lý
+                          → publish "payment_completed"
+                                    │
+                                    ▼
+                          Subscriber song song:
+                          ├── Inventory Service     (giảm stock)
+                          ├── Shipping Service      (đặt lịch ship)
+                          └── Notification Service  (gửi email confirm)
+
+User nhận confirmation NGAY LẬP TỨC (không cần chờ shipping schedule)
+Billing / shipping xảy ra ASYNC bên trong
 ```
 
 **CQRS cho Product Search:**
-```
-Product Service ──update──> [Broker] ──> Product Search Service
-Inventory Service ──update──> [Broker] ──┘
 
-Product Search Service:
+```text
+Product Service   ──update event──► [Broker] ──► Product Search Service
+Inventory Service ──update event──► [Broker] ──┘
+
+Product Search Service maintain:
 Materialized view = {product_id, name, price, availability, avg_rating, thumbnail_url}
-→ Search query chỉ cần 1 service, 1 DB, fast!
+
+→ Search query chỉ cần 1 service, 1 DB, cực nhanh
+→ Không cần JOIN qua nhiều service
 ```
 
-**Flash Sale (Traffic Spike):**
-```
-Flash Sale: 10,000 users mua 100 sản phẩm trong 1 phút
+**Flash Sale (xử lý spike traffic):**
 
-Inventory Service:
-- Key-Value Store (Redis): Rất fast for counter operations
+```text
+Flash Sale: 10,000 user cùng mua 100 sản phẩm trong 1 phút
+
+Inventory Service dùng:
+- Redis (Key-Value): cực nhanh cho atomic counter
 - Atomic decrement: inventory_count--
-- Nếu count < 0 → reject order
+- Nếu count < 0 → reject order ngay
 
-Orders:
-- Message Broker buffer orders
-- Process sau khi sale xong
-→ Không cần over-provision servers
+Order:
+- Message Broker buffer order (Phase 4 Bài 2)
+- Xử lý sau khi sale qua đỉnh
+→ Không cần over-provision server tốn kém
+→ Buffer hấp thụ spike thay vì crash
 ```
 
-**Global Scale:**
-```
-GSLB → Route user đến datacenter gần nhất
+**Global Scale (đa region):**
+
+```text
+GSLB (Phase 4 Bài 1) → Route user về datacenter gần nhất
+
 Multi-region deployment:
-  US-East (primary) + EU-West + APAC
+  US-East   (primary)
+  EU-West   (replica + serve EU traffic)
+  APAC      (replica + serve APAC traffic)
+
 CDN:
-  Product thumbnails, images, static assets
-  → Serve từ edge servers → Fast globally
+  Product thumbnail, image, static asset
+  → Serve từ edge server → fast trên toàn cầu
 ```
 
 ---
 
 ## System Design Interview Tips
 
-### 1. Clarify trước khi design
+Khi đi phỏng vấn system design (Google, Meta, Amazon, ...), follow các nguyên tắc sau:
 
-```
+### 1. Clarify trước khi design (cực kỳ quan trọng)
+
+Đừng nhảy thẳng vào vẽ box. Hỏi rõ requirements trước:
+
+```text
 "Trước khi bắt đầu, tôi muốn clarify một số điểm:
-- Scale target: bao nhiêu users? DAU?
-- Consistency requirements: real-time hay eventual ok?
-- Read/write ratio?
-- Budget/team constraints?"
+ - Scale target: bao nhiêu user? DAU (Daily Active User)? Peak QPS?
+ - Read/write ratio?
+ - Consistency requirements: real-time hay eventual consistency OK?
+ - Budget / team constraint?
+ - Mục tiêu tối ưu: latency, throughput, hay cost?"
 ```
 
-### 2. Start with Functional Architecture
+Điều này cho thấy bạn **suy nghĩ như một kiến trúc sư thực thụ** — không over-engineer, không under-engineer.
 
-```
-Step 1: Identify services (không cần scale yet)
-Step 2: Define data flows giữa services
-Step 3: Define data models/schemas
+### 2. Bắt đầu với Functional Architecture
+
+```text
+Bước 1: Identify service nào cần có (chưa cần scale)
+Bước 2: Define data flow giữa các service
+Bước 3: Define data model / schema chính
 ```
 
-### 3. Explicit Trade-offs
+Vẽ diagram cao-level trước. Đừng nghĩ về Redis, Kafka, replica từ đầu — đó là Bước 4.
 
-```
+### 3. Thể hiện rõ Trade-offs (kỹ năng quan trọng nhất)
+
+Interviewer muốn thấy bạn **nhận thức được trade-off**, không chỉ chọn pattern lung tung:
+
+```text
 "Tôi sẽ chọn availability over consistency ở đây vì...
- Trade-off là user có thể thấy stale data trong X phút"
+ Trade-off là user có thể thấy stale data trong X phút,
+ nhưng điều đó chấp nhận được vì..."
 
-"Tôi dùng NoSQL ở đây vì flexible schema cần thiết,
- nhưng trade-off là không có ACID transactions"
+"Tôi dùng NoSQL ở đây vì cần flexible schema,
+ nhưng trade-off là không có ACID transaction —
+ nên cho phần X (transactional), tôi vẫn dùng PostgreSQL"
 ```
 
-### 4. Bottleneck Identification
+### 4. Bottleneck Identification (xác định nút thắt)
 
+```text
+Identify bottleneck (thường gặp):
+- Database với read traffic cao  → Read replica + cache
+- Service tốn compute            → Horizontal scale + LB
+- External API call              → Async qua Message Broker
+- Global latency                 → CDN + Multi-region
+- Hot key trong cache            → Cache sharding / replica
 ```
-Identify bottlenecks:
-- Database với high read traffic → Read replicas + Cache
-- Service với high compute → Horizontal scale + LB
-- External API calls → Async với Message Broker
-- Global latency → CDN + Multi-region
+
+### 5. Tham chiếu các pattern đã học
+
+Đừng "phát minh" pattern mới giữa interview. Dùng pattern phổ biến và nói tên nó:
+
+```text
+"Tôi sẽ áp dụng CQRS pattern ở đây..."
+"Đây là Event-Driven Architecture với pub-sub..."
+"Database này dùng Active-Passive replication..."
+"Cache strategy là pull (lazy loading)..."
 ```
 
-## Tóm tắt quy trình
+### 6. Vẽ diagram rõ ràng
 
-```
-System Design Process:
+- Service = box vuông.
+- Database = hình trụ.
+- Message broker = hình thoi.
+- Mũi tên có **label** (REST, gRPC, event).
+- Đánh dấu sync vs async khác nhau.
 
-1. Requirements
-   ├── Functional: Use cases, user flows, API
-   ├── Non-functional: Quality attributes (perf, scale, availability)
-   └── Constraints: Tech, business, legal
+## Tóm tắt quy trình System Design
 
-2. API Design (REST)
+```text
+4 Bước System Design:
+
+1. Requirements (yêu cầu)
+   ├── Functional: use case, user flow, API
+   ├── Non-functional: quality attribute (perf, scale, availability)
+   └── Constraint: tech, business, legal
+
+2. API Design (REST hoặc gRPC)
    ├── Entities → URIs
-   ├── Representations (JSON)
+   ├── Representation (JSON)
    └── HTTP Methods
 
 3. Functional Architecture
-   ├── Identify services
-   ├── Define data stores per service
-   └── Map API calls to services
+   ├── Identify service
+   ├── Define data store per service
+   └── Map API call to service
 
 4. Non-functional Refinement
-   ├── Load Balancers
+   ├── Load Balancer
    ├── DB Replication + Sharding
    ├── Caching (Redis, CDN)
-   ├── Message Brokers (async, spike buffering)
-   └── CQRS/Event-Driven patterns
+   ├── Message Broker (async, spike buffer)
+   └── CQRS / Event-Driven pattern
 ```
+
+## Lời kết của course
+
+Bạn đã đi qua **6 Phase** của software architecture design:
+
+- **Phase 1**: Architectural Drivers — Requirements + Constraints.
+- **Phase 2**: Quality Attributes — Performance, Scalability, Availability, Fault Tolerance, SLA/SLO/SLI.
+- **Phase 3**: API Design — REST, RPC, IDL, HATEOAS.
+- **Phase 4**: Architectural Building Blocks — Load Balancer, Message Broker, API Gateway, CDN.
+- **Phase 5**: Data Storage — SQL, NoSQL, Indexing/Replication/Sharding, CAP, Unstructured Storage.
+- **Phase 6**: Architectural Patterns — Multi-tier, Microservices, Event-Driven, Stream Processing, Big Data / Lambda.
+
+Bạn đã có toolkit đầy đủ để **thiết kế hệ thống ở quy mô bất kỳ**. Bước tiếp theo: thực hành — chọn 1 sản phẩm bạn dùng hằng ngày (Twitter, Uber, Netflix, Tinder, ...) và thử thiết kế lại nó theo quy trình 4 bước trên. Hoặc đi xa hơn: implement một phần nhỏ và đo lường thực tế.
+
+Chúc bạn thành công trên con đường trở thành Software Architect!
+
+---
+**Hoàn thành Software Architecture Design Course** 🎓
+
+**Phase tiếp theo (nếu có)**: Áp dụng vào project thực tế — không có "bài kế tiếp" trong course này.
