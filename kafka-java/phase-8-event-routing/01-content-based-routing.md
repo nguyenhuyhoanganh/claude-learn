@@ -380,9 +380,9 @@ PhysicalConsumer log:
 
 ✅ Content-based routing: odd→digital, even→physical.
 
-## Patterns + best practices
+## Pattern + best practice
 
-### Pattern: Map routing rules clearly
+### Pattern 1: Map routing rules rõ ràng
 
 ```java
 public class RoutingRules {
@@ -397,18 +397,18 @@ public class RoutingRules {
 }
 ```
 
-Single source of truth cho routing logic. Adding new product type:
+Đây là **single source of truth** cho routing logic. Khi thêm product type mới:
 ```java
 DESTINATIONS = Map.of(
     ProductType.DIGITAL, "digital-delivery-out",
     ProductType.PHYSICAL, "physical-delivery-out",
-    ProductType.SUBSCRIPTION, "subscription-delivery-out"   // NEW
+    ProductType.SUBSCRIPTION, "subscription-delivery-out"   // MỚI
 );
 ```
 
-+ Add new binding in YAML. Done.
++ Thêm binding mới trong YAML. Xong.
 
-### Pattern: Multi-criteria routing
+### Pattern 2: Routing nhiều tiêu chí (multi-criteria)
 
 ```java
 private String determineDestination(OrderEvent order) {
@@ -419,9 +419,9 @@ private String determineDestination(OrderEvent order) {
 }
 ```
 
-Multiple conditions. Routing logic complex → extract to dedicated **router class**.
+Nhiều điều kiện kết hợp. Routing logic phức tạp → **extract sang dedicated Router class** để test riêng được.
 
-### Pattern: Default / fallback destination
+### Pattern 3: Fallback destination — phòng case không match
 
 ```java
 private String determineDestination(OrderEvent order) {
@@ -430,28 +430,28 @@ private String determineDestination(OrderEvent order) {
 }
 ```
 
-Defensive cho future product types không có route → fallback topic processed manually.
+**Defensive coding** — phòng cho product type mới được thêm vào enum mà chưa có route → có fallback topic riêng để xử lý thủ công, tránh event bị silently dropped.
 
-## Anti-patterns
+## Anti-pattern
 
-| Anti-pattern | Problem | Fix |
+| Anti-pattern | Vấn đề | Sửa |
 |---|---|---|
-| Hardcode topic names trong code | Refactor pain | Use binding name constants + YAML |
-| Routing logic deep in `dispatch` lambda | Hard test, hard read | Extract `Router` service class |
-| Return `Message<?>` without `sendTo` header | Goes to `processor-out-0` (if defined) or silently dropped | Always set header for routing |
-| Try mix `Function<T, R>` with manual `streamBridge.send` | Double emit, confused offsets | Pick one strategy per processor |
-| Missing fallback for unknown type | Event silently lost | Default route + monitor |
+| Hard-code topic name trong code | Đau khi refactor | Dùng binding name constant + define trong YAML |
+| Routing logic nhồi sâu vào lambda `dispatch` | Khó test, khó đọc | Extract sang `Router` service class |
+| Return `Message<?>` mà KHÔNG set header `sendTo` | Message đi vào `processor-out-0` (nếu định nghĩa) hoặc bị drop silent | LUÔN set header để routing |
+| Mix `Function<T, R>` với manual `streamBridge.send` trong cùng processor | Double emit, offset confused | Chọn 1 strategy duy nhất cho mỗi processor |
+| Thiếu fallback cho type không match | Event silently mất | Default route + monitor topic này |
 
 ## Tóm tắt bài 1
 
-- **Routing** = direct event to N destinations based on rules.
-- **Content-based** = route theo nội dung message (productType, amount, region).
-- SCS `Function<T, R>` chỉ có 1 output → cần workaround for routing.
-- **2 strategies**:
-  - **StreamBridge**: bean type `Consumer<T>`, manual `send(binding, payload)`.
-  - **Send-To header**: bean type `Function<T, Message<?>>`, set `spring.cloud.stream.sendTo.destination` header.
-- Both define **custom bindings** trong YAML (not auto-derived).
-- Both work; Send-To header slightly more idiomatic.
-- Best practice: extract routing rules to `Map` or `Router` service. Fallback destination for unknown.
+- **Routing** = chuyển event đến **N destination** dựa vào rule/condition.
+- **Content-based routing** = route theo **nội dung** của message (productType, amount, region, ...).
+- SCS `Function<T, R>` chỉ có 1 output binding → cần workaround để routing được.
+- **2 strategy SCS cung cấp**:
+  - **StreamBridge**: bean type `Consumer<T>`, gọi `streamBridge.send(binding, payload)` thủ công trong code.
+  - **Send-To header**: bean type `Function<T, Message<?>>`, set header `spring.cloud.stream.sendTo.destination` trên message để chỉ định binding output.
+- Cả 2 strategy đều cần **định nghĩa custom binding** trong YAML (không auto-derive như binding mặc định).
+- Cả 2 đều chạy được; Send-To header slightly idiomatic hơn theo Spring style.
+- Best practice: extract routing rule sang `Map` hoặc Router service class. Luôn có **fallback destination** cho case không match.
 
 **Bài kế tiếp** → [Bài 2: Dynamic Routing — runtime configuration](02-dynamic-routing.md)
