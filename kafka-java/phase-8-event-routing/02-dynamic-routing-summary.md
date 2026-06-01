@@ -260,68 +260,68 @@ void physicalOrderRoutesUSPSWhenFedExDown() {
 }
 ```
 
-Mock `CarrierAvailabilityService`. Verify decision logic without Kafka.
+Mock `CarrierAvailabilityService` để verify logic quyết định mà không cần Kafka thật.
 
-## Anti-patterns
+## Anti-pattern
 
-| Anti-pattern | Problem | Fix |
+| Anti-pattern | Vấn đề | Sửa |
 |---|---|---|
-| Hardcode availability check inside lambda | Not testable | Inject service |
-| Magic strings for binding names | Typo risk | Constants |
-| Forget toggle scheduling thread safety | Race conditions | `AtomicBoolean` / synchronized |
-| Long-running availability check in dispatch | Blocks processor | Background check + cached state |
-| Missing fallback for "all carriers down" | Event lost / exception | Default route + manual reprocess |
-| Use blocking REST call to check availability | Per-message overhead | Cache + circuit breaker |
+| Hard-code check availability ngay trong lambda | Không test được | Inject service |
+| Magic string cho binding name | Dễ typo | Dùng constant |
+| Quên thread safety cho toggle scheduling | Race condition | Dùng `AtomicBoolean` hoặc synchronized |
+| Check availability tốn thời gian dài trong dispatch | Block processor | Check ở background + cache state |
+| Thiếu fallback khi "tất cả carrier đều down" | Event lost hoặc exception | Default route + reprocess thủ công |
+| Dùng blocking REST call để check availability mỗi message | Overhead lớn | Cache + circuit breaker |
 
-## Phase 8 — toàn bộ summary
+## Tổng kết Phase 8
 
-### Routing concepts
+### Khái niệm routing
 
-| Type | Decision based on | Use case |
+| Loại | Quyết định dựa vào | Use case |
 |---|---|---|
-| **Content-based** | Message content (field values) | Product type, region, amount tier |
-| **Dynamic** | Runtime state (external service, time, flag) | Carrier availability, load balancing, A/B test |
-| **Mixed** | Both | Production reality |
+| **Content-based** | Nội dung message (giá trị các field) | Product type, region, amount tier |
+| **Dynamic** | Runtime state (service ngoài, thời gian, feature flag) | Carrier availability, load balancing, A/B test |
+| **Mixed** | Cả 2 | Thực tế production |
 
-### 2 implementation strategies
+### 2 strategy implement
 
-1. **StreamBridge** — bean `Consumer<T>`, manually `streamBridge.send(binding, payload)`.
-2. **Send-To header** — bean `Function<T, Message<?>>`, set `spring.cloud.stream.sendTo.destination`.
+1. **StreamBridge** — bean `Consumer<T>`, gọi `streamBridge.send(binding, payload)` thủ công.
+2. **Send-To header** — bean `Function<T, Message<?>>`, set header `spring.cloud.stream.sendTo.destination` để chỉ destination.
 
-Both define custom output bindings in YAML.
+Cả 2 đều cần định nghĩa **custom output binding** trong YAML.
 
-### Production architecture pattern
+### Pattern kiến trúc production
 
 ```text
-order-events  →  RouterProcessor  →  N output topics  →  N consumer microservices
+order-events  →  RouterProcessor  →  N output topic  →  N consumer microservice
                        │
-                       ├── content-based rules
-                       ├── dynamic state queries
+                       ├── content-based rule (dựa vào field)
+                       ├── dynamic state query (gọi service ngoài)
                        └── fallback destination
 ```
 
-Router becomes critical service. Test thoroughly, monitor closely.
+Router trở thành **service quan trọng**. Phải test kỹ, monitor sát.
 
-## Phase 8 takeaways
+## Take-away của Phase 8
 
-- Processor không chỉ transform, mà còn **route**.
-- 2 routing types: content-based (message content) + dynamic (runtime state).
-- 2 SCS strategies: StreamBridge vs Send-To header. Both define custom bindings.
-- Real apps **combine** both routing types.
-- Extract routing logic to dedicated class for testability.
-- Always fallback destination cho unhandled cases.
-- Monitor each output topic (drift detection).
+- Processor không chỉ transform data, mà còn có thể **route** đến nhiều destination.
+- 2 loại routing: **content-based** (theo nội dung message) + **dynamic** (theo runtime state).
+- 2 strategy SCS: **StreamBridge** vs **Send-To header**. Cả 2 đều cần custom binding trong YAML.
+- App thực tế thường **kết hợp** cả 2 loại routing.
+- Extract routing logic sang class riêng → dễ test, dễ maintain.
+- LUÔN có **fallback destination** cho case không match.
+- Monitor mỗi output topic riêng → phát hiện drift (vd FedEx topic luôn empty).
 
-## Common mistakes
+## Các lỗi thường gặp
 
-| Mistake | Why bad | Fix |
+| Lỗi | Vấn đề | Sửa |
 |---|---|---|
-| Hardcode logic inside lambda | Untestable | Router class |
-| Skip fallback route | Events lost | Default destination |
-| Sync external check per message | Slow | Cache + async refresh |
-| Send-To header with wrong binding name | Silent fail | Constants + integration test |
-| Forget @EnableScheduling for dynamic check | Stale state | Add annotation |
-| Bind output topics in wrong namespace | Spring confused | Mixed binder configs careful |
+| Hard-code logic routing trong lambda | Không test được riêng | Tách Router class |
+| Quên fallback route | Event mất khi không match rule nào | Default destination |
+| Sync check external state mỗi message | Slow, bottleneck | Cache + refresh async |
+| Send-To header với binding name sai (typo) | Silent fail | Dùng constant + integration test |
+| Quên `@EnableScheduling` cho dynamic check | State bị stale | Thêm annotation vào runner |
+| Bind output topic ở binder namespace sai | Spring bị confused | Cẩn thận với mixed binder config |
 
 ## Tóm tắt bài 2 + Phase 8
 
