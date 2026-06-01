@@ -1,15 +1,15 @@
 # Bài 2: Docker Compose deep — networking, volumes, profiles
 
-Phase 28 cover Compose cơ bản. Bài này deep-dive **production patterns**: network, volume, secret, profile, healthcheck.
+Phase 28 đã cover Compose cơ bản. Bài này deep-dive **production pattern**: network, volume, secret, profile, healthcheck.
 
 ## docker-compose.yml v3.9 syntax
 
 ```yaml
-version: '3.9'                    # Optional in modern Compose
+version: '3.9'                    # Optional ở Compose hiện đại
 
-name: vprofile                    # Project name (override directory)
+name: vprofile                    # Tên project (override tên directory)
 
-x-common-env: &common-env         # YAML anchor (reuse)
+x-common-env: &common-env         # YAML anchor (để reuse)
   TZ: UTC
   LOG_LEVEL: INFO
 
@@ -17,15 +17,15 @@ services:
   db:
     image: mariadb:11
     environment:
-      <<: *common-env             # Merge anchor
+      <<: *common-env             # Merge anchor vào đây
       MYSQL_DATABASE: accounts
 ```
 
 ## Networking
 
-### Default network
+### Network mặc định
 
-Mỗi project → 1 bridge network. Services reach nhau bằng tên.
+Mỗi project Compose → 1 bridge network mặc định. Các service gọi nhau qua tên service.
 
 ```yaml
 services:
@@ -41,10 +41,10 @@ services:
     image: mariadb
 ```
 
-`web` → reach `api:8080` (port internal).
-`api` → reach `db:3306`.
+`web` → gọi được `api:8080` (port internal).
+`api` → gọi được `db:3306`.
 
-### Custom networks
+### Custom networks (Tách network riêng)
 
 ```yaml
 networks:
@@ -52,25 +52,25 @@ networks:
     driver: bridge
   backend:
     driver: bridge
-    internal: true               # No external access
+    internal: true               # Không có external access (không ra Internet)
   monitoring:
-    external: true                # Pre-existing network
+    external: true                # Network đã tồn tại sẵn
 
 services:
   web:
     networks: [frontend]
 
   api:
-    networks: [frontend, backend]   # Bridge tier
+    networks: [frontend, backend]   # Service "cầu nối" giữa 2 tier
 
   db:
-    networks: [backend]              # Backend only
+    networks: [backend]              # Chỉ backend (cô lập)
 
   prometheus:
     networks: [monitoring, backend]
 ```
 
-`db` chỉ trong `backend` (internal) → web không reach trực tiếp → security.
+`db` chỉ ở trong `backend` (internal: true) → web không gọi trực tiếp tới db được → tăng tính bảo mật.
 
 ### Network alias
 
@@ -83,7 +83,7 @@ services:
         aliases: [db, db-master]
 ```
 
-App connect `db:3306` → resolve to db-primary. Easy swap implementation.
+App connect `db:3306` → resolve về db-primary. Dễ dàng swap implementation mà không cần đổi code app.
 
 ### Static IP
 
@@ -101,11 +101,11 @@ services:
         ipv4_address: 172.20.0.10
 ```
 
-Rarely needed; prefer DNS by service name.
+Hiếm khi cần; ưu tiên dùng DNS qua tên service.
 
 ## Volumes
 
-### Named volume (managed by Docker)
+### Named volume (Do Docker quản lý)
 
 ```yaml
 volumes:
@@ -128,13 +128,13 @@ services:
 ```
 
 ```bash
-# List
+# Liệt kê
 docker volume ls
 
-# Inspect
+# Inspect chi tiết
 docker volume inspect vprofile_db-data
 
-# Backup
+# Backup volume
 docker run --rm -v vprofile_db-data:/data \
     -v $(pwd):/backup alpine \
     tar -czf /backup/db-$(date +%F).tar.gz /data
@@ -145,7 +145,7 @@ docker run --rm -v vprofile_db-data:/data \
     tar -xzf /backup/db-2026-05-31.tar.gz -C /
 ```
 
-### Bind mount
+### Bind mount (Mount thư mục từ host)
 
 ```yaml
 services:
@@ -157,20 +157,20 @@ services:
       # Config read-only
       - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
 
-      # Host log
+      # Log ra host
       - /var/log/vprofile:/app/logs
 
-      # Cache (writable)
+      # Cache (cho phép write)
       - ./.cache:/root/.cache:delegated
 ```
 
 Mount options:
 - `ro`: read-only.
-- `cached`: better perf macOS (host wins).
-- `delegated`: better perf macOS (container wins).
-- `consistent`: strong consistency (slow).
+- `cached`: tối ưu cho macOS (host wins — host là source of truth).
+- `delegated`: tối ưu cho macOS (container wins).
+- `consistent`: consistency mạnh (chậm hơn).
 
-### tmpfs
+### tmpfs (Volume trong RAM)
 
 ```yaml
 services:
@@ -180,9 +180,9 @@ services:
       - /run:size=100M,mode=1770,uid=1000
 ```
 
-RAM-backed, fast, ephemeral.
+RAM-backed → cực nhanh, ephemeral (mất khi container restart).
 
-### Volume from external
+### Reuse volume external
 
 ```yaml
 volumes:
@@ -191,7 +191,7 @@ volumes:
     name: legacy-app-data
 ```
 
-Reuse existing volume từ other project.
+Dùng lại volume đã tồn tại từ project khác.
 
 ## Healthcheck + depends_on
 
@@ -217,18 +217,18 @@ services:
         condition: service_completed_successfully
 ```
 
-Conditions:
-- `service_started` (default): container start.
-- `service_healthy`: healthcheck pass.
-- `service_completed_successfully`: exit 0 (for init container pattern).
+Các condition:
+- `service_started` (mặc định): container đã start.
+- `service_healthy`: healthcheck đã pass.
+- `service_completed_successfully`: container exit code 0 (cho init container pattern).
 
-## Profiles — selective start
+## Profiles — Khởi động chọn lọc
 
 ```yaml
 services:
   db:
     image: mariadb
-    # No profile = always start
+    # Không có profile = luôn start
 
   cache:
     image: redis
@@ -244,20 +244,20 @@ services:
 ```
 
 ```bash
-docker compose up -d              # Only db (no profile)
+docker compose up -d              # Chỉ db (không có profile)
 docker compose --profile full up -d   # db + cache
 docker compose --profile monitoring up -d
 docker compose --profile full --profile monitoring up -d
 ```
 
-Use case: dev minimal, full stack, debug tools.
+Use case: dev minimal, full stack, debug tool — kích hoạt khi cần.
 
 ## Environment + secrets
 
-### .env file
+### File .env
 
 ```text
-# .env (not committed)
+# .env (KHÔNG commit lên Git)
 DB_PASSWORD=Secret123
 API_KEY=sk-xxx
 ```
@@ -266,17 +266,17 @@ API_KEY=sk-xxx
 services:
   db:
     environment:
-      MYSQL_PASSWORD: ${DB_PASSWORD}    # Variable substitution
+      MYSQL_PASSWORD: ${DB_PASSWORD}    # Substitute từ env
 ```
 
-### env_file
+### env_file (Đa file env)
 
 ```yaml
 services:
   api:
     env_file:
       - .env.common
-      - .env.${ENV}              # .env.production or .env.dev
+      - .env.${ENV}              # .env.production hoặc .env.dev
 ```
 
 ### Secrets
@@ -286,7 +286,7 @@ secrets:
   db_password:
     file: ./secrets/db_password.txt
   api_key:
-    external: true               # From Swarm/external
+    external: true               # Lấy từ Swarm/external store
 
 services:
   db:
@@ -296,15 +296,15 @@ services:
       MYSQL_PASSWORD_FILE: /run/secrets/db_password
 ```
 
-Secret mount as `/run/secrets/<name>` file. App read file.
+Secret được mount thành file `/run/secrets/<name>`. App đọc file → tránh được secret xuất hiện trong env (giảm rủi ro lộ qua `docker inspect`).
 
-## Multiple compose files
+## Multiple compose files (Compose nhiều file)
 
 ```bash
-docker-compose.yml              # Base
-docker-compose.override.yml      # Auto-load (usually dev)
-docker-compose.prod.yml          # Production override
-docker-compose.test.yml          # Test override
+docker-compose.yml              # File base
+docker-compose.override.yml      # Auto-load (thường cho dev)
+docker-compose.prod.yml          # Override cho production
+docker-compose.test.yml          # Override cho test
 ```
 
 ```bash
@@ -312,16 +312,16 @@ docker compose up               # base + override (dev)
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up
 ```
 
-Pattern: base immutable, environment-specific override.
+Pattern: file base bất biến, file override cho từng environment cụ thể.
 
-### override.yml example
+### override.yml ví dụ
 
 ```yaml
 # docker-compose.override.yml (dev)
 services:
   api:
     build:
-      target: dev          # Multi-stage Dockerfile dev target
+      target: dev          # Multi-stage Dockerfile target dev
     volumes:
       - ./src:/app/src     # Live reload code
     environment:
@@ -330,12 +330,12 @@ services:
       - "5005:5005"        # Debugger port
 ```
 
-### prod.yml
+### prod.yml ví dụ
 
 ```yaml
 services:
   api:
-    image: ${REGISTRY}/vprofile:${VERSION}    # Pre-built
+    image: ${REGISTRY}/vprofile:${VERSION}    # Image đã build sẵn (không build tại chỗ)
     restart: unless-stopped
     deploy:
       resources:
@@ -352,7 +352,7 @@ services:
         max-file: "3"
 ```
 
-## Resource constraints
+## Resource constraints (Giới hạn tài nguyên)
 
 ```yaml
 services:
@@ -373,7 +373,7 @@ services:
         soft: 65535
         hard: 65535
 
-    # Block I/O
+    # Giới hạn Block I/O
     blkio_config:
       weight: 500
       device_read_bps:
@@ -395,9 +395,9 @@ services:
         tag: "{{.Name}}/{{.ID}}"
 ```
 
-Other drivers: `syslog`, `journald`, `gelf`, `fluentd`, `awslogs`, `gcplogs`, `loki`.
+Các driver khác: `syslog`, `journald`, `gelf`, `fluentd`, `awslogs`, `gcplogs`, `loki`.
 
-Loki driver:
+Loki driver (gửi log thẳng vào Loki):
 
 ```yaml
 logging:
@@ -410,7 +410,7 @@ logging:
 
 ## Init container pattern
 
-Run task once before main start:
+Chạy task 1 lần trước khi service chính start:
 
 ```yaml
 services:
@@ -429,7 +429,7 @@ services:
     restart: "no"
 ```
 
-`migrate` run once, exit, then `app` start.
+`migrate` chạy 1 lần, exit thành công, sau đó `app` mới start.
 
 ## Scaling
 
@@ -437,18 +437,18 @@ services:
 docker compose up -d --scale api=3
 ```
 
-3 instance of api. Frontend (nginx) load balance via DNS:
+3 instance của `api`. Frontend (nginx) load balance qua DNS:
 
 ```nginx
 upstream api {
     server api:8080 max_fails=3 fail_timeout=10s;
-    # Compose resolve api → all 3 IPs
+    # Compose tự resolve tên "api" → tất cả 3 IP của 3 instance
 }
 ```
 
-Production scale = K8s, not Compose. Compose scale OK for dev/test.
+Production scale = K8s, không phải Compose. Scale qua Compose OK cho dev/test.
 
-## Production vProfile compose
+## Production vProfile compose (đầy đủ)
 
 ```yaml
 version: '3.9'
@@ -584,17 +584,17 @@ secrets:
     file: ./secrets/mq_password.txt
 ```
 
-Production-ready single-host deployment.
+Đây là deployment production-ready cho single-host.
 
 ## Tóm tắt bài 2
 
-- **Custom networks** (internal: true) cho tier isolation.
-- **Healthcheck + depends_on condition** ordered startup.
-- **Profiles** selective start cho dev/full/monitoring.
-- **Secrets** file mount thay env hardcode.
-- **Override files** dev/prod/test pattern.
-- **Logging driver** Loki/Fluentd cho production aggregation.
+- **Custom networks** (internal: true) cho cô lập tier.
+- **Healthcheck + depends_on condition** cho ordered startup.
+- **Profiles** selective start cho dev / full / monitoring.
+- **Secrets** mount qua file, tránh hardcode env.
+- **Override files** theo pattern dev / prod / test.
+- **Logging driver** Loki / Fluentd cho production aggregation.
 - **Init container** pattern với `service_completed_successfully`.
-- **Resource limits** + **ulimits** production constraints.
+- **Resource limits** + **ulimits** = production constraint.
 
 **Bài kế tiếp** → [Bài 3: Docker Swarm, Buildx, security scanning](03-docker-swarm-buildx.md)
