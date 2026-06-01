@@ -1,10 +1,10 @@
 # Bài 2: Jenkins installation và setup từ A-Z
 
-Bài 1 overview. Bài này **install Jenkins production-grade** + configure plugin + agent + security.
+Bài 1 đã overview Jenkins. Bài này thực hành **cài đặt Jenkins production-grade** + cấu hình plugin + agent + security.
 
 ## Setup Jenkins server
 
-### EC2 launch
+### Launch EC2
 
 ```bash
 aws ec2 run-instances \
@@ -18,9 +18,9 @@ aws ec2 run-instances \
     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=jenkins-master}]'
 ```
 
-`t3.medium` (4 GB RAM) minimum cho Jenkins master. Build agents = separate.
+`t3.medium` (4 GB RAM) là minimum cho Jenkins master. Build agent nên tách riêng (không build trên master).
 
-### `jenkins-install.sh` user data
+### Script user data `jenkins-install.sh`
 
 ```bash
 #!/bin/bash
@@ -28,18 +28,18 @@ set -e
 
 dnf update -y
 
-# Java 17 (Jenkins LTS 2.426+ require)
+# Java 17 (Jenkins LTS 2.426+ bắt buộc Java 17)
 dnf install -y java-17-openjdk java-17-openjdk-devel
 
-# Jenkins repo
+# Thêm repo Jenkins
 wget -O /etc/yum.repos.d/jenkins.repo \
     https://pkg.jenkins.io/redhat-stable/jenkins.repo
 rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
-# Install
+# Cài đặt
 dnf install -y jenkins
 
-# Configure JVM
+# Tinh chỉnh JVM
 sed -i 's|^Environment="JAVA_OPTS=.*|Environment="JAVA_OPTS=-Djava.awt.headless=true -Xms1g -Xmx2g"|' \
     /lib/systemd/system/jenkins.service
 
@@ -47,22 +47,22 @@ systemctl daemon-reload
 systemctl enable --now jenkins
 ```
 
-### First login
+### Lần đầu login
 
 ```bash
-# Get initial admin password
+# Lấy initial admin password
 sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 ```
 
-Browser `http://<jenkins-ip>:8080`:
+Truy cập browser `http://<jenkins-ip>:8080`:
 1. Paste initial password.
 2. **Install suggested plugins** (Git, Pipeline, ...).
-3. Create admin user.
-4. URL config.
+3. Tạo admin user.
+4. Cấu hình URL.
 
 ## Reverse proxy nginx + HTTPS
 
-Jenkins port 8080 → nginx :443 với cert:
+Jenkins chạy ở port 8080 → expose qua nginx :443 với cert HTTPS:
 
 ```bash
 dnf install -y nginx
@@ -98,36 +98,36 @@ server {
         proxy_buffering off;
         proxy_http_version 1.1;
 
-        # CLI websocket
+        # Hỗ trợ CLI websocket
         proxy_set_header Connection "upgrade";
         proxy_set_header Upgrade $http_upgrade;
     }
 }
 EOF
 
-# Cert with Let's Encrypt
+# Cert với Let's Encrypt
 dnf install -y certbot python3-certbot-nginx
 certbot --nginx -d jenkins.acme.com --non-interactive --agree-tos -m admin@acme.com
 
 systemctl reload nginx
 ```
 
-Update Jenkins URL: Manage Jenkins → System → Jenkins URL = `https://jenkins.acme.com/`.
+Cập nhật Jenkins URL: Manage Jenkins → System → Jenkins URL = `https://jenkins.acme.com/`.
 
-## Configuration as Code (JCasC)
+## Configuration as Code (JCasC) — Cấu hình bằng code
 
-Jenkins config thường click chuột → khó reproduce. **JCasC** = YAML config:
+Jenkins config thường được click chuột → khó reproduce. **JCasC** cho phép cấu hình bằng file YAML, version control được:
 
 ```bash
-# Install plugin "configuration-as-code"
+# Cài plugin "configuration-as-code"
 ```
 
-`/var/lib/jenkins/casc.yaml`:
+File `/var/lib/jenkins/casc.yaml`:
 
 ```yaml
 jenkins:
   systemMessage: "Jenkins for vProfile production"
-  numExecutors: 0          # No build on master
+  numExecutors: 0          # Không build trên master
   scmCheckoutRetryCount: 3
 
   authorizationStrategy:
@@ -210,63 +210,63 @@ credentials:
               description: "SonarCloud"
 ```
 
-Mount casc.yaml + env file → Jenkins auto-apply.
+Mount casc.yaml + env file → Jenkins tự động apply khi start.
 
-Export current config:
+Export config hiện tại để track:
 
 ```bash
 # Browser: Manage Jenkins → Configuration as Code → Download
 ```
 
-Commit `casc.yaml` lên Git → version control config.
+Commit `casc.yaml` lên Git → version control toàn bộ Jenkins config.
 
 ## Plugin management
 
-Top plugin DevOps must install:
+Các plugin DevOps must-install (bắt buộc):
 
 | Plugin | Mục đích |
 |---|---|
 | **Pipeline** | Declarative pipeline (built-in) |
-| **Blue Ocean** | Modern pipeline UI |
+| **Blue Ocean** | UI pipeline hiện đại |
 | **Git** | SCM (built-in) |
-| **GitHub** | GitHub integration |
+| **GitHub** | Tích hợp GitHub |
 | **GitHub Branch Source** | Multi-branch pipeline |
 | **Docker** | Docker build/push |
-| **Kubernetes** | K8s agents + deploy |
-| **Pipeline Maven** | Maven integration |
+| **Kubernetes** | K8s agent + deploy |
+| **Pipeline Maven** | Tích hợp Maven |
 | **Pipeline Utility Steps** | readJSON, readYaml, ... |
-| **Credentials Binding** | Inject secret |
-| **AnsiColor** | Color terminal output |
-| **Build Timeout** | Auto-kill long build |
-| **Workspace Cleanup** | Cleanup khi end |
-| **Email Extension** | Rich email notification |
-| **Slack Notification** | Slack integration |
-| **SonarQube Scanner** | Sonar analysis |
-| **JUnit** | Test report (built-in) |
+| **Credentials Binding** | Inject secret vào pipeline |
+| **AnsiColor** | Output terminal có màu |
+| **Build Timeout** | Tự kill build chạy quá lâu |
+| **Workspace Cleanup** | Cleanup khi build xong |
+| **Email Extension** | Email notification có rich content |
+| **Slack Notification** | Tích hợp Slack |
+| **SonarQube Scanner** | Phân tích code với Sonar |
+| **JUnit** | Báo cáo test (built-in) |
 | **HTML Publisher** | Custom HTML report |
-| **Build Discarder** | Old build cleanup |
-| **OWASP Dependency-Check** | Vuln scan |
-| **Configuration as Code** | YAML config |
+| **Build Discarder** | Cleanup build cũ |
+| **OWASP Dependency-Check** | Quét lỗ hổng |
+| **Configuration as Code** | YAML config (JCasC) |
 | **Role-based Authorization** | RBAC |
-| **Job DSL** | Programmatic job creation |
-| **Build User Vars** | Variable `BUILD_USER` |
+| **Job DSL** | Tạo job bằng code |
+| **Build User Vars** | Variable `BUILD_USER` trong pipeline |
 
-Install: Manage Jenkins → Plugins → Available → check → Install without restart.
+Cài qua UI: Manage Jenkins → Plugins → Available → check → Install without restart.
 
-CLI install:
+Cài qua CLI:
 
 ```bash
-# Jenkins CLI jar
+# Lấy Jenkins CLI jar
 wget http://jenkins.acme.com/jnlpJars/jenkins-cli.jar
 
-# Install plugin
+# Cài plugin
 java -jar jenkins-cli.jar -s https://jenkins.acme.com -auth admin:token \
     install-plugin docker-workflow:1.28
 ```
 
-## Build agents
+## Build agents (Máy build)
 
-### Static agent on EC2
+### Static agent on EC2 (Agent cố định)
 
 EC2 chạy Java + Jenkins agent JAR:
 
@@ -274,13 +274,13 @@ EC2 chạy Java + Jenkins agent JAR:
 # Trên EC2 agent
 dnf install -y java-17-openjdk git maven docker
 
-# Add jenkins user
+# Tạo jenkins user
 useradd -m -s /bin/bash jenkins
 usermod -aG docker jenkins
 mkdir -p /home/jenkins/agent
 chown -R jenkins:jenkins /home/jenkins
 
-# Get agent jar
+# Lấy agent.jar
 wget http://jenkins.acme.com/jnlpJars/agent.jar -O /home/jenkins/agent.jar
 ```
 
@@ -292,7 +292,7 @@ Master: Manage Jenkins → Nodes → New Node:
 - Launch method: **Launch agent by connecting it to the controller** (JNLP).
 - Availability: Always.
 
-Get secret token → copy command → run trên agent:
+Lấy secret token → copy command → chạy trên agent:
 
 ```bash
 sudo -u jenkins java -jar /home/jenkins/agent.jar \
@@ -302,7 +302,7 @@ sudo -u jenkins java -jar /home/jenkins/agent.jar \
     -workDir /home/jenkins/agent
 ```
 
-Tạo systemd unit để agent persistent:
+Tạo systemd unit để agent chạy persistent (tự restart khi crash):
 
 ```ini
 # /etc/systemd/system/jenkins-agent.service
@@ -324,12 +324,12 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-### Kubernetes agent (dynamic)
+### Kubernetes agent (dynamic — best practice hiện đại)
 
-Recommended modern approach: ephemeral agent in K8s pod.
+Cách tiếp cận khuyến nghị: agent ephemeral (tạm thời) chạy trong K8s pod, tự tạo và tự huỷ.
 
 ```yaml
-# casc.yaml clouds section
+# casc.yaml — section clouds
 clouds:
   - kubernetes:
       name: k8s
@@ -356,7 +356,7 @@ clouds:
                 mountPath: /var/run/docker.sock
 ```
 
-Pipeline:
+Pipeline sử dụng:
 
 ```groovy
 pipeline {
@@ -378,31 +378,31 @@ pipeline {
 }
 ```
 
-Mỗi build → spawn pod mới → terminate sau xong. Zero ops, scale infinite.
+Mỗi build → spawn pod mới → tự terminate sau khi xong. **Zero ops** (không cần vận hành thủ công), **scale infinite** (không giới hạn).
 
 ### Spot agent on AWS
 
-EC2 Fleet plugin + Spot instance → save 70%.
+EC2 Fleet plugin + Spot instance → tiết kiệm 70% so với on-demand.
 
-Master define template → Jenkins auto-provision spot khi queue có job → terminate khi idle.
+Master định nghĩa template → Jenkins tự provision spot khi queue có job → tự terminate khi idle.
 
 ## Backup strategy
 
-Jenkins state ở `/var/lib/jenkins/`:
-- `config.xml` — master config.
-- `jobs/` — job definition + build history.
-- `users/` — user account.
-- `secrets/` — encrypted credential.
-- `plugins/` — installed plugins.
+Toàn bộ state Jenkins lưu ở `/var/lib/jenkins/`:
+- `config.xml` — config master.
+- `jobs/` — định nghĩa job + lịch sử build.
+- `users/` — tài khoản user.
+- `secrets/` — credential đã encrypt.
+- `plugins/` — plugin đã cài.
 
 ### Thin Backup plugin
 
 Manage Jenkins → Plugin → Install "Thin Backup":
 
-Config: Manage Jenkins → ThinBackup → Configuration:
+Cấu hình: Manage Jenkins → ThinBackup → Configuration:
 - Backup directory: `/var/backup/jenkins`.
-- Full backup schedule: `H 2 * * *` (daily 2am).
-- Differential: `H * * * *` (hourly).
+- Full backup schedule: `H 2 * * *` (mỗi ngày 2h sáng).
+- Differential: `H * * * *` (mỗi giờ).
 - Max stored backups: 7.
 
 ### Manual backup script
@@ -418,17 +418,17 @@ S3_BUCKET="s3://acme-backups/jenkins"
 
 mkdir -p $BACKUP_DIR
 
-# Exclude workspace + cache
+# Loại trừ workspace + cache
 tar -czf $BACKUP_DIR/jenkins-$DATE.tar.gz \
     --exclude='workspace' \
     --exclude='caches' \
     --exclude='logs' \
     -C /var/lib jenkins
 
-# Upload S3
+# Upload lên S3
 aws s3 cp $BACKUP_DIR/jenkins-$DATE.tar.gz $S3_BUCKET/
 
-# Retention 30d local, 90d S3
+# Giữ 30 ngày local, 90 ngày trên S3
 find $BACKUP_DIR -name 'jenkins-*.tar.gz' -mtime +30 -delete
 aws s3 ls $S3_BUCKET/ | awk '{print $4}' | sort | head -n -90 | \
     xargs -I {} aws s3 rm $S3_BUCKET/{}
@@ -439,11 +439,11 @@ echo "Backup complete: jenkins-$DATE.tar.gz"
 ```bash
 chmod +x /usr/local/bin/jenkins-backup.sh
 
-# Cron daily 2am
+# Cron hàng ngày 2h sáng
 echo "0 2 * * * /usr/local/bin/jenkins-backup.sh" | crontab -
 ```
 
-### Restore
+### Restore (Phục hồi)
 
 ```bash
 systemctl stop jenkins
@@ -455,18 +455,18 @@ systemctl start jenkins
 
 ## Security hardening
 
-### Disable Jenkins CLI nếu không cần
+### Disable Jenkins CLI nếu không dùng
 
-`JENKINS_OPTS="--httpListenAddress=127.0.0.1"` → chỉ accept local + reverse proxy.
+`JENKINS_OPTS="--httpListenAddress=127.0.0.1"` → chỉ accept kết nối local + qua reverse proxy.
 
 ### CSRF protection
 
-Default enabled. Manage Jenkins → Security → "Prevent Cross Site Request Forgery exploits" — keep on.
+Mặc định đã bật. Manage Jenkins → Security → "Prevent Cross Site Request Forgery exploits" — giữ on.
 
-### CSP for plugin
+### CSP cho plugin
 
 ```bash
-# /etc/sysconfig/jenkins or systemd override
+# /etc/sysconfig/jenkins hoặc systemd override
 JAVA_OPTS="-Dhudson.model.DirectoryBrowserSupport.CSP=\"sandbox; default-src 'self'; ...\""
 ```
 
@@ -474,15 +474,15 @@ JAVA_OPTS="-Dhudson.model.DirectoryBrowserSupport.CSP=\"sandbox; default-src 'se
 
 Plugin `Audit Trail`:
 - Log mọi action vào file.
-- Forward to ELK/Splunk for analysis.
+- Forward đến ELK/Splunk để phân tích.
 
-### Block known unsafe plugin
+### Block plugin known unsafe
 
-Manage Jenkins → Plugin → check vuln advisory. Update or remove.
+Manage Jenkins → Plugin → kiểm tra security advisory. Update hoặc remove plugin có lỗ hổng.
 
-### Update Jenkins thường xuyên
+### Update Jenkins định kỳ
 
-LTS release mỗi quý. Security patch mỗi 2-4 tuần.
+LTS release ra mỗi quý. Security patch ra mỗi 2-4 tuần.
 
 ```bash
 dnf update -y jenkins
@@ -493,18 +493,18 @@ systemctl restart jenkins
 
 ### Built-in metrics
 
-Manage Jenkins → System Information → JVM metrics, executor utilization, ...
+Manage Jenkins → System Information → xem JVM metric, executor utilization, ...
 
 ### Prometheus export
 
 Plugin "Prometheus metrics":
 - Endpoint `/prometheus/`.
-- Scrape with Prometheus.
-- Dashboard Grafana có sẵn.
+- Scrape bằng Prometheus.
+- Có sẵn dashboard cho Grafana.
 
-### Alert on stuck queue
+### Alert khi queue bị stuck (kẹt)
 
-Long queue = bottleneck. Alarm khi queue > 10:
+Queue dài = bottleneck (nút thắt cổ chai). Alarm khi queue > 10:
 
 ```promql
 jenkins_queue_size_value{type="buildable"} > 10
@@ -514,24 +514,24 @@ jenkins_queue_size_value{type="buildable"} > 10
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Build trên master | OOM master | Build trên agent, master executor = 0 |
-| Plugin outdated | Vuln, broken pipeline | Auto-update + monitor |
-| Disk Jenkins đầy | Build fail | Workspace cleanup, log rotation |
-| Static agent SPOF | Build queue stuck | Use K8s dynamic agents |
-| Config click chuột | Không reproduce | Configuration as Code |
-| Credential trong Jenkinsfile | Lộ secret | Credentials Store + binding |
-| Plugin install không test | Crash production | Test trên staging Jenkins |
-| Backup không có | Loss config | Daily backup S3 |
+| Build trên master | OOM master crash | Build trên agent, set master executor = 0 |
+| Plugin outdated | Vuln + pipeline broken | Auto-update + monitor |
+| Disk Jenkins đầy | Build fail | Workspace cleanup + log rotation |
+| Static agent thành SPOF | Build queue kẹt | Chuyển sang K8s dynamic agent |
+| Config click chuột | Không reproduce được | Dùng Configuration as Code |
+| Credential trong Jenkinsfile | Lộ secret | Dùng Credentials Store + binding |
+| Plugin install không test | Crash production | Test trên Jenkins staging trước |
+| Không backup | Mất config khi crash | Daily backup + sync lên S3 |
 
 ## Tóm tắt bài 2
 
 - Jenkins master EC2 t3.medium + Java 17 + JVM tune Xmx 2g.
 - **Nginx reverse proxy** + Let's Encrypt cert cho HTTPS.
-- **Configuration as Code** (JCasC) → YAML config → version control.
+- **Configuration as Code** (JCasC) → cấu hình bằng YAML → version control.
 - 20+ plugin DevOps must-have.
-- **Kubernetes agents** dynamic = best practice modern.
-- **Thin Backup** plugin + S3 sync daily.
+- **Kubernetes agent dynamic** = best practice hiện đại.
+- **Thin Backup** plugin + sync S3 hàng ngày.
 - Security: CSRF on, audit log, update LTS định kỳ.
-- Prometheus metric export cho monitoring.
+- Export Prometheus metric cho monitoring.
 
 **Bài kế tiếp** → [Bài 3: Declarative Pipeline syntax đầy đủ](03-declarative-pipeline.md)

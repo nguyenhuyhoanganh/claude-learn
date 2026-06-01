@@ -1,10 +1,10 @@
 # Bài 3: Services, Ingress, Network Policy
 
-Networking là phần phức tạp nhất K8s. Bài này dạy đầy đủ Service types, Ingress, NetworkPolicy.
+Networking là phần phức tạp nhất của K8s. Bài này đi đầy đủ qua các loại Service, Ingress, và NetworkPolicy.
 
-## Service types
+## Service types (Các loại Service)
 
-### ClusterIP (default)
+### ClusterIP (mặc định)
 
 ```yaml
 apiVersion: v1
@@ -23,7 +23,7 @@ spec:
       protocol: TCP
 ```
 
-Internal only. DNS: `vprofile-app.vprofile.svc.cluster.local`.
+Chỉ truy cập được **từ bên trong cluster**. DNS: `vprofile-app.vprofile.svc.cluster.local`.
 
 ### NodePort
 
@@ -33,12 +33,12 @@ spec:
   ports:
     - port: 80
       targetPort: 8080
-      nodePort: 30080      # 30000-32767 range
+      nodePort: 30080      # Trong range 30000-32767
 ```
 
-Expose port trên **mọi node** (ANY node IP:30080 → service).
+Expose port trên **mọi node** trong cluster (truy cập qua bất kỳ node IP:30080 → service).
 
-Use case: dev/test, on-prem without LoadBalancer.
+Use case: dev/test, on-prem khi không có cloud LoadBalancer.
 
 ### LoadBalancer
 
@@ -54,12 +54,12 @@ spec:
     - 1.2.3.0/24
 ```
 
-Cloud-provisioned LB:
-- AWS: NLB (default) or ALB (with AWS Load Balancer Controller).
-- GCP: Cloud Load Balancer.
-- Azure: Load Balancer.
+K8s yêu cầu cloud provider provision một Load Balancer thật:
+- **AWS**: NLB (mặc định) hoặc ALB (cần AWS Load Balancer Controller).
+- **GCP**: Cloud Load Balancer.
+- **Azure**: Azure Load Balancer.
 
-`loadBalancerSourceRanges` whitelist IP range.
+`loadBalancerSourceRanges` whitelist IP nào được phép kết nối.
 
 ### ExternalName
 
@@ -69,7 +69,9 @@ spec:
   externalName: my-db.acme.com
 ```
 
-DNS CNAME alias. No proxy, just DNS resolution.
+DNS CNAME alias — pod query service này sẽ được redirect tới `my-db.acme.com`. Không proxy traffic, chỉ resolve DNS.
+
+Use case: trỏ tới external service (vd: managed DB ngoài cluster) qua tên service nội bộ.
 
 ### Headless Service
 
@@ -81,36 +83,36 @@ spec:
   ports: [...]
 ```
 
-Return individual pod IPs (not VIP). Use cho StatefulSet, custom load balancing in app.
+Trả về **IP của từng pod** thay vì 1 VIP (Virtual IP). Dùng cho StatefulSet, hoặc khi muốn load balancing tự xử lý ở app layer.
 
-## Service discovery
+## Service discovery (Khám phá service)
 
-Pod resolve service:
+Pod resolve service qua DNS:
 
 ```bash
-# Same namespace
+# Cùng namespace
 vprofile-app
 vprofile-app:80
 
-# Different namespace
+# Khác namespace
 vprofile-app.vprofile
 
-# Fully qualified
+# Fully qualified domain name (FQDN)
 vprofile-app.vprofile.svc.cluster.local
 ```
 
-Env variables auto-injected (legacy):
+Env variables cũng được auto-inject (legacy method):
 
 ```bash
 VPROFILE_APP_SERVICE_HOST=10.0.0.5
 VPROFILE_APP_SERVICE_PORT=80
 ```
 
-DNS preferred over env.
+→ DNS được khuyến nghị hơn env variable (linh hoạt hơn, không cần restart pod khi service đổi).
 
-## Endpoints
+## Endpoints (Danh sách pod thực sự đứng sau Service)
 
-Service select pod → create Endpoints object:
+Khi Service select pod → K8s tạo Endpoints object liệt kê pod đang serve:
 
 ```bash
 kubectl get endpoints vprofile-app
@@ -118,13 +120,15 @@ kubectl get endpoints vprofile-app
 # vprofile-app   10.244.0.5:8080,10.244.1.7:8080,...     5d
 ```
 
-If endpoints empty → selector wrong hoặc pod not ready.
+→ Nếu endpoints empty → selector sai hoặc pod chưa Ready. Đây là chỗ debug đầu tiên khi service không hoạt động.
 
-## Ingress
+## Ingress — Entry point duy nhất cho HTTP routing
 
-Single entry point cho multiple services with HTTP routing.
+Cho phép định tuyến HTTP từ 1 entry point đến nhiều service.
 
 ### Install Ingress Controller (nginx)
+
+Ingress object chỉ là khai báo; cần Ingress Controller thực thi:
 
 ```bash
 helm install ingress-nginx ingress-nginx/ingress-nginx \
@@ -132,9 +136,9 @@ helm install ingress-nginx ingress-nginx/ingress-nginx \
     --set controller.service.type=LoadBalancer
 ```
 
-Other options: Traefik, HAProxy, AWS Load Balancer Controller, Istio Gateway.
+Các option khác: Traefik, HAProxy, AWS Load Balancer Controller, Istio Gateway.
 
-### Basic Ingress
+### Ingress cơ bản
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -180,14 +184,14 @@ spec:
       secretName: vprofile-tls
 ```
 
-`pathType`:
-- `Exact`: exact match.
-- `Prefix`: path begins with.
-- `ImplementationSpecific`: leave to controller.
+`pathType` — cách match path:
+- `Exact`: khớp chính xác.
+- `Prefix`: path bắt đầu bằng giá trị.
+- `ImplementationSpecific`: tuỳ vào controller xử lý.
 
-### Cert-manager + Let's Encrypt
+### Cert-manager + Let's Encrypt (Tự động HTTPS)
 
-Install cert-manager:
+Cài cert-manager:
 
 ```bash
 helm install cert-manager jetstack/cert-manager \
@@ -195,7 +199,7 @@ helm install cert-manager jetstack/cert-manager \
     --set installCRDs=true
 ```
 
-ClusterIssuer:
+ClusterIssuer (định nghĩa nguồn cert):
 
 ```yaml
 apiVersion: cert-manager.io/v1
@@ -214,9 +218,9 @@ spec:
             ingressClassName: nginx
 ```
 
-Ingress annotation `cert-manager.io/cluster-issuer: letsencrypt-prod` → auto issue + renew cert.
+Khi Ingress có annotation `cert-manager.io/cluster-issuer: letsencrypt-prod` → cert-manager tự issue cert + auto renew khi sắp hết hạn.
 
-### Advanced annotations
+### Advanced annotations cho Ingress nginx
 
 ```yaml
 metadata:
@@ -224,7 +228,7 @@ metadata:
     # Rate limiting
     nginx.ingress.kubernetes.io/limit-rps: "100"
 
-    # Body size
+    # Giới hạn kích cỡ request body
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 
     # Timeout
@@ -235,22 +239,22 @@ metadata:
     nginx.ingress.kubernetes.io/enable-cors: "true"
     nginx.ingress.kubernetes.io/cors-allow-origin: "https://vprofile.acme.com"
 
-    # Auth (basic)
+    # Basic auth
     nginx.ingress.kubernetes.io/auth-type: basic
     nginx.ingress.kubernetes.io/auth-secret: vprofile-basic-auth
     nginx.ingress.kubernetes.io/auth-realm: "Admin Area"
 
-    # Whitelist IP
+    # Whitelist IP — chỉ cho phép các range này truy cập
     nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,1.2.3.0/24"
 
-    # Canary
+    # Canary deployment
     nginx.ingress.kubernetes.io/canary: "true"
     nginx.ingress.kubernetes.io/canary-weight: "10"
 ```
 
-### Gateway API (modern)
+### Gateway API (Phiên bản hiện đại của Ingress)
 
-Successor of Ingress, more expressive:
+Successor của Ingress, expressive hơn rất nhiều:
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -288,13 +292,13 @@ spec:
         - {name: vprofile-web-canary, port: 80, weight: 10}
 ```
 
-Better separation: Gateway (admin) + HTTPRoute (app team).
+Tách biệt rõ ràng: Gateway (do admin/platform team quản) + HTTPRoute (do app team quản). Đây là sự cải tiến lớn so với Ingress (gộp cả 2 vào 1 object).
 
-## NetworkPolicy
+## NetworkPolicy — Firewall trong K8s
 
-Default: pod-to-pod traffic **unrestricted**. NetworkPolicy = K8s firewall.
+Mặc định: traffic pod-to-pod **hoàn toàn không giới hạn** (mọi pod có thể nói chuyện với mọi pod khác). NetworkPolicy = K8s firewall — restrict traffic.
 
-### Default deny
+### Default deny — chặn hết, rồi mới allow
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -303,13 +307,13 @@ metadata:
   name: default-deny-all
   namespace: vprofile
 spec:
-  podSelector: {}                    # All pods
+  podSelector: {}                    # Áp dụng cho mọi pod trong namespace
   policyTypes: [Ingress, Egress]
 ```
 
-All traffic denied. Then allow what's needed.
+Mọi traffic bị deny. Sau đó allow những gì cần.
 
-### Allow specific traffic
+### Allow traffic cụ thể
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -332,9 +336,9 @@ spec:
           port: 8080
 ```
 
-Only web tier can reach app tier:8080.
+Chỉ web tier được phép connect tới app tier port 8080.
 
-### Comprehensive policy
+### Policy đầy đủ (production)
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -348,9 +352,9 @@ spec:
       tier: app
   policyTypes: [Ingress, Egress]
 
-  # Inbound
+  # Inbound (vào)
   ingress:
-    # From web tier
+    # Từ web tier
     - from:
         - podSelector:
             matchLabels:
@@ -358,7 +362,7 @@ spec:
       ports:
         - {protocol: TCP, port: 8080}
 
-    # From Prometheus
+    # Từ Prometheus (cho scrape metrics)
     - from:
         - namespaceSelector:
             matchLabels:
@@ -369,9 +373,9 @@ spec:
       ports:
         - {protocol: TCP, port: 8080}
 
-  # Outbound
+  # Outbound (ra)
   egress:
-    # DNS
+    # DNS (cần thiết để resolve service)
     - to:
         - namespaceSelector:
             matchLabels:
@@ -382,7 +386,7 @@ spec:
       ports:
         - {protocol: UDP, port: 53}
 
-    # DB
+    # Database
     - to:
         - podSelector:
             matchLabels:
@@ -398,7 +402,7 @@ spec:
       ports:
         - {protocol: TCP, port: 11211}
 
-    # External (HTTPS to internet)
+    # External HTTPS đến internet (loại trừ private IP)
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -410,24 +414,24 @@ spec:
         - {protocol: TCP, port: 443}
 ```
 
-Zero-trust networking: explicit allow only.
+→ **Zero-trust networking**: chỉ explicit allow, mặc định deny.
 
-### CNI requirement
+### Yêu cầu về CNI plugin
 
-NetworkPolicy enforcement requires CNI plugin support:
-- **Calico**: ✓ (default many distros).
-- **Cilium**: ✓ (eBPF, modern).
+NetworkPolicy chỉ có hiệu lực khi CNI (Container Network Interface) plugin hỗ trợ:
+- **Calico**: ✓ (mặc định ở nhiều distro K8s).
+- **Cilium**: ✓ (modern, dựa trên eBPF).
 - **Weave Net**: ✓.
-- **Flannel**: ✗ (no enforcement, ignored).
+- **Flannel**: ✗ (không enforce, NetworkPolicy bị ignore).
 
-EKS default `vpc-cni` không enforce NetworkPolicy → enable Calico/Cilium addon.
+EKS mặc định dùng `vpc-cni` không enforce NetworkPolicy → cần enable Calico/Cilium addon.
 
-## Service Mesh — Istio brief
+## Service Mesh — giới thiệu Istio
 
-Beyond Ingress: mTLS, traffic splitting, observability built-in.
+Vượt qua Ingress: mTLS (mutual TLS) tự động, traffic splitting, observability tích hợp sẵn.
 
 ```yaml
-# Sidecar inject auto
+# Sidecar tự động inject vào pod khi namespace có label
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -439,7 +443,7 @@ spec:
   ...
 ```
 
-Istio Envoy sidecar injected → handle mTLS + traffic policy.
+Istio inject Envoy sidecar vào mọi pod → sidecar xử lý mTLS + traffic policy.
 
 VirtualService — advanced routing:
 
@@ -463,27 +467,27 @@ spec:
           weight: 10
 ```
 
-Header-based + weighted canary in 1 config.
+Header-based routing + weighted canary trong cùng 1 config.
 
-Alternative: **Linkerd** (simpler), **Cilium Service Mesh** (eBPF-based).
+Alternatives của Istio: **Linkerd** (đơn giản hơn nhiều), **Cilium Service Mesh** (dựa trên eBPF, không cần sidecar).
 
-## DNS
+## DNS trong K8s
 
-CoreDNS deployment in `kube-system` resolve cluster DNS.
+CoreDNS deployment chạy trong namespace `kube-system` đảm nhiệm resolve DNS cluster.
 
 ```bash
-# Test from pod
+# Test từ pod
 kubectl run -it --rm test --image=busybox --restart=Never -- sh
 nslookup vprofile-app
 nslookup vprofile-app.vprofile.svc.cluster.local
 ```
 
-Custom DNS:
+Custom DNS cho pod:
 
 ```yaml
 spec:
-  dnsPolicy: ClusterFirst       # Default
-  # Or: Default, ClusterFirstWithHostNet, None
+  dnsPolicy: ClusterFirst       # Mặc định
+  # Các option khác: Default, ClusterFirstWithHostNet, None
   dnsConfig:
     nameservers:
       - 8.8.8.8
@@ -491,9 +495,9 @@ spec:
       - acme.com
 ```
 
-## ExternalDNS
+## ExternalDNS — Tự động tạo Route 53 record
 
-Auto-create DNS record from Ingress:
+Tự động tạo DNS record bên ngoài (vd: Route 53) từ Ingress:
 
 ```bash
 helm install external-dns external-dns/external-dns \
@@ -504,7 +508,7 @@ helm install external-dns external-dns/external-dns \
     --set txtOwnerId=vprofile-cluster
 ```
 
-Ingress with annotation → ExternalDNS create Route 53 record:
+Ingress có annotation → ExternalDNS tự tạo record:
 
 ```yaml
 metadata:
@@ -512,29 +516,29 @@ metadata:
     external-dns.alpha.kubernetes.io/hostname: vprofile.acme.com
 ```
 
-No manual Route 53 update.
+→ Không cần thao tác Route 53 thủ công nữa, mọi thứ declarative trong K8s YAML.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Service selector không match | No endpoints | Verify labels |
-| NodePort production-facing | Security risk | Use Ingress + LB |
-| No NetworkPolicy | Lateral movement | Default deny + explicit allow |
-| Cert-manager rate limit | Cert fail | Use staging issuer trước, then prod |
-| Ingress no class | Multiple controller | Specify `ingressClassName` |
-| Flannel + NetworkPolicy | Silent no enforcement | Use Calico/Cilium |
-| Service mesh complexity | Hard to debug | Start without, add if needed |
+| Service selector không match pod label | Endpoints empty | Verify label trong pod |
+| NodePort hướng ra production | Rủi ro bảo mật | Dùng Ingress + LB |
+| Không có NetworkPolicy | Attacker lateral movement dễ | Default deny + explicit allow |
+| Cert-manager rate limit của Let's Encrypt | Issue cert fail | Dùng staging issuer trước, sau đó prod |
+| Ingress không có ingressClassName | Nhiều controller xung đột | Specify `ingressClassName` |
+| Dùng Flannel + NetworkPolicy | Policy không enforce silently | Đổi sang Calico/Cilium |
+| Service mesh phức tạp | Khó debug | Bắt đầu không có service mesh, thêm khi cần |
 
 ## Tóm tắt bài 3
 
-- **Service types**: ClusterIP, NodePort, LoadBalancer, ExternalName, Headless.
+- **Service types**: ClusterIP, NodePort, LoadBalancer, ExternalName, Headless — mỗi loại cho use case riêng.
 - DNS service discovery: `service.namespace.svc.cluster.local`.
 - **Ingress** + Ingress Controller (nginx/Traefik) cho HTTP routing.
-- **cert-manager** + Let's Encrypt = auto HTTPS.
-- **Gateway API** = modern successor to Ingress.
-- **NetworkPolicy** zero-trust, requires CNI support (Calico/Cilium).
-- **Istio/Linkerd** service mesh cho mTLS + advanced traffic.
-- **ExternalDNS** auto manage Route 53 records.
+- **cert-manager** + Let's Encrypt = auto HTTPS, không cần thao tác thủ công.
+- **Gateway API** = thế hệ mới thay thế Ingress, tách biệt admin/app concerns.
+- **NetworkPolicy** = zero-trust networking, yêu cầu CNI hỗ trợ (Calico/Cilium).
+- **Istio/Linkerd** service mesh cho mTLS + advanced traffic management.
+- **ExternalDNS** tự động manage Route 53 record từ K8s.
 
 **Bài kế tiếp** → [Bài 4: ConfigMap, Secret, RBAC, Pod Security](04-config-secret-rbac.md)
