@@ -518,14 +518,14 @@ curl -L https://grafana.com/api/dashboards/1860/revisions/latest/download \
 
 ### Long-term storage
 
-Prometheus retention 30 days default. For longer:
+Prometheus mặc định retention 30 ngày. Để lưu trữ lâu hơn:
 - **Thanos**: sidecar + object storage (S3).
-- **Cortex / Mimir**: scalable multi-tenant.
-- **VictoriaMetrics**: drop-in replacement, faster.
+- **Cortex / Mimir**: scalable, hỗ trợ multi-tenant.
+- **VictoriaMetrics**: drop-in replacement, nhanh hơn Prometheus.
 
 ### Federation
 
-Central Prometheus scrape from regional Prometheus:
+Central Prometheus scrape (lấy metric) từ các Prometheus regional:
 
 ```yaml
 - job_name: 'federate'
@@ -553,7 +553,7 @@ groups:
         expr: 100 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100
 ```
 
-Dashboard query `instance:node_cpu_usage:rate5m` → fast lookup.
+Dashboard query `instance:node_cpu_usage:rate5m` → lookup nhanh hơn nhiều.
 
 ## Bẫy thường gặp
 
@@ -570,12 +570,12 @@ Dashboard query `instance:node_cpu_usage:rate5m` → fast lookup.
 ## Tóm tắt bài 2
 
 - Production stack: **Prometheus + Alertmanager + Grafana + node_exporter + cAdvisor**.
-- **Service discovery**: EC2, K8s, Consul auto-find targets.
-- **Alert rules** golden signals + SLO burn rate.
+- **Service discovery**: EC2, K8s, Consul tự động tìm target.
+- **Alert rules** dựa trên golden signals + SLO burn rate.
 - **Alertmanager** routing: severity → Slack/PagerDuty.
-- **Inhibit rules** suppress noise.
+- **Inhibit rules** để suppress alert nhiễu.
 - **PromQL**: rate, sum by, histogram_quantile, predict_linear.
-- **Grafana provisioning** datasource + dashboard from file.
+- **Grafana provisioning** quản lý datasource + dashboard từ file.
 - **Long-term storage**: Thanos / Mimir / VictoriaMetrics.
 
 **Bài kế tiếp** → [Bài 3: Loki + ELK log + distributed tracing](03-loki-elk-tracing.md)
