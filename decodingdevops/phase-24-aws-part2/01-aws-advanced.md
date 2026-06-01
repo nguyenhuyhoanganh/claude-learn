@@ -1,10 +1,10 @@
-# Bài 1: AWS Part 2 — service nâng cao
+# Bài 1: AWS Part 2 — Service nâng cao
 
-Phase 13 cover IAM, EC2, VPC, S3, RDS. Bài này nâng cao: **Lambda, ECS, EKS, CloudFront, Route 53, Auto Scaling, Systems Manager** — service production-grade.
+Phase 13 đã cover IAM, EC2, VPC, S3, RDS. Bài này về các service nâng cao: **Lambda, ECS, EKS, CloudFront, Route 53, Auto Scaling, Systems Manager** — đây là các service production-grade bạn sẽ gặp hằng ngày.
 
-## Lambda — serverless function
+## Lambda — Serverless function
 
-> **Lambda** = chạy code không quản server. Pay per invocation + duration. Free tier 1M req/month.
+> **Lambda** = chạy code mà không cần quản lý server. Trả tiền theo lần invoke + duration. Free tier 1 triệu request/tháng.
 
 ```python
 # lambda_handler.py
@@ -33,78 +33,78 @@ aws lambda create-function \
 aws lambda invoke --function-name hello --payload '{}' response.json
 ```
 
-### Triggers
+### Triggers (Nguồn kích hoạt Lambda)
 
 | Trigger | Use case |
 |---|---|
 | API Gateway | REST API |
-| S3 event | Process upload (resize image, scan) |
-| EventBridge | Schedule, system event |
+| S3 event | Xử lý khi có upload (resize image, scan virus) |
+| EventBridge | Schedule (như cron), system event |
 | SQS / SNS | Async messaging |
-| DynamoDB Stream | React to DB change |
+| DynamoDB Stream | React khi DB thay đổi |
 | CloudWatch Logs | Log processing |
-| ALB | HTTP backend |
-| Lambda function URL | Direct HTTPS endpoint |
+| ALB | HTTP backend (như EC2) |
+| Lambda function URL | Endpoint HTTPS trực tiếp, không qua API Gateway |
 
-### Limit
+### Limit (Giới hạn)
 
-- Memory: 128 MB - 10 GB.
-- Timeout: max 15 phút.
-- Package size: 50 MB zip, 250 MB unzipped.
-- Concurrent: 1000/account default.
+- **Memory**: 128 MB – 10 GB.
+- **Timeout**: tối đa 15 phút.
+- **Package size**: 50 MB (zip), 250 MB (unzipped).
+- **Concurrent**: 1000 invocation song song / account (mặc định, có thể request tăng).
 
-### Cold start
+### Cold start (Vấn đề khởi động lạnh)
 
-First invoke = init runtime + load code → 100ms-2s. Sau đó "warm" cho 5-15 phút.
+Lần invoke đầu tiên = init runtime + load code → mất 100ms-2s. Sau đó function "warm" trong 5-15 phút (Lambda giữ container lại).
 
-Mitigation:
-- Provisioned concurrency (always warm, $).
-- SnapStart (Java).
-- Smaller package.
+Cách giảm cold start:
+- **Provisioned concurrency** (luôn warm, tốn tiền).
+- **SnapStart** (cho Java — snapshot state).
+- Giảm package size để load nhanh.
 
 ## API Gateway
 
-REST/HTTP API frontend cho Lambda hoặc service khác.
+REST/HTTP API frontend cho Lambda hoặc các service khác.
 
 ```yaml
-# Đơn giản nhất: Lambda Function URL
+# Cách đơn giản nhất: Lambda Function URL
 aws lambda create-function-url-config \
     --function-name hello \
     --auth-type NONE
 # → https://xxx.lambda-url.us-east-1.on.aws/
 ```
 
-Hoặc API Gateway:
-- HTTP API (cheaper, fewer features).
-- REST API (full features, transformation, validation).
+Hoặc dùng API Gateway:
+- **HTTP API** (rẻ, ít feature).
+- **REST API** (đầy đủ feature: transformation, validation).
 
-Pattern serverless backend:
+Pattern serverless backend phổ biến:
 
 ```text
 Client → API Gateway → Lambda → DynamoDB
                               → S3
-                              → Other service
+                              → Service khác
 ```
 
 ## ECS — Elastic Container Service
 
-AWS native container orchestration. Đơn giản hơn K8s.
+Container orchestration native của AWS. Đơn giản hơn K8s nhiều.
 
-### Concepts
+### Khái niệm
 
 | Term | Mô tả |
 |---|---|
 | **Cluster** | Tập compute (EC2 hoặc Fargate) |
-| **Task definition** | JSON spec container (image, port, env, resource) |
-| **Task** | Instance của task definition đang chạy |
-| **Service** | Maintain N task running, auto-restart fail |
+| **Task definition** | JSON spec container (image, port, env, resource limit) |
+| **Task** | Instance đang chạy của task definition |
+| **Service** | Đảm bảo có N task đang chạy, auto-restart khi fail |
 
 ### Launch type
 
-- **EC2**: bạn quản EC2 host.
-- **Fargate**: AWS quản — pay per task vCPU + memory + duration.
+- **EC2**: bạn tự quản EC2 host (cheaper, more control).
+- **Fargate**: AWS manage host hộ — trả tiền theo task vCPU + memory + duration.
 
-Fargate = serverless container. Đơn giản hơn nhưng đắt hơn EC2 ~20%.
+Fargate = serverless container — đơn giản hơn nhưng đắt hơn EC2 khoảng 20%.
 
 ### Task definition example
 
@@ -147,37 +147,39 @@ aws ecs create-service \
     --load-balancers "targetGroupArn=arn:...,containerName=tomcat,containerPort=8080"
 ```
 
-3 task auto-restart, behind ALB, log to CloudWatch.
+3 task chạy + auto-restart khi fail, đứng sau ALB, log vào CloudWatch.
 
 ## EKS — Elastic Kubernetes Service
 
-Managed K8s. Section 29-30 sẽ deep-dive.
+Managed Kubernetes. Section 29-30 sẽ đi sâu.
 
 ```bash
-# Create cluster
+# Tạo cluster
 eksctl create cluster --name vprofile --region us-east-1 --nodes 3
 
-# Wait ~15 phút
+# Chờ ~15 phút
 
-# kubectl ready
+# kubectl đã sẵn sàng
 kubectl get nodes
 ```
 
 ECS vs EKS:
-- **ECS**: đơn giản, AWS-only, học nhanh.
-- **EKS**: K8s standard, portable cross-cloud, ecosystem khổng lồ, học phức tạp.
+- **ECS**: đơn giản, chỉ chạy trên AWS, học nhanh.
+- **EKS**: standard K8s, portable đa cloud, ecosystem khổng lồ, học phức tạp.
 
-Khoá học làm K8s (section 29-30) vì standard hơn.
+Khoá học chọn K8s (section 29-30) vì là standard hơn.
 
-## CloudFront — CDN
+## CloudFront — CDN của AWS
 
-Cache content global, giảm latency:
+Cache content trên các edge location toàn cầu, giảm latency:
 
 ```text
-User in Asia → CloudFront Asia edge (cached HTML) ← cache miss → S3 us-east-1
+User ở châu Á → CloudFront Asia edge (cached HTML)
+                ↓ cache miss
+                S3 us-east-1
 ```
 
-200+ edge location.
+CloudFront có 200+ edge location trên thế giới.
 
 ```bash
 aws cloudfront create-distribution \
@@ -186,8 +188,8 @@ aws cloudfront create-distribution \
 ```
 
 Use case:
-- Static site (S3 + CF).
-- Reverse proxy cho ALB (cache + WAF).
+- Static site (S3 + CloudFront).
+- Reverse proxy cho ALB (cache + WAF tích hợp).
 - Video stream.
 - Software download.
 
@@ -196,10 +198,10 @@ Use case:
 DNS + health check + DNS-based routing.
 
 ```bash
-# Create hosted zone
+# Tạo hosted zone
 aws route53 create-hosted-zone --name acme.com --caller-reference $(date +%s)
 
-# Add A record
+# Thêm A record (alias đến ALB)
 aws route53 change-resource-record-sets --hosted-zone-id Z123 --change-batch '{
     "Changes": [{
         "Action": "CREATE",
@@ -216,22 +218,22 @@ aws route53 change-resource-record-sets --hosted-zone-id Z123 --change-batch '{
 }'
 ```
 
-### Routing policy
+### Routing policy (Chính sách routing)
 
-- **Simple**: 1 record.
-- **Weighted**: split traffic A/B test.
-- **Latency-based**: route đến region gần user.
-- **Failover**: primary down → secondary.
-- **Geolocation**: theo country/state.
-- **Multi-value**: như round-robin DNS.
+- **Simple**: 1 record duy nhất.
+- **Weighted**: split traffic để A/B test.
+- **Latency-based**: route user về region gần nhất.
+- **Failover**: primary down → chuyển sang secondary.
+- **Geolocation**: theo quốc gia / bang.
+- **Multi-value**: như round-robin DNS (trả nhiều IP, client tự chọn).
 
 ## Auto Scaling Group (ASG)
 
-Đã touch phase 15. Deep:
+Đã đề cập sơ ở phase 15. Đào sâu hơn:
 
-### Scaling policies
+### Scaling policies (Chính sách scale)
 
-**Target tracking** (recommend):
+**Target tracking** (khuyến nghị):
 
 ```bash
 aws autoscaling put-scaling-policy \
@@ -244,33 +246,33 @@ aws autoscaling put-scaling-policy \
     }'
 ```
 
-Auto add/remove instance để CPU ~ 70%.
+Auto add/remove instance để giữ CPU ở ~70%.
 
-**Step scaling**: thay đổi N instance khi metric cross threshold.
+**Step scaling**: thay đổi N instance khi metric cross qua các ngưỡng cụ thể.
 
-**Scheduled**: cron-like (vd Friday peak hour: +5 instance).
+**Scheduled**: cron-like (vd: Friday peak hour → +5 instance).
 
-### Lifecycle hook
+### Lifecycle hook (Action tuỳ chỉnh khi launch/terminate)
 
 Custom action khi instance start/terminate:
 
 ```text
 Launch:
-  1. ASG launch EC2
-  2. Hook PAUSE
-  3. Run script (warm up, register service mesh)
-  4. CONTINUE → in service
+  1. ASG launch EC2 mới
+  2. Hook PAUSE — chờ
+  3. Chạy script (warm up cache, register với service mesh)
+  4. CONTINUE → instance vào service
 ```
 
 ## Systems Manager (SSM)
 
-Manage EC2 không SSH:
+Quản lý EC2 mà không cần SSH:
 
 ### Session Manager
 
 ```bash
 aws ssm start-session --target i-xxx
-# Tương đương SSH nhưng qua IAM, không cần key pair, không cần SSH port open
+# Tương đương SSH nhưng qua IAM, không cần key pair, không cần mở SSH port
 ```
 
 ### Run Command
@@ -284,31 +286,31 @@ aws ssm send-command \
 
 ### Parameter Store
 
-Lưu config + secret (free up to 10k params):
+Lưu config + secret (free đến 10k parameter):
 
 ```bash
 aws ssm put-parameter --name /vprofile/db-host --value "vprofile-rds.xxx" --type String
 aws ssm put-parameter --name /vprofile/db-password --value "secret" --type SecureString
 
-# Read
+# Đọc
 aws ssm get-parameter --name /vprofile/db-password --with-decryption
 ```
 
-App đọc qua SDK → no hardcode secret.
+App đọc qua SDK → không hardcode secret trong code.
 
 ### Patch Manager
 
-Auto patch OS + app.
+Tự động patch OS + app trên fleet.
 
 ### Inventory
 
-Hiện software cài đặt mọi EC2.
+Hiển thị software đã cài trên mọi EC2.
 
 ## Secrets Manager
 
 Tốt hơn Parameter Store cho secret:
-- Auto-rotate (RDS password tự đổi mỗi 30 ngày).
-- IAM-integrated.
+- **Auto-rotate** (password RDS tự đổi mỗi 30 ngày).
+- Tích hợp IAM.
 - Versioning.
 
 ```bash
@@ -320,7 +322,7 @@ aws secretsmanager create-secret \
 aws secretsmanager get-secret-value --secret-id prod/db/password
 ```
 
-Cost: $0.40/secret/month + $0.05/10k API call.
+Cost: $0.40 / secret / tháng + $0.05 / 10k API call.
 
 ## CloudTrail
 
@@ -332,7 +334,7 @@ aws cloudtrail create-trail --name org-trail --s3-bucket-name acme-trail-bucket
 aws cloudtrail start-logging --name org-trail
 ```
 
-Log đi vào S3. Query với Athena:
+Log đi vào S3. Query bằng Athena:
 
 ```sql
 SELECT eventName, userIdentity.arn, sourceIPAddress, eventTime
@@ -341,29 +343,29 @@ WHERE eventName = 'TerminateInstances'
   AND eventTime > '2026-05-01'
 ```
 
-## Cost optimization advanced
+## Cost optimization advanced (Tối ưu chi phí)
 
 ### Cost Explorer
 
 Console → Billing → Cost Explorer:
-- Cost per service.
-- Cost per tag.
-- Cost per AZ.
-- Forecast.
+- Cost theo service.
+- Cost theo tag.
+- Cost theo AZ.
+- Forecast (dự báo).
 
 ### Trusted Advisor
 
 Auto-suggest:
-- Idle EC2 (delete).
-- Old EBS snapshot.
-- Unused Elastic IP.
-- Low-utilization RDS.
+- EC2 idle (xoá).
+- EBS snapshot cũ.
+- Elastic IP chưa dùng (vẫn tính phí).
+- RDS underutilized.
 
 ### Compute Savings Plan
 
-Commit $/hour 1-3 năm, apply mọi compute (EC2, Fargate, Lambda).
+Commit $/giờ trong 1-3 năm, áp dụng cho mọi compute (EC2, Fargate, Lambda).
 
-### Spot for non-critical
+### Spot cho non-critical workload
 
 Mix on-demand + spot trong ASG:
 
@@ -372,11 +374,11 @@ aws autoscaling create-auto-scaling-group \
     --mixed-instances-policy "InstancesDistribution={OnDemandPercentageAboveBaseCapacity=30}"
 ```
 
-70% spot, 30% on-demand → save ~50%.
+70% spot, 30% on-demand → tiết kiệm ~50% cost.
 
 ## AWS Organizations
 
-Multi-account structure:
+Cấu trúc multi-account:
 
 ```text
 Management account (billing)
@@ -393,36 +395,36 @@ Management account (billing)
     └── Account: audit
 ```
 
-Pros:
-- Blast radius limit.
-- Cost separation per team.
-- Compliance isolation.
+**Lợi ích:**
+- Giới hạn blast radius (phạm vi ảnh hưởng khi có sự cố).
+- Phân tách chi phí theo team.
+- Cô lập compliance.
 
-Free service.
+Service free.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Lambda cold start critical path | Latency spike | Provisioned concurrency |
-| ECS Fargate cost | $$$ for high traffic | EC2 launch type cheaper |
-| CloudFront cache HTML | Stale content | TTL ngắn cho HTML, dài cho asset |
-| Route 53 health check too strict | Failover unnecessary | Tune threshold |
-| ASG terminate active instance | Connection drop | Connection draining |
+| Lambda cold start ở critical path | Latency spike | Provisioned concurrency |
+| ECS Fargate cost | $$$ khi traffic cao | EC2 launch type rẻ hơn |
+| CloudFront cache HTML | Content cũ | TTL ngắn cho HTML, dài cho static asset |
+| Route 53 health check quá strict | Failover không cần thiết | Tinh chỉnh threshold |
+| ASG terminate instance đang active | Connection bị drop | Bật connection draining |
 | SSM Session Manager log | Compliance | Log session vào S3/CW |
-| Multiple account chaos | Permission hell | Organizations + IAM Identity Center |
+| Multiple account loạn | Permission hell | Dùng Organizations + IAM Identity Center |
 
 ## Tóm tắt bài 1
 
-- **Lambda**: serverless function, pay per invocation, max 15 phút.
-- **ECS**: AWS container orchestrate (Fargate serverless / EC2).
+- **Lambda**: serverless function, trả tiền theo invocation, tối đa 15 phút.
+- **ECS**: container orchestration của AWS (Fargate serverless / EC2).
 - **EKS**: managed Kubernetes.
 - **CloudFront**: CDN global edge cache.
 - **Route 53**: DNS + health check + routing policy.
-- **ASG**: auto-scale theo metric, lifecycle hook custom.
+- **ASG**: auto-scale theo metric, lifecycle hook tuỳ chỉnh.
 - **SSM**: Session Manager (no SSH), Parameter Store, Patch Manager.
-- **Secrets Manager**: better than Parameter Store cho secret + auto-rotate.
+- **Secrets Manager**: tốt hơn Parameter Store cho secret + auto-rotate.
 - **CloudTrail**: audit mọi API call.
-- **Organizations**: multi-account structure cho isolation + cost.
+- **Organizations**: cấu trúc multi-account để cô lập + tách cost.
 
 **Phase kế tiếp** → [Phase 25 — Bài 1: AWS CI/CD project](../phase-25-aws-cicd/01-aws-cicd.md)
