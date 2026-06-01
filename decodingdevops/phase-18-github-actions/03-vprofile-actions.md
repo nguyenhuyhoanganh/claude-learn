@@ -472,21 +472,21 @@ Same workload 100 build/day:
 
 GitHub Actions thường rẻ hơn cho team < 10 dev.
 
-Self-host alternative cho enterprise: cost variable.
+Alternative self-host cho enterprise: cost biến thiên tuỳ scale.
 
-## Workflow visualization
+## Workflow visualization (Hiển thị workflow)
 
 GitHub UI:
-- DAG visualization rất tốt.
-- Job dependency arrows.
-- Live log streaming.
-- Re-run failed jobs only.
-- Cancel selective jobs.
+- DAG visualization (sơ đồ phụ thuộc) rất tốt.
+- Mũi tên thể hiện dependency giữa job.
+- Live log streaming theo thời gian thực.
+- Re-run chỉ các job fail.
+- Cancel chọn lọc từng job.
 
 Jenkins:
-- Stage View plugin.
-- Blue Ocean (deprecated 2024).
-- Less polished UI.
+- Plugin Stage View.
+- Blue Ocean (đã deprecated năm 2024).
+- UI không bóng bẩy bằng.
 
 ## Bẫy thường gặp
 
@@ -503,26 +503,26 @@ Jenkins:
 ## Tổng kết phase 18
 
 3 bài cover:
-1. GitHub Actions basics + concepts + events + jobs.
-2. Advanced: reusable workflow, composite, matrix, environments, OIDC.
-3. vProfile end-to-end production-grade pipeline.
+1. GitHub Actions basics + concept + event + job.
+2. Advanced: reusable workflow, composite, matrix, environment, OIDC.
+3. vProfile pipeline end-to-end production-grade.
 
-Skills:
+Skill đạt được:
 - Setup CI/CD trên GitHub Actions.
 - Reusable workflow + composite action.
-- OIDC integrate AWS không lưu key.
+- Tích hợp OIDC với AWS, không cần lưu key.
 - Environment + protection rule cho production.
-- Blue-green deploy K8s.
+- Blue-green deploy lên K8s.
 
 ## Tóm tắt bài 3
 
 - Pipeline 8 job: build → sonar → security → docker → staging → integration → prod → notify.
 - **Concurrency** cancel-in-progress cho PR check.
-- **OIDC + IAM role** thay AWS access key.
+- **OIDC + IAM role** thay cho AWS access key tĩnh.
 - **Buildx cache** với `cache-from/cache-to: type=gha`.
 - **Environment + reviewer + wait timer** cho production.
 - **Blue-green** deploy K8s với traffic switch.
-- **Trivy + SARIF + CodeQL** upload security results.
-- **Slack** notification với blocks rich format.
+- **Trivy + SARIF + CodeQL** upload kết quả security scan.
+- **Slack** notification với block format giàu hình thức.
 
 **Phase kế tiếp** → [Phase 19 — GitLab](../phase-19-gitlab/01-gitlab-overview.md)
