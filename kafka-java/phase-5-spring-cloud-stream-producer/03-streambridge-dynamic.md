@@ -249,25 +249,25 @@ Message<OrderEvent> msg = MessageBuilder
 streamBridge.send("order-events-out", msg);
 ```
 
-StreamBridge accept `Object` payload. If `Message<T>` → extract payload + headers. Same as Supplier.
+StreamBridge nhận tham số payload kiểu `Object`. Nếu là `Message<T>` → tự extract payload + header. Pattern y hệt Supplier.
 
-## When to use Supplier vs StreamBridge
+## Khi nào dùng Supplier vs StreamBridge?
 
-| Use case | Approach |
+| Tình huống | Cách dùng |
 |---|---|
-| Periodic events (heartbeat, metrics) | **Supplier** |
-| Business events on action | **StreamBridge** |
-| HTTP request → event | StreamBridge |
-| Scheduled batch trigger | Supplier with cron poller |
-| Reactive pipeline emitting | `Supplier<Flux<T>>` |
-| Conditional / dynamic destination | StreamBridge |
-| Integration test ad-hoc emit | StreamBridge dynamic binding |
+| Event periodic (heartbeat, metric) | **Supplier** |
+| Business event theo user action | **StreamBridge** |
+| HTTP request đến → emit event | StreamBridge |
+| Scheduled batch trigger | Supplier với cron poller |
+| Reactive pipeline emit | `Supplier<Flux<T>>` |
+| Routing có điều kiện / destination động | StreamBridge |
+| Integration test ad-hoc emit message | StreamBridge với dynamic binding |
 
-Default: **StreamBridge** cho 90% production code. Supplier rare (heartbeat-like).
+Default cho production: **StreamBridge** chiếm 90% code. Supplier chỉ dùng cho case kiểu heartbeat.
 
-## Patterns + best practices
+## Pattern + best practice
 
-### Pattern: Service emits via StreamBridge
+### Pattern 1: Service emit qua StreamBridge
 
 ```java
 @Service
@@ -285,7 +285,7 @@ public class OrderService {
     public Order placeOrder(OrderRequest req) {
         Order order = repo.save(new Order(req));
         
-        // Publish event AFTER DB save
+        // Publish event SAU KHI save DB
         streamBridge.send("order-events-out",
             MessageBuilder
                 .withPayload(new OrderPlacedEvent(order))
@@ -298,9 +298,9 @@ public class OrderService {
 }
 ```
 
-Service own business + event publishing. Controller stays thin.
+Service tự own business logic + event publishing. Controller mỏng (chỉ delegate sang service).
 
-### Pattern: Conditional emit
+### Pattern 2: Conditional emit (chỉ emit khi đạt điều kiện)
 
 ```java
 public void updateInventory(String sku, int delta) {
@@ -315,35 +315,35 @@ public void updateInventory(String sku, int delta) {
 }
 ```
 
-Supplier không làm được (gửi conditional). StreamBridge OK.
+Supplier không làm được kiểu này (vì supplier chạy theo timer, không theo điều kiện). StreamBridge OK — gọi khi cần.
 
-### Anti-patterns
+### Anti-pattern
 
-| Anti-pattern | Problem | Fix |
+| Anti-pattern | Vấn đề | Sửa |
 |---|---|---|
-| Emit StreamBridge BEFORE DB commit | Event sent for failed transaction | Emit after commit, or use Outbox pattern |
-| Synchronous error throw at consumer side affects producer | Coupling | EDA = fire-and-forget; rely on retry |
-| Hardcode binding name in 50 places | Refactor pain | Constant `public static final String BINDING_NAME = "order-events-out"` |
-| Use dynamic binding (auto topic) in production | Loses config visibility | Define binding explicitly |
-| StreamBridge from @Component without DI | NPE | Use constructor injection |
-| Lose event if app crashes between DB save + send | Inconsistent | Outbox pattern (Phase 13) |
+| Emit StreamBridge TRƯỚC khi commit DB | Event đã được gửi nhưng DB rollback → inconsistency | Emit SAU khi commit, hoặc dùng Outbox pattern |
+| Throw exception ở consumer ảnh hưởng producer | Vi phạm decoupling | EDA là fire-and-forget, dùng retry mechanism |
+| Hard-code binding name ở 50 chỗ trong code | Đau khi refactor | Đặt constant `public static final String BINDING_NAME = "order-events-out"` |
+| Dùng dynamic binding (auto-create topic) ở production | Mất visibility config | Định nghĩa binding explicit trong YAML |
+| Dùng StreamBridge trong `@Component` mà không inject | NPE khi gọi | Constructor injection |
+| App crash giữa lúc save DB và send event | State inconsistent | **Outbox pattern** (Phase 13) |
 
-## Outbox preview (Phase 13 detail)
+## Preview Outbox pattern (chi tiết ở Phase 13)
 
-Critical pattern cho reliability:
+Đây là pattern **critical cho reliability**:
 
 ```java
 @Transactional
 public Order placeOrder(OrderRequest req) {
     Order order = repo.save(new Order(req));
     
-    // Save event to outbox table (SAME transaction)
+    // Save event vào bảng outbox (CÙNG transaction với business data)
     outboxRepo.save(new OutboxEvent("OrderPlaced", order.toJson()));
     
-    return order;  // commit → both rows persisted atomically
+    return order;  // commit → cả 2 row được persist atomic
 }
 
-// Separate worker
+// Worker chạy riêng, định kỳ poll outbox và emit
 @Scheduled(fixedRate = 100)
 public void publishOutbox() {
     List<OutboxEvent> unpublished = outboxRepo.findUnpublished();
@@ -354,17 +354,17 @@ public void publishOutbox() {
 }
 ```
 
-Atomic "save business data + queue event" — handle crash between save and send. Phase 13 deep-dive.
+Lợi ích: **atomic** giữa "save business data" và "queue event". Nếu app crash giữa 2 bước → event vẫn còn trong outbox table, worker sẽ retry emit sau. Phase 13 sẽ học sâu.
 
 ## Tóm tắt bài 3
 
-- `Supplier<T>` periodic. Business events on-demand → **StreamBridge**.
-- `streamBridge.send(bindingName, payload)` từ bất kỳ đâu (@Service, @RestController).
-- Binding name **tự đặt** (không derive). Define `spring.cloud.stream.bindings.{name}.destination`.
-- Dynamic binding: nếu name không trong YAML → assume topic name. Avoid in production.
-- Support `Message<T>` cho key + headers via `MessageBuilder`.
-- 90% production use StreamBridge. Supplier cho heartbeat/metrics.
-- Best practice: emit AFTER DB commit. Reliable: Outbox pattern (Phase 13).
-- Anti-patterns: pre-commit emit, dynamic binding production, hardcoded names.
+- `Supplier<T>` cho event periodic. Business event on-demand → dùng **`StreamBridge`**.
+- Cú pháp: `streamBridge.send(bindingName, payload)` — gọi được từ bất kỳ đâu (`@Service`, `@RestController`, `@EventListener`...).
+- Binding name **tự đặt** (không auto-derive như Supplier). Phải define trong YAML qua `spring.cloud.stream.bindings.{name}.destination`.
+- **Dynamic binding**: nếu name truyền vào không có trong YAML → SCS coi đó là topic name. Tiện cho test, **tránh dùng ở production** (mất visibility config).
+- Support `Message<T>` cho key + header qua `MessageBuilder` — same pattern với Supplier.
+- 90% production code dùng StreamBridge. Supplier chỉ dùng cho heartbeat/metric.
+- Best practice: emit **SAU KHI** commit DB. Pattern reliable: **Outbox** (Phase 13).
+- Anti-pattern chính: emit trước commit, dynamic binding ở production, hard-code binding name.
 
 **Bài kế tiếp** → [Bài 4: Reactive producer + Phase 5 summary](04-reactive-producer-summary.md)

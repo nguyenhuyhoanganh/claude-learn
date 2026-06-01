@@ -246,39 +246,37 @@ received: message-100
 
 Fast burst. Counter reset to 1 mỗi restart vì `AtomicInteger` in-memory.
 
-### Common poller config
+### Các option config poller phổ biến
 
 ```yaml
 poller:
-  fixed-delay: 1000          # default
-  # OR
-  cron: "*/5 * * * * *"      # cron expression alternative
-  initial-delay: 0
-  max-messages-per-poll: 1   # how many to get per poll cycle
+  fixed-delay: 1000          # mặc định, 1 giây 1 lần
+  # HOẶC dùng cron expression:
+  cron: "*/5 * * * * *"      # mỗi 5 giây
+  initial-delay: 0           # delay lần gọi đầu tiên sau khi app start
+  max-messages-per-poll: 1   # mỗi chu kỳ poll lấy bao nhiêu message
 ```
 
-## Limitation: Supplier-based producer
+## Hạn chế của Supplier-based producer
 
-Suppliers polling = **periodic generation**. Use case rare ngoài demo:
+Supplier polling = **sinh event theo chu kỳ**. Use case thực tế không nhiều:
 
-- Heartbeat events (1 msg/min, "system alive").
-- Periodic metrics emit (CPU, memory every 30s).
-- Scheduled batch trigger.
+- Heartbeat event (1 msg/phút báo "service đang sống").
+- Emit metric định kỳ (CPU, memory mỗi 30 giây).
+- Trigger scheduled batch.
 
-Real business events thường KHÔNG periodic:
-- User places order → event.
-- Payment received → event.
-- Click happens → event.
+Đa số business event **KHÔNG periodic**:
+- User đặt hàng → event xảy ra ngẫu nhiên theo user action.
+- Payment được nhận → event theo timing thanh toán thực.
+- User click → event theo user behavior.
 
-→ Trigger = **external action**, không phải timer.
+→ Trigger là **action ngoài** (HTTP request, user action), KHÔNG phải timer.
 
-Polling supplier không fit. Cần **on-demand producer** = **StreamBridge** (bài sau).
+Cho các case này, Supplier không phù hợp. Cần **producer on-demand** = **`StreamBridge`** (sẽ học ở bài 3).
 
-> Sneak peek: `StreamBridge` cho phép gọi `streamBridge.send("topic", payload)` từ **anywhere** (controller, service, listener) — no poller.
+> Spoiler: `StreamBridge` cho phép gọi `streamBridge.send("topic", payload)` từ **bất kỳ đâu** trong code (controller, service, event listener) — không cần poller.
 
-## Real-world: cron-style supplier
-
-Use case good cho supplier:
+## Use case thực tế hợp với Supplier: cron-style heartbeat
 
 ```java
 @Bean
@@ -301,29 +299,29 @@ spring:
         heartbeatProducer-out-0:
           destination: service-heartbeats
       poller:
-        fixed-delay: 30000          # every 30 seconds
+        fixed-delay: 30000          # 30 giây 1 lần
 ```
 
-Monitoring service consume → know all services alive.
+Monitoring service consume topic này → biết được tất cả service nào đang alive.
 
 ## Best practices
 
-| Practice | Why |
+| Best practice | Lý do |
 |---|---|
-| Don't use Supplier for business events | Doesn't fit periodic pattern → StreamBridge |
-| Counter for demo, not production | Real producer gets data from external source |
-| `AtomicInteger` cho counter | Thread-safe (poller may multi-thread) |
-| Explicit `poller.fixed-delay` | Visibility, even at default 1000ms |
-| Bean name encodes purpose | `orderEventProducer`, `heartbeatProducer` |
+| KHÔNG dùng Supplier cho business event | Pattern không khớp (periodic vs on-demand) → dùng StreamBridge |
+| Counter chỉ dùng cho demo, không cho production | Producer thực phải lấy data từ external source (DB, queue, API) |
+| `AtomicInteger` cho counter | Thread-safe (poller có thể chạy multi-thread) |
+| Explicit `poller.fixed-delay` trong YAML | Đọc code thấy ngay polling rate, không phải đoán default |
+| Đặt tên bean theo purpose | `orderEventProducer`, `heartbeatProducer` (rõ ý nghĩa) |
 
-## Anti-patterns
+## Anti-pattern
 
-| Anti-pattern | Problem | Fix |
+| Anti-pattern | Vấn đề | Sửa |
 |---|---|---|
-| Supplier với complex business state | Hard to manage state in lambda | Use StreamBridge from service |
-| Long-running operation trong supplier | Blocks poller thread, miss events | Async via separate thread / queue |
-| Counter overflow rủi ro (`int`) | Eventual restart needed | Use `AtomicLong` |
-| Forget `initial-delay` causing startup spam | Producer floods before consumer ready | `initial-delay: 5000` |
+| Supplier có state phức tạp | Khó quản lý state trong lambda, dễ bug | Dùng StreamBridge gọi từ service |
+| Operation tốn thời gian dài trong supplier | Block thread của poller, miss event tiếp theo | Async qua thread riêng hoặc queue |
+| Counter dùng `int` thay vì `AtomicLong` | Có thể overflow nếu app chạy lâu | Dùng `AtomicLong` |
+| Quên `initial-delay` | Producer flood ngay khi app start, consumer chưa kịp ready | Set `initial-delay: 5000` (5 giây) |
 
 ## Visualization
 
@@ -364,13 +362,13 @@ Producer App (JVM 1)
 
 ## Tóm tắt bài 1
 
-- Producer SCS = `Supplier<T>` bean → SCS **periodic poll** via poller thread.
+- Producer SCS dùng bean kiểu **`Supplier<T>`** → SCS chạy **periodic poll** qua poller thread.
 - Pseudocode internal: `while (running) { msg = supplier.get(); send(msg); sleep(delay); }`.
-- Default poll interval: `1000ms`. Tune via `poller.fixed-delay`.
-- Code skeleton: 1 `@Configuration` + 1 `@Bean Supplier<T>` + counter (in-memory).
-- YAML: `function.definition` + `bindings.producer-out-0.destination` + `poller.fixed-delay`.
-- 2 runners trong 1 project: separate `@SpringBootApplication` + `@ComponentScan` to scope.
-- Supplier hợp cho **periodic events** (heartbeat, metrics, batch trigger). Không hợp business events on-demand.
-- Business events → **StreamBridge** (bài sau).
+- Polling interval mặc định = **1000ms (1 giây)**. Tune qua `poller.fixed-delay`.
+- Code skeleton tối thiểu: 1 `@Configuration` + 1 `@Bean Supplier<T>` + counter (in-memory cho demo).
+- YAML cần 3 setting: `function.definition` + `bindings.{bean}-out-0.destination` + `poller.fixed-delay`.
+- Demo chạy producer + consumer như 2 process riêng: tạo 2 inner class `@SpringBootApplication` + `@ComponentScan` scope vào package riêng.
+- Supplier hợp cho **event periodic** (heartbeat, emit metric, trigger batch). KHÔNG hợp cho business event on-demand.
+- Business event → dùng **`StreamBridge`** (bài 3 sẽ học).
 
 **Bài kế tiếp** → [Bài 2: Message attributes + key serialization](02-message-attributes-keys.md)

@@ -323,15 +323,15 @@ End: 1M messages processed.
 
 True batching = 100-1000× throughput improvement.
 
-## Accessing metadata in batch mode — gotcha
+## Truy cập metadata trong batch mode — gotcha quan trọng
 
-What if you need keys / headers per message in a batch?
+Nếu cần đọc key / header của từng message trong batch thì sao?
 
-### Naive (WRONG)
+### Cách viết SAI (naive)
 
 ```java
 @Bean
-public Consumer<List<Message<String>>> consumer() {     // ← NOT supported in batch mode
+public Consumer<List<Message<String>>> consumer() {     // ← KHÔNG support trong batch mode
     return batch -> {
         for (Message<String> msg : batch) {
             String key = msg.getHeaders().get(KafkaHeaders.RECEIVED_KEY, String.class);
@@ -341,9 +341,9 @@ public Consumer<List<Message<String>>> consumer() {     // ← NOT supported in 
 }
 ```
 
-Spring docs explicitly: **`List<Message<T>>` not supported with batch mode**.
+Spring doc nói rõ: **`List<Message<T>>` KHÔNG được support trong batch mode**.
 
-### Correct: `Message<List<T>>`
+### Cách viết ĐÚNG: `Message<List<T>>`
 
 ```java
 @Bean
@@ -351,7 +351,7 @@ public Consumer<Message<List<String>>> consumer() {       // ← Message<List<T>
     return msg -> {
         List<String> payloads = msg.getPayload();
         
-        // Headers are LISTS of all keys/headers
+        // Header là LIST chứa key/header của tất cả message trong batch
         List<String> keys = (List<String>) msg.getHeaders().get(KafkaHeaders.RECEIVED_KEY);
         List<String> sources = (List<String>) msg.getHeaders().get("source");
         
@@ -359,21 +359,21 @@ public Consumer<Message<List<String>>> consumer() {       // ← Message<List<T>
             String payload = payloads.get(i);
             String key = keys != null ? keys.get(i) : null;
             String source = sources != null ? sources.get(i) : null;
-            // process individual record
+            // xử lý từng record riêng
         }
     };
 }
 ```
 
-API ugly. Spring rationale:
-- Avoid creating N `Message<T>` objects (allocation cost).
-- Provide raw arrays for performance.
+API xấu thật. Lý do Spring làm vậy:
+- Tránh tạo N object `Message<T>` (cost allocation cao khi batch lớn).
+- Cung cấp raw array để performance tốt nhất.
 
-Index-aligned: `payloads[i]` corresponds to `keys[i]`, `sources[i]`.
+**Index-aligned** (cùng index): `payloads[i]` tương ứng với `keys[i]`, `sources[i]`.
 
-### Reality check
+### Trong thực tế
 
-Most consumers don't need per-message keys. If you do, app pattern:
+Phần lớn consumer KHÔNG cần đọc key của từng message. Nếu thật sự cần, đóng gói pattern này lại cho gọn:
 
 ```java
 record EnrichedMessage(String key, String payload, String source) {}
@@ -382,7 +382,7 @@ record EnrichedMessage(String key, String payload, String source) {}
 public Consumer<Message<List<String>>> consumer() {
     return msg -> {
         List<EnrichedMessage> enriched = extractMessages(msg);
-        // process List<EnrichedMessage> uniformly
+        // xử lý List<EnrichedMessage> đồng nhất
     };
 }
 
@@ -401,59 +401,59 @@ private List<EnrichedMessage> extractMessages(Message<List<String>> msg) {
 }
 ```
 
-Encapsulate ugliness. Rest of code uniform.
+Đóng gói phần API xấu vào 1 chỗ. Phần code còn lại sạch sẽ, đồng nhất.
 
-## Trade-offs of batching
+## Trade-off của batching
 
-| Pro | Con |
+| Ưu điểm | Nhược điểm |
 |---|---|
-| Higher throughput | Higher latency (wait to batch) |
-| Lower network overhead | Memory usage (buffer) |
-| Compression efficient | Batch failure = many messages affected |
-| Reduce DB round trips | Need different code path (consumer batch-mode) |
-| Better resource utilization | Harder to debug individual messages |
+| Throughput cao hơn | Latency cao hơn (phải đợi gom batch) |
+| Network overhead thấp hơn | Tốn memory (buffer chờ) |
+| Compression hiệu quả hơn | 1 batch fail = nhiều message bị ảnh hưởng |
+| Giảm số lần round trip xuống DB | Phải đổi code path (consumer batch-mode) |
+| Tận dụng resource tốt hơn | Khó debug từng message riêng |
 
-### When NOT batch
+### Khi nào KHÔNG dùng batch
 
-| Scenario | Reason |
+| Tình huống | Lý do |
 |---|---|
-| Low traffic (< 100 msg/sec) | Overhead unjustified |
-| Latency-critical (real-time alerts) | Batching adds wait |
-| Per-message complex logic | Batch processing simplifies less |
-| Different per-message error handling | Failure isolation harder |
+| Traffic thấp (< 100 msg/giây) | Overhead không xứng đáng |
+| Latency-critical (real-time alert) | Batching thêm thời gian chờ |
+| Logic xử lý từng message phức tạp | Batch không đơn giản hoá được |
+| Error handling khác nhau theo message | Khó isolate failure |
 
-### When YES batch
+### Khi nào NÊN dùng batch
 
-| Scenario | Reason |
+| Tình huống | Lý do |
 |---|---|
-| High throughput (10k+ msg/sec) | Network overhead per msg dominates |
-| Bulk DB writes | One transaction for batch |
-| Stream processing aggregation | Natural fit |
-| Log shipping / metrics | Latency tolerant |
-| Heavy compression benefit | Large batches compress well |
+| High throughput (10k+ msg/giây) | Network overhead per-message chiếm tỷ trọng lớn |
+| Bulk DB write | 1 transaction cho cả batch |
+| Stream processing aggregation | Phù hợp tự nhiên |
+| Log shipping / metric collection | Tolerant với latency |
+| Compression đáng kể | Batch lớn nén hiệu quả hơn |
 
-## Anti-patterns
+## Anti-pattern
 
-| Anti-pattern | Problem | Fix |
+| Anti-pattern | Vấn đề | Sửa |
 |---|---|---|
-| `batch.size` but no `linger.ms` increase | Small batches due to time | Tune both |
-| `linger.ms` very high (1000ms) | UX delay noticeable | Keep 5-50ms |
-| Fetch `Consumer<String>` but expect batch | 1-by-1 only | `Consumer<List<T>>` |
-| Forget `batch-mode: true` | Treats list as 1 event | YAML config |
-| Catch + swallow exception in batch | Whole batch fails together | Error handling Phase 13 |
-| `max.poll.records` super high (50k) | OOM | Bound to realistic batch |
+| Set `batch.size` lớn nhưng `linger.ms = 0` | Batch nhỏ vì gửi ngay khi có message | Tune cả 2 song song |
+| `linger.ms` quá cao (1000ms) | UX delay rõ rệt | Giữ 5-50ms |
+| Bean signature `Consumer<String>` nhưng mong nhận batch | Vẫn nhận từng message | Đổi sang `Consumer<List<T>>` |
+| Quên `batch-mode: true` trong YAML | Spring coi List là 1 event payload | Thêm vào YAML |
+| Catch + swallow exception trong batch | Cả batch fail cùng nhau, không biết message nào lỗi | Error handling Phase 13 |
+| Set `max.poll.records` quá cao (50k) | OOM khi batch lớn | Giữ ở mức realistic (500-5000) |
 
 ## Tóm tắt bài 1 + Phase 10
 
-- **Producer batching**: `linger.ms` + `batch.size` (whichever first). Compression (lz4). Production: 10ms linger, 32KB batch, lz4.
-- **Consumer batching**: `fetch.min.bytes`, `max.poll.records`. App-level: change bean signature.
-- **True end-to-end batching** requires:
-  - `Consumer<List<T>>` bean type.
-  - `consumer.batch-mode: true` in YAML.
-  - Process records in bulk (saveAll, batch insert).
-- Throughput 100-1000× improvement potential.
-- **Metadata in batch**: `Message<List<T>>` + headers as `List<...>` (NOT `List<Message<T>>`).
-- Trade-off: latency for throughput. Skip for low-traffic or latency-critical.
-- Phase 11 sẽ cover **concurrent processing** (multi-thread per consumer) — complementary to batching.
+- **Producer batching**: 2 property cốt lõi `linger.ms` (thời gian chờ) + `batch.size` (giới hạn dung lượng) — cái nào đạt trước thì flush. Bật compression (lz4) để giảm bandwidth. Production thường: 10ms linger, 32KB batch, lz4.
+- **Consumer batching**: tune `fetch.min.bytes`, `max.poll.records`. Quan trọng nhất: **đổi signature bean** từ `Consumer<T>` sang `Consumer<List<T>>` để nhận batch.
+- **True end-to-end batching** cần đủ 3 điều kiện:
+  - Bean type `Consumer<List<T>>`.
+  - `consumer.batch-mode: true` trong YAML.
+  - Code xử lý theo bulk (vd `saveAll`, batch insert thay vì save từng cái).
+- Cải thiện throughput **100-1000×** so với mode per-message.
+- **Metadata trong batch**: dùng `Message<List<T>>` với header là `List<...>` (KHÔNG phải `List<Message<T>>` — Spring không support).
+- Trade-off chính: đánh đổi latency lấy throughput. Skip cho traffic thấp hoặc latency-critical.
+- Phase 11 sẽ học **concurrent processing** (multi-thread mỗi consumer) — bổ sung cho batching để scale thêm nữa.
 
 **Bài kế tiếp** → [Phase 11 - Concurrent Message Processing](../phase-11-concurrent-processing/01-concurrency-models.md)
