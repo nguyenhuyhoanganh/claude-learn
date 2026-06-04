@@ -352,8 +352,8 @@ http {
 ```
 
 Template render với context của target host:
-- `ansible_processor_vcpus` = auto-detect CPU count.
-- `groups['app']` = list all app hosts.
+- `ansible_processor_vcpus` = tự detect số CPU.
+- `groups['app']` = list tất cả host trong group `app`.
 - `hostvars[host].ansible_default_ipv4.address` = IP của host kia.
 
 ### Jinja2 filters
@@ -534,7 +534,7 @@ Force run handler ngay:
   tags: setup
 ```
 
-`block` = try, `rescue` = catch, `always` = finally.
+`block` = giống try, `rescue` = giống catch, `always` = giống finally trong các ngôn ngữ khác.
 
 ## Tags
 
@@ -580,7 +580,7 @@ ansible-playbook play.yml --list-tags
   delegate_to: localhost
 ```
 
-Use case: notification, DB migration (only 1 host runs).
+Use case: gửi notification, DB migration (chỉ 1 host chạy).
 
 ## Bẫy thường gặp
 
@@ -596,14 +596,14 @@ Use case: notification, DB migration (only 1 host runs).
 
 ## Tóm tắt bài 2
 
-- **Modules** = action atomic (apt, systemd, template, lineinfile, mysql_db, ...).
-- **Variable precedence** complex — biết để debug.
-- **`group_vars/`, `host_vars/`** organize variables.
-- **Jinja2 templates** + filters cho dynamic config.
-- **Conditionals `when`** + **Loops `loop`** + **`until`** retry.
-- **Handlers** delayed action when task `changed`.
-- **`block/rescue/always`** error handling.
-- **Tags** selective run.
-- **`delegate_to`, `run_once`** for special host execution.
+- **Modules** = action nguyên tử (apt, systemd, template, lineinfile, mysql_db, ...).
+- **Variable precedence** phức tạp — phải biết để debug.
+- **`group_vars/`, `host_vars/`** để tổ chức variable.
+- **Jinja2 templates** + filter cho dynamic config.
+- **Conditional `when`** + **Loop `loop`** + **`until`** để retry.
+- **Handlers** = action chậm chỉ chạy khi task `changed`.
+- **`block/rescue/always`** xử lý lỗi.
+- **Tags** chạy chọn lọc.
+- **`delegate_to`, `run_once`** cho việc thực thi đặc biệt trên host.
 
 **Bài kế tiếp** → [Bài 3: Roles và Galaxy](03-ansible-roles.md)

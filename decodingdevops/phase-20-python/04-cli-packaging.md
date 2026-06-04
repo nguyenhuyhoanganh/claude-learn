@@ -34,7 +34,7 @@ my-tool/
 └── docs/
 ```
 
-`src/` layout (vs flat layout) — avoid import bug.
+`src/` layout (so với flat layout) — tránh được bug import phổ biến.
 
 ## pyproject.toml — modern config
 
@@ -117,7 +117,7 @@ pip install -e ".[dev]"
 my-tool --help
 ```
 
-`-e` = editable install — code change reflect immediately.
+`-e` = editable install — code thay đổi reflect ngay (không cần reinstall).
 
 ## CLI với Click
 
@@ -244,7 +244,7 @@ with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.descripti
 console.print(Panel.fit("Deploy complete!", border_style="green"))
 ```
 
-Beautiful CLI vs plain `print()`.
+CLI đẹp hơn nhiều so với `print()` thông thường.
 
 ## Logging
 
@@ -270,7 +270,7 @@ logger.warning("Disk usage high")
 logger.error("Deploy failed", exc_info=True)
 ```
 
-Rich tracebacks = pretty + clickable links to source.
+Rich tracebacks = traceback đẹp + link click được đến source code.
 
 ## Testing với pytest
 
@@ -377,7 +377,7 @@ def test_create_instance():
     assert len(resp["Instances"]) == 1
 ```
 
-Real boto3 calls intercepted by moto → test against simulated AWS.
+moto intercept (chặn lại) boto3 call thật → test với AWS giả lập trong bộ nhớ.
 
 ### Coverage
 
@@ -568,22 +568,22 @@ Tag `v0.1.0` → auto-publish PyPI với OIDC.
 3. Automation (subprocess, requests, boto3, parallel).
 4. CLI tool + packaging + testing.
 
-Skills:
+Skill đạt được:
 - Viết tool DevOps Python production-grade.
 - CLI với Click + Rich.
-- Test pytest + mock + moto.
-- Package + distribute PyPI / Nexus / Docker.
+- Test với pytest + mock + moto.
+- Package + phân phối PyPI / Nexus / Docker.
 - CI pipeline cho Python project.
 
 ## Tóm tắt bài 4
 
-- **`pyproject.toml`** modern config.
-- **`src/` layout** avoid import bug.
+- **`pyproject.toml`** = config hiện đại.
+- **`src/` layout** tránh bug import.
 - **Click** declarative CLI > argparse.
-- **Rich** beautiful output (table, progress, color).
+- **Rich** output đẹp (table, progress, màu sắc).
 - **pytest** + **moto** + **mock** = test mọi thứ.
-- **Ruff** + **mypy** + **pre-commit** = code quality.
-- Build wheel → distribute PyPI / Nexus / PyInstaller / Docker.
-- CI pipeline với matrix Python version.
+- **Ruff** + **mypy** + **pre-commit** = code quality tự động.
+- Build wheel → phân phối qua PyPI / Nexus / PyInstaller / Docker.
+- CI pipeline với matrix nhiều Python version.
 
 **Phase kế tiếp** → [Phase 21 — Terraform](../phase-21-terraform/01-terraform-basics.md)

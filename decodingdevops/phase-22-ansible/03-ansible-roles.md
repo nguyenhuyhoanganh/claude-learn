@@ -206,7 +206,7 @@ http {
       when: env == "production"
 ```
 
-`roles:` keyword run before `tasks:`.
+Section `roles:` được chạy trước section `tasks:`.
 
 Inline role với `import_role` / `include_role`:
 
@@ -302,11 +302,11 @@ CI:
             root: "/var/www/vprofile"
 ```
 
-Battle-tested. Save weeks of work.
+Đã được test kỹ ở nhiều production. Tiết kiệm hàng tuần công việc.
 
 ## Collections
 
-Modern Ansible packaging. Bundle modules + plugins + roles.
+Cách packaging Ansible hiện đại. Bundle modules + plugins + roles trong 1 unit.
 
 ```bash
 ansible-galaxy collection install community.general
@@ -325,7 +325,7 @@ Use:
     instance_type: t3.micro
 ```
 
-Fully qualified collection name (FQCN) recommend.
+Khuyến nghị dùng tên đầy đủ (FQCN — fully qualified collection name).
 
 ## Molecule — test role
 
@@ -477,7 +477,7 @@ ansible/
     - nginx
 ```
 
-Each role: install + configure + start service idempotent.
+Mỗi role làm 3 việc idempotent: install + configure + start service.
 
 Run:
 
@@ -517,7 +517,7 @@ pipelining = True
 control_path = /tmp/ansible-ssh-%%h-%%p-%%r
 ```
 
-`forks = 50` = 50 parallel host execution. Speed up.
+`forks = 50` = chạy song song 50 host. Tăng tốc đáng kể.
 
 ## Best practices
 
@@ -549,12 +549,12 @@ control_path = /tmp/ansible-ssh-%%h-%%p-%%r
 ## Tóm tắt bài 3
 
 - **Role** = directory structure chuẩn (tasks, handlers, defaults, templates, files, meta).
-- **`ansible-galaxy init`** generate scaffold.
-- **Dependencies** in `meta/main.yml` auto-run preceded.
-- **Ansible Galaxy** registry community role.
-- **Collections** bundle modules + plugins + roles.
-- **Molecule** test role multi-distro với Docker.
-- **`requirements.yml`** pin role + collection version.
-- vProfile playbook → modular role architecture.
+- **`ansible-galaxy init`** sinh scaffold mẫu cho role mới.
+- **Dependencies** trong `meta/main.yml` tự chạy trước.
+- **Ansible Galaxy** = registry cộng đồng cho role.
+- **Collections** = bundle modules + plugins + roles.
+- **Molecule** test role trên nhiều distro với Docker.
+- **`requirements.yml`** pin version cho role + collection.
+- vProfile playbook → kiến trúc modular dựa trên role.
 
 **Bài kế tiếp** → [Bài 4: Ansible Vault, dynamic inventory, AWX/Tower](04-ansible-advanced.md)

@@ -1,23 +1,23 @@
 # Bài 2: CodeBuild + CodeDeploy chi tiết
 
-Bài 1 overview. Bài này deep-dive **CodeBuild** (build server managed) và **CodeDeploy** (deployment strategies).
+Bài 1 đã overview AWS CI/CD stack. Bài này deep-dive vào **CodeBuild** (build server được AWS quản lý hộ) và **CodeDeploy** (các chiến lược triển khai).
 
 ## CodeBuild
 
-### Concept
+### Khái niệm
 
-> CodeBuild = managed build server. No Jenkins to maintain. Pay per minute.
+> CodeBuild = build server **managed** (do AWS vận hành hộ). Không cần tự maintain Jenkins. Trả phí theo phút build.
 
-Specifications:
-- Container-based.
-- Linux/Windows.
-- Custom Docker image.
-- Concurrent builds.
-- Lambda-backed for small jobs (cheaper).
+Đặc điểm chính:
+- Container-based (chạy build trong container).
+- Hỗ trợ Linux và Windows.
+- Cho phép dùng custom Docker image làm môi trường build.
+- Cho phép concurrent build (chạy nhiều build song song).
+- Lambda-backed cho job nhỏ (rẻ hơn nhiều so với EC2-backed).
 
-### buildspec.yml
+### buildspec.yml — định nghĩa các bước build
 
-Define build steps:
+Đây là file declare toàn bộ quy trình build cho project:
 
 ```yaml
 version: 0.2
@@ -83,27 +83,32 @@ cache:
     - '/root/.m2/**/*'
 ```
 
-### Local environment variables
+### Cấu hình biến môi trường (Environment variables)
 
 ```yaml
 env:
-  variables:                 # Plain
+  variables:                 # Plain — giá trị trực tiếp
     KEY: value
-  parameter-store:           # Pull from SSM at build start
+  parameter-store:           # Pull từ AWS SSM Parameter Store khi build bắt đầu
     DB_HOST: /prod/db/host
-  secrets-manager:           # Pull from Secrets Manager
+  secrets-manager:           # Pull từ AWS Secrets Manager
     API_KEY: prod/api:key
 ```
 
-### Build environment
+→ Không hardcode secret vào buildspec — luôn lấy từ SSM hoặc Secrets Manager.
 
-Console → CodeBuild → Project → Environment:
-- **Image**: managed (aws/codebuild/standard:7.0) or custom ECR image.
-- **Compute**: Small (3 GB), Medium (7 GB), Large (15 GB), Lambda.
-- **Service role**: IAM cho ECR, S3, SSM access.
-- **Privileged**: enable cho Docker build.
+### Build environment (Môi trường build)
 
-### CodeBuild custom image
+Khi tạo CodeBuild project trong Console → CodeBuild → Project → Environment, cấu hình:
+
+- **Image**: Image managed sẵn (vd: `aws/codebuild/standard:7.0`) hoặc custom image từ ECR.
+- **Compute** (tài nguyên): Small (3 GB RAM), Medium (7 GB), Large (15 GB), hoặc Lambda.
+- **Service role**: IAM role cấp quyền truy cập ECR, S3, SSM.
+- **Privileged mode**: bật khi cần Docker build (vì Docker-in-Docker yêu cầu).
+
+### CodeBuild custom image — tăng tốc build
+
+Tạo image build có sẵn các tool cần thiết để không phải cài lại mỗi build:
 
 ```dockerfile
 FROM public.ecr.aws/codebuild/amazonlinux2-x86_64-standard:5.0
@@ -119,20 +124,20 @@ docker build -t my-codebuild-image .
 docker push 123.dkr.ecr.us-east-1.amazonaws.com/my-codebuild:latest
 ```
 
-Use:
-- Project → Environment → "Custom image" → ECR URI.
-- Faster build (pre-installed tools).
+Cách dùng:
+- Trong Project → Environment → chọn "Custom image" → trỏ vào ECR URI.
+- Build nhanh hơn (vì tool đã được pre-installed).
 
-### Local build with codebuild-agent
+### Local build với codebuild-agent
 
-Test buildspec locally without spinning up CodeBuild project:
+Cho phép test buildspec ngay tại máy local — không cần tạo CodeBuild project và chờ pipeline:
 
 ```bash
-# Install codebuild-local
+# Cài codebuild-local agent
 curl -fsSL https://raw.githubusercontent.com/aws/aws-codebuild-docker-images/master/local_builds/codebuild_build.sh -o codebuild_build.sh
 chmod +x codebuild_build.sh
 
-# Run
+# Chạy build cục bộ
 ./codebuild_build.sh \
     -i aws/codebuild/standard:7.0 \
     -a /tmp/artifacts \
@@ -140,34 +145,34 @@ chmod +x codebuild_build.sh
     -e .env
 ```
 
-Debug buildspec locally before commit.
+Debug buildspec ngay tại local trước khi commit lên repo — tiết kiệm rất nhiều thời gian.
 
-### Lambda compute (fast + cheap)
+### Lambda compute (nhanh + rẻ)
 
-For small build (< 15 phút, < 10 GB RAM):
+Cho build nhỏ (< 15 phút, < 10 GB RAM):
 
 ```yaml
-ComputeType: BUILD_LAMBDA_2GB    # or 4GB, 8GB, 10GB
+ComputeType: BUILD_LAMBDA_2GB    # hoặc 4GB, 8GB, 10GB
 ```
 
-Cold start ~1s, much cheaper than EC2-backed CodeBuild.
+Cold start ~1 giây, rẻ hơn nhiều so với EC2-backed CodeBuild. Phù hợp cho build nhỏ chạy thường xuyên.
 
-### Concurrency + queue
+### Concurrency + queue + cache
 
-Service quota: default 1 concurrent build/project. Request increase.
+**Service quota mặc định**: 1 concurrent build/project. Cần request tăng quota nếu muốn nhiều build song song.
 
-Cache:
-- **S3 cache**: download cached files start.
-- **Local cache** (in container): `cache: paths:`.
-- **EFS** for large persistent cache.
+**Các loại cache** giúp tăng tốc build:
+- **S3 cache**: Download file đã cache khi build bắt đầu.
+- **Local cache** (trong container): Khai báo qua `cache: paths:` trong buildspec.
+- **EFS** cho cache lớn cần persist lâu dài.
 
 ## CodeDeploy
 
-### Concept
+### Khái niệm
 
-> CodeDeploy = deployment automation. Support EC2, ECS, Lambda.
+> CodeDeploy = service tự động hoá deployment. Hỗ trợ deploy lên EC2, ECS, Lambda.
 
-### Deployment groups
+### Deployment groups (Nhóm máy được deploy)
 
 ```bash
 aws deploy create-deployment-group \
@@ -179,20 +184,20 @@ aws deploy create-deployment-group \
     --auto-rollback-configuration enabled=true,events=DEPLOYMENT_FAILURE,DEPLOYMENT_STOP_ON_ALARM
 ```
 
-### Deployment configurations
+### Deployment configurations (Cấu hình triển khai)
 
-EC2/On-Premises:
-- `OneAtATime`: 1 instance at a time.
-- `HalfAtATime`: 50% at once.
-- `AllAtOnce`: parallel.
-- Custom: percentage.
+**Cho EC2 / On-Premises:**
+- `OneAtATime` — deploy từng instance một (an toàn nhất, chậm nhất).
+- `HalfAtATime` — deploy 50% instance cùng lúc.
+- `AllAtOnce` — deploy song song toàn bộ (nhanh nhất, rủi ro cao nhất).
+- Custom: theo % tuỳ chọn.
 
-Lambda:
-- `Linear10PercentEvery1Minute`: shift 10% every minute.
-- `Canary10Percent5Minutes`: 10% first 5 min, then 100%.
+**Cho Lambda:**
+- `Linear10PercentEvery1Minute` — chuyển 10% traffic mỗi phút.
+- `Canary10Percent5Minutes` — 10% trong 5 phút đầu, sau đó 100%.
 - `AllAtOnce`.
 
-ECS:
+**Cho ECS:**
 - `Linear10PercentEvery1Minute`.
 - `Canary10Percent5Minutes`.
 - `AllAtOnce`.
@@ -227,9 +232,9 @@ hooks:
       timeout: 300
 ```
 
-Hooks execute in order. Failed hook → automatic rollback.
+Các hook chạy **theo thứ tự**. Nếu 1 hook fail → CodeDeploy tự động rollback toàn bộ.
 
-`scripts/health_check.sh`:
+`scripts/health_check.sh` — ví dụ health check script:
 
 ```bash
 #!/bin/bash
@@ -265,12 +270,12 @@ Hooks:
   - AfterAllowTraffic: "AfterProductionHookFn"
 ```
 
-ECS Blue/Green flow:
-1. Deploy task definition new → green ECS service.
-2. Test traffic → green (via test listener).
-3. Switch production traffic → green.
-4. Drain blue.
-5. Optionally terminate blue.
+**ECS Blue/Green flow:**
+1. Deploy task definition mới → green ECS service (môi trường mới).
+2. Test traffic vào green (qua test listener — không ảnh hưởng prod).
+3. Chuyển production traffic sang green.
+4. Drain (rút) traffic khỏi blue (môi trường cũ).
+5. Optionally terminate blue (hoặc giữ lại để rollback nhanh).
 
 ### appspec.yml — Lambda
 
@@ -289,9 +294,9 @@ Hooks:
   - AfterAllowTraffic: "postTrafficHookFn"
 ```
 
-CodeDeploy shift alias traffic gradually. Pre-traffic hook test new version.
+CodeDeploy shift dần traffic của alias sang version mới. Pre-traffic hook là Lambda function test version mới trước khi chuyển traffic.
 
-### Triggers + monitoring
+### Triggers + monitoring (Cảnh báo và monitor)
 
 ```bash
 aws deploy create-deployment-group ... \
@@ -313,12 +318,12 @@ aws deploy create-deployment-group ... \
     }'
 ```
 
-CloudWatch alarm trigger → CodeDeploy auto-rollback.
+Khi CloudWatch alarm trigger (vd: error rate cao đột biến) → CodeDeploy auto-rollback. Đây là cơ chế bảo vệ production cực kỳ hiệu quả.
 
-## CodeDeploy + Lambda canary example
+## CodeDeploy + Lambda canary — ví dụ thực tế
 
 ```python
-# preTrafficHook.py — test new version before traffic
+# preTrafficHook.py — test version mới trước khi chuyển traffic
 import boto3
 import json
 
@@ -330,7 +335,7 @@ def handler(event, context):
     lifecycle_event_hook_execution_id = event["LifecycleEventHookExecutionId"]
 
     try:
-        # Invoke new version with test payload
+        # Invoke version mới với test payload
         new_version = "vprofile-app:2"
         resp = lambda_client.invoke(
             FunctionName=new_version,
@@ -341,7 +346,7 @@ def handler(event, context):
         if resp["StatusCode"] != 200:
             raise Exception("Test invocation failed")
 
-        # Notify success → CodeDeploy proceed
+        # Báo CodeDeploy: test thành công → tiếp tục
         codedeploy.put_lifecycle_event_hook_execution_status(
             deploymentId=deployment_id,
             lifecycleEventHookExecutionId=lifecycle_event_hook_execution_id,
@@ -356,7 +361,7 @@ def handler(event, context):
         raise
 ```
 
-## Full vProfile pipeline integration
+## Pipeline đầy đủ cho vProfile — tích hợp toàn stack
 
 ### Stack diagram
 
@@ -377,27 +382,27 @@ Build stage: CodeBuild
   - Output: imagedefinitions.json
     │
     ▼
-Test stage: CodeBuild (smoke + integration)
+Test stage: CodeBuild (smoke + integration test)
     │
     ▼
 Deploy Staging stage: ECS deploy action
-  - Update ECS service
+  - Update ECS service ở staging
     │
     ▼
-Manual Approval
+Manual Approval (cần phê duyệt thủ công)
     │
     ▼
 Deploy Production stage: CodeDeploy Blue/Green
-  - Deploy to green ECS
-  - Pre-traffic hook
-  - Shift 10% → wait 5min → 100%
+  - Deploy lên green ECS
+  - Chạy pre-traffic hook
+  - Shift 10% → đợi 5 phút → 100%
   - Drain blue
     │
     ▼
-Post-deploy stage: CloudWatch alarm verify
+Post-deploy stage: Verify CloudWatch alarm
 ```
 
-### CodePipeline YAML (CloudFormation)
+### CodePipeline YAML (qua CloudFormation)
 
 ```yaml
 Resources:
@@ -487,49 +492,49 @@ Resources:
 
 ### Build
 
-- Cache Maven `.m2` to S3.
-- Use Lambda compute for small fast builds.
-- Custom image with pre-installed tools.
-- Privileged mode for Docker build.
-- Buildspec in repo (not console-defined).
+- Cache Maven `.m2` vào S3 — giảm thời gian download dependency.
+- Dùng Lambda compute cho build nhỏ, build nhanh.
+- Custom image với tool đã pre-installed sẵn.
+- Bật privileged mode khi cần Docker build.
+- Buildspec lưu trong repo (không định nghĩa qua console — version control mới track được).
 
 ### Deploy
 
-- Always Blue/Green for production.
-- Pre-traffic hook with synthetic test.
-- Auto-rollback CloudWatch alarm.
-- Notification SNS → Slack.
-- Manual approval for prod.
-- Health check grace period 60-300s for slow boot.
+- Luôn dùng Blue/Green cho production.
+- Pre-traffic hook chạy synthetic test (mô phỏng request thật).
+- Auto-rollback theo CloudWatch alarm.
+- Notification qua SNS → Slack.
+- Yêu cầu manual approval cho deploy prod.
+- Health check grace period 60-300s cho app khởi động chậm (vd Tomcat, JVM warmup).
 
 ### Security
 
-- KMS encrypt artifact bucket.
-- IAM least privilege per stage.
-- VPC endpoint cho ECR pull (no NAT).
-- Branch protection main.
+- KMS encrypt artifact bucket trên S3.
+- IAM least privilege (quyền tối thiểu) cho từng stage.
+- VPC endpoint cho ECR pull → không cần NAT Gateway (tiết kiệm cost).
+- Branch protection cho main branch (yêu cầu PR review).
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Buildspec inline console | Hard to track | Always in repo |
-| Docker build no privileged | Build fail | Enable privileged |
-| No cache | Slow build | S3 + local cache |
-| imagedefinitions.json wrong format | Deploy fail | `[{"name":"X","imageUri":"..."}]` |
-| Health check grace too short | Premature kill | Increase to 300s |
-| No alarm config | Rollback not trigger | Attach CloudWatch alarm |
-| Approval timeout | Pipeline stuck | Set timeout (default 7 days too long) |
+| Buildspec inline trong console | Khó track thay đổi | Luôn lưu trong repo |
+| Docker build không bật privileged | Build fail | Enable privileged mode |
+| Không có cache | Build chậm | S3 + local cache |
+| imagedefinitions.json sai format | Deploy fail | Format đúng: `[{"name":"X","imageUri":"..."}]` |
+| Health check grace period quá ngắn | App bị kill sớm | Tăng lên 300s |
+| Không config alarm | Auto-rollback không trigger | Attach CloudWatch alarm |
+| Approval không có timeout | Pipeline kẹt vĩnh viễn | Set timeout (default 7 ngày quá dài) |
 
 ## Tóm tắt bài 2
 
-- **CodeBuild** managed build, `buildspec.yml` define phases.
-- Lambda compute cho small fast builds.
-- Custom image pre-install tools for speed.
-- **CodeDeploy** EC2/ECS/Lambda với Blue/Green + Canary.
-- `appspec.yml` define hooks + traffic shift config.
-- Pre-traffic hook validate new version.
-- Auto-rollback CloudWatch alarm.
-- Full pipeline: Source → Build → Test → DeployStaging → Approval → DeployProd Blue/Green.
+- **CodeBuild** là managed build service. `buildspec.yml` định nghĩa các phase.
+- Dùng Lambda compute cho build nhỏ và nhanh.
+- Custom image pre-install tool để tăng tốc build.
+- **CodeDeploy** hỗ trợ EC2 / ECS / Lambda với Blue/Green + Canary deployment.
+- `appspec.yml` định nghĩa các hook + cấu hình traffic shift.
+- Pre-traffic hook validate version mới trước khi chuyển production traffic.
+- Auto-rollback dựa vào CloudWatch alarm.
+- Pipeline đầy đủ: Source → Build → Test → DeployStaging → Approval → DeployProd Blue/Green.
 
 **Bài kế tiếp** → [Bài 3: GitHub Actions + AWS OIDC (modern alternative)](03-github-aws-oidc.md)

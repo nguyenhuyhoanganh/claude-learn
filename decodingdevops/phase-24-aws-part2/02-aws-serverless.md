@@ -1,17 +1,17 @@
 # Bài 2: AWS Serverless — Lambda, API Gateway, Step Functions, EventBridge
 
-Serverless = không quản server, chỉ care code. Bài này dạy **Lambda đầy đủ** + API Gateway + orchestration.
+Serverless = không quản server, chỉ cần care về code. Bài này dạy **Lambda đầy đủ** + API Gateway + orchestration.
 
-## Lambda deep
+## Lambda deep dive
 
 ### Anatomy
 
 ```python
 def lambda_handler(event, context):
     """
-    event:   Trigger data (HTTP request, S3 event, ...)
-    context: Runtime info (request_id, function_name, timeout, ...)
-    return:  Response (auto-serialize JSON)
+    event:   Dữ liệu trigger (HTTP request, S3 event, ...)
+    context: Thông tin runtime (request_id, function_name, timeout, ...)
+    return:  Response (Lambda tự serialize thành JSON)
     """
     print(f"Received: {event}")
     return {
@@ -21,19 +21,19 @@ def lambda_handler(event, context):
     }
 ```
 
-### Limits
+### Limit (Giới hạn)
 
-| | Value |
+| | Giá trị |
 |---|---|
 | Memory | 128 MB - 10240 MB |
 | Timeout | Max 15 phút |
 | Package size | 50 MB zip, 250 MB unzipped, 10 GB image |
 | /tmp | 512 MB - 10 GB |
-| Concurrent | 1000 / account default |
-| Env variable | 4 KB total |
+| Concurrent | 1000 / account (mặc định) |
+| Env variable | 4 KB tổng |
 | Payload | 6 MB sync, 256 KB async |
 
-### Runtimes
+### Runtimes (Ngôn ngữ hỗ trợ)
 
 - Python 3.11/3.12.
 - Node.js 18/20.
@@ -42,18 +42,18 @@ def lambda_handler(event, context):
 - Ruby 3.2.
 - .NET 6/8.
 - Custom runtime (Rust, Bash, ...).
-- Container image (any).
+- Container image (mọi ngôn ngữ).
 
 ### Deploy Lambda
 
-#### Option 1: Zip upload
+#### Option 1: Upload qua Zip
 
 ```bash
 # Package
 zip -r function.zip lambda_handler.py
 zip function.zip dependencies/*
 
-# Create function
+# Tạo function
 aws lambda create-function \
     --function-name hello \
     --runtime python3.12 \
@@ -128,24 +128,24 @@ sam build
 sam deploy --guided
 ```
 
-### Cold start
+### Cold start (Khởi động lạnh)
 
-First invoke = load runtime + code = 100ms-2s.
+Lần invoke đầu = load runtime + code = mất 100ms-2s.
 
-Mitigation:
-- **Provisioned concurrency**: keep N instance warm (extra cost).
-- **SnapStart** (Java only): cache initialized state.
-- **Smaller package**: fewer dependencies.
-- **Init logic**: connection pool outside handler.
+Mitigation (cách giảm cold start):
+- **Provisioned concurrency**: giữ N instance luôn warm (tốn thêm tiền).
+- **SnapStart** (chỉ Java): cache state đã initialize.
+- **Package nhỏ hơn**: ít dependency hơn.
+- **Init logic**: connection pool đặt ngoài handler.
 
 ```python
-# BAD - new connection per invoke
+# BAD - tạo connection mới mỗi invoke
 def lambda_handler(event, context):
-    conn = psycopg2.connect(...)        # Cold start mỗi invoke
+    conn = psycopg2.connect(...)        # Cold start mỗi lần invoke
     ...
 
 # GOOD - reuse connection
-conn = psycopg2.connect(...)             # Init once
+conn = psycopg2.connect(...)             # Init 1 lần khi container warm
 
 def lambda_handler(event, context):
     cursor = conn.cursor()
@@ -154,7 +154,7 @@ def lambda_handler(event, context):
 
 ### Lambda layers
 
-Share code between functions:
+Chia sẻ code giữa nhiều function:
 
 ```bash
 # Build layer
@@ -169,37 +169,37 @@ aws lambda publish-layer-version \
     --zip-file fileb://layer.zip \
     --compatible-runtimes python3.12
 
-# Use in function
+# Dùng trong function
 aws lambda update-function-configuration \
     --function-name hello \
     --layers arn:aws:lambda:us-east-1:123:layer:common-deps:1
 ```
 
-Layers: cache deps, share utility code, custom runtime.
+Layers dùng để: cache dependency, share utility code, custom runtime.
 
-### Versions + Aliases
+### Versions + Aliases (Phiên bản và bí danh)
 
 ```bash
-# Publish version (immutable snapshot)
+# Publish version (snapshot bất biến)
 aws lambda publish-version --function-name hello
 # Version 1 created
 
-# Create alias
+# Tạo alias
 aws lambda create-alias \
     --function-name hello \
     --name prod \
     --function-version 1
 
-# Traffic shifting alias
+# Traffic shifting alias (canary deploy)
 aws lambda update-alias \
     --function-name hello \
     --name prod \
     --function-version 2 \
     --routing-config 'AdditionalVersionWeights={"1"=0.9}'
-# 90% v1, 10% v2 (canary)
+# 90% traffic vào v1, 10% vào v2 (canary)
 ```
 
-API Gateway / EventBridge trigger `hello:prod` → use alias.
+API Gateway / EventBridge trigger `hello:prod` → dùng alias (không bind trực tiếp version).
 
 ## API Gateway
 
@@ -207,24 +207,24 @@ API Gateway / EventBridge trigger `hello:prod` → use alias.
 
 | | REST API | HTTP API | WebSocket API |
 |---|---|---|---|
-| Cost | High | **Low** (cheaper 70%) | Medium |
-| Latency | Higher | **Lower** | N/A |
-| Feature | Full | Subset | Bidirectional |
-| Use case | Legacy, full feature | Modern simple | Realtime chat |
+| Cost | Cao | **Thấp** (rẻ hơn 70%) | Trung bình |
+| Latency | Cao hơn | **Thấp hơn** | N/A |
+| Feature | Đầy đủ | Subset | Bidirectional |
+| Use case | Legacy, full feature | Project hiện đại đơn giản | Real-time chat |
 
-HTTP API recommend cho project mới.
+**HTTP API** được khuyến nghị cho project mới.
 
 ### Setup HTTP API + Lambda
 
 ```bash
-# Create API
+# Tạo API
 API_ID=$(aws apigatewayv2 create-api \
     --name vprofile-api \
     --protocol-type HTTP \
     --target arn:aws:lambda:us-east-1:123:function:hello \
     --query ApiId --output text)
 
-# Get URL
+# Lấy URL
 aws apigatewayv2 get-api --api-id $API_ID \
     --query ApiEndpoint --output text
 # https://xxxx.execute-api.us-east-1.amazonaws.com
@@ -233,7 +233,7 @@ aws apigatewayv2 get-api --api-id $API_ID \
 ### Routes
 
 ```bash
-# Add route + integration
+# Thêm route + integration
 aws apigatewayv2 create-integration \
     --api-id $API_ID \
     --integration-type AWS_PROXY \
@@ -249,16 +249,16 @@ aws apigatewayv2 create-route \
 ### Custom domain + cert
 
 ```bash
-# Cert
+# Cert ACM
 CERT_ARN=$(aws acm request-certificate \
     --domain-name api.vprofile.acme.com \
     --validation-method DNS \
     --region us-east-1 \
     --query CertificateArn --output text)
 
-# Wait validated...
+# Chờ validated...
 
-# Custom domain
+# Tạo custom domain
 aws apigatewayv2 create-domain-name \
     --domain-name api.vprofile.acme.com \
     --domain-name-configurations CertificateArn=$CERT_ARN
@@ -270,21 +270,21 @@ aws apigatewayv2 create-api-mapping \
     --stage \$default
 
 # Route 53 alias
-aws route53 change-resource-record-sets ... # Alias to API Gateway domain
+aws route53 change-resource-record-sets ... # Alias trỏ đến API Gateway domain
 ```
 
 ### Authorization
 
 ```yaml
-# JWT (Cognito or external IdP)
+# JWT (Cognito hoặc external IdP)
 - Authorization: Bearer <jwt-token>
 - API Gateway verify với issuer URL + audience
 
-# IAM (sign with AWS sig v4)
-- Service-to-service
+# IAM (sign request với AWS sig v4)
+- Dùng cho service-to-service
 
 # Lambda authorizer
-- Custom logic Python function
+- Logic auth tuỳ chỉnh, viết bằng Python
 ```
 
 ```python
@@ -307,14 +307,14 @@ DefaultRouteSettings:
   ThrottlingRateLimit: 1000      # req/s
   ThrottlingBurstLimit: 2000
 
-# Cache (REST API only)
+# Cache (chỉ REST API có)
 CacheEnabled: true
 CacheTtlInSeconds: 300
 ```
 
-## Step Functions — workflow
+## Step Functions — Workflow orchestration
 
-Orchestrate Lambda + service into workflow:
+Phối hợp Lambda + service thành workflow:
 
 ```json
 {
@@ -381,18 +381,18 @@ Orchestrate Lambda + service into workflow:
 }
 ```
 
-UI: visual workflow editor.
+UI: visual workflow editor (kéo thả).
 
-Pros:
-- Built-in retry + error handling.
-- Long-running (max 1 year).
-- Parallel + Map (foreach).
-- Audit log every step.
-- Integrate 200+ AWS service direct.
+**Ưu điểm Step Functions:**
+- Retry + error handling built-in.
+- Long-running (tối đa 1 năm).
+- Hỗ trợ Parallel + Map (foreach).
+- Audit log mọi bước.
+- Tích hợp trực tiếp 200+ AWS service.
 
-Cost: $25/million state transition. Standard. Express workflow cheaper for short tasks.
+Cost: $25 / triệu state transition (Standard). Workflow loại **Express** rẻ hơn nhiều cho task ngắn.
 
-## EventBridge — event bus
+## EventBridge — Event bus
 
 ```text
 Event Source → EventBridge → Targets
@@ -400,7 +400,7 @@ Event Source → EventBridge → Targets
                custom)        Step Functions, ...)
 ```
 
-### Schedule (cron)
+### Schedule (cron-like)
 
 ```bash
 aws events put-rule \
@@ -413,7 +413,7 @@ aws events put-targets \
     --targets "Id=1,Arn=arn:aws:lambda:us-east-1:123:function:backup"
 ```
 
-### React to AWS event
+### React to AWS event (Phản ứng với event của AWS)
 
 ```bash
 # EC2 instance state change
@@ -429,7 +429,7 @@ aws events put-targets --rule ec2-stopped \
     --targets "Id=1,Arn=arn:aws:sns:us-east-1:123:alerts"
 ```
 
-### Custom event
+### Custom event (Event tự định nghĩa)
 
 ```python
 import boto3
@@ -447,7 +447,7 @@ eb.put_events(Entries=[{
 }])
 ```
 
-Subscriber rule:
+Subscriber rule (lọc event):
 
 ```json
 {
@@ -459,14 +459,14 @@ Subscriber rule:
 
 ### EventBridge Pipes
 
-Source → Filter → Enrichment → Target. Replace many Lambda glue.
+Source → Filter → Enrichment → Target. Thay thế nhiều Lambda glue (Lambda chỉ làm nhiệm vụ kết nối).
 
-Source: SQS, Kinesis, DynamoDB stream, MSK.
+Source hỗ trợ: SQS, Kinesis, DynamoDB stream, MSK.
 Target: Lambda, Step Functions, SQS, ...
 
 ## SAM — Serverless Application Model
 
-`template.yaml` full example:
+`template.yaml` ví dụ đầy đủ:
 
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
@@ -530,7 +530,7 @@ Outputs:
 sam build
 sam deploy --guided
 
-# Local test
+# Test local
 sam local start-api
 sam local invoke GetUserFunction --event events/test.json
 ```
@@ -539,22 +539,22 @@ sam local invoke GetUserFunction --event events/test.json
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Cold start critical path | Latency spike | Provisioned concurrency |
-| Package > 250 MB | Deploy fail | Use layer hoặc container image |
-| Connection pool inside handler | Slow | Init outside |
-| Sync invocation no error handling | Lost message | Dead Letter Queue |
-| API Gateway no throttling | Cost spike | Rate limit per stage |
-| Step Functions Standard for short task | $$$ | Use Express |
-| Lambda in VPC | Cold start +5s | Avoid VPC nếu không cần |
-| Hardcode secret | Lộ | Secrets Manager + cache |
+| Cold start ở critical path | Latency spike | Provisioned concurrency |
+| Package > 250 MB | Deploy fail | Dùng layer hoặc container image |
+| Tạo connection pool trong handler | Chậm | Init bên ngoài handler |
+| Sync invocation không có error handling | Mất message | Dead Letter Queue |
+| API Gateway không throttling | Cost spike | Rate limit per stage |
+| Step Functions Standard cho task ngắn | Tốn tiền | Dùng Express |
+| Lambda trong VPC | Cold start +5s | Tránh VPC nếu không thực sự cần |
+| Hardcode secret | Lộ | Secrets Manager + cache trong handler |
 
 ## Tóm tắt bài 2
 
-- **Lambda**: serverless function pay-per-invocation max 15 phút.
-- **Provisioned concurrency** mitigate cold start.
-- **Layers** share code, **versions + aliases** canary deploy.
-- **API Gateway HTTP API** cheaper than REST, modern projects.
-- **JWT + IAM + Lambda authorizer** authentication options.
+- **Lambda**: serverless function, trả tiền theo invocation, max 15 phút.
+- **Provisioned concurrency** giảm cold start.
+- **Layers** share code; **versions + aliases** cho canary deploy.
+- **API Gateway HTTP API** rẻ hơn REST, khuyến nghị cho project hiện đại.
+- **JWT + IAM + Lambda authorizer** là các option authentication.
 - **Step Functions** orchestration với retry + parallel + visual editor.
 - **EventBridge** event bus: schedule + AWS event + custom event.
 - **SAM** = CloudFormation transform cho serverless app.

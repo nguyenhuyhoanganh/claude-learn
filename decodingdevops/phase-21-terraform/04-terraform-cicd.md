@@ -1,10 +1,10 @@
 # Bài 4: CI/CD cho Terraform, Atlantis, security scan, best practices
 
-Bài cuối phase 21. Tổng hợp **Terraform production workflow**: PR plan visible, security scan, drift detection, scale team.
+Bài cuối của phase 21. Tổng hợp **Terraform workflow ở production**: hiển thị plan trên PR, security scan, drift detection (phát hiện thay đổi ngoài Terraform), workflow cho team lớn.
 
 ## CI workflow cơ bản
 
-`.github/workflows/terraform.yml`:
+File `.github/workflows/terraform.yml`:
 
 ```yaml
 name: Terraform
@@ -201,16 +201,16 @@ ${plan}
       - run: terraform apply -auto-approve -input=false
 ```
 
-`environment: production-apply` → require reviewer approve trên GitHub UI.
+`environment: production-apply` → bắt buộc reviewer approve trên GitHub UI trước khi job chạy.
 
-## Atlantis — PR-native workflow
+## Atlantis — Workflow tích hợp ngay trong PR
 
-Atlantis = service listen GitHub webhook, run Terraform với PR commands.
+Atlantis = service lắng nghe webhook từ GitHub, chạy Terraform thông qua các comment trên PR.
 
 ### Setup
 
 ```bash
-# Run Atlantis trên EC2 hoặc K8s
+# Chạy Atlantis trên EC2 hoặc K8s
 docker run -d --name atlantis \
     -p 4141:4141 \
     -e ATLANTIS_GH_USER=acme-bot \
@@ -222,15 +222,17 @@ docker run -d --name atlantis \
     runatlantis/atlantis:latest
 ```
 
-### Workflow
+### Workflow Atlantis (luồng hoạt động)
 
-1. Dev tạo PR đổi Terraform code.
-2. Atlantis auto-comment `atlantis plan` output.
-3. Reviewer thấy plan, comment.
-4. Dev `atlantis apply` → Atlantis run apply.
-5. Apply log post lại PR.
+1. Dev tạo PR thay đổi Terraform code.
+2. Atlantis tự động comment kết quả `atlantis plan` lên PR.
+3. Reviewer xem plan, comment review.
+4. Dev gõ `atlantis apply` → Atlantis chạy apply.
+5. Log apply được post ngược lại lên PR.
 
-`atlantis.yaml`:
+→ Toàn bộ workflow Terraform diễn ra ngay trong giao diện PR — không cần CI riêng.
+
+File `atlantis.yaml` cấu hình project:
 
 ```yaml
 version: 3
@@ -264,7 +266,7 @@ workflows:
         - run: ./post-apply.sh
 ```
 
-## Security scan tools
+## Security scan tools (Công cụ quét bảo mật)
 
 ### Checkov
 
@@ -273,11 +275,11 @@ pip install checkov
 checkov -d . --framework terraform
 ```
 
-Check 200+ rules:
-- S3 bucket public.
-- RDS not encrypted.
-- Security group too open.
-- IAM policy too permissive.
+Kiểm tra 200+ rule, bao gồm:
+- S3 bucket có public access.
+- RDS không có encryption.
+- Security group mở quá rộng (vd: 0.0.0.0/0 cho mọi port).
+- IAM policy quá permissive (cấp quyền quá rộng).
 
 ### tfsec
 
@@ -286,7 +288,7 @@ brew install tfsec
 tfsec .
 ```
 
-Lightweight, Go binary, similar checks.
+Lightweight, viết bằng Go, các check tương tự Checkov.
 
 ### Terrascan
 
@@ -297,25 +299,25 @@ terrascan scan -t aws
 
 ### Snyk IaC
 
-Commercial, integrate Snyk dashboard.
+Commercial product (tính phí), tích hợp với Snyk dashboard cho enterprise.
 
-## Cost estimation
+## Cost estimation (Ước tính chi phí)
 
-### Infracost
+### Infracost — Tính chi phí trước khi apply
 
 ```bash
 brew install infracost
 infracost auth login
 
-# Static analysis (no AWS API call)
+# Static analysis (không cần gọi AWS API)
 infracost breakdown --path .
 
-# With plan
+# Với plan file (chính xác hơn)
 terraform plan -out=plan.tfplan
 infracost diff --path . --terraform-plan-path plan.tfplan
 ```
 
-PR comment với cost change:
+Comment chi phí thay đổi lên PR — reviewer thấy ngay PR này tốn thêm bao nhiêu tiền:
 
 ```yaml
 - name: Infracost
@@ -332,7 +334,7 @@ PR comment với cost change:
     path: infracost-base.json
 ```
 
-PR shows:
+PR sẽ hiện:
 
 ```text
 +-----+---+-------+
@@ -344,11 +346,13 @@ PR shows:
 +-----+---+-------+
 ```
 
-## Policy as Code
+→ Cost discussion trở thành phần của code review.
+
+## Policy as Code (Chính sách dưới dạng code)
 
 ### OPA (Open Policy Agent)
 
-Write policy in Rego:
+Viết policy bằng ngôn ngữ Rego:
 
 ```rego
 # policies/no-public-s3.rego
@@ -362,7 +366,7 @@ deny[msg] {
 }
 ```
 
-Run với conftest:
+Chạy bằng conftest:
 
 ```bash
 terraform show -json plan.tfplan > plan.json
@@ -371,9 +375,11 @@ conftest test plan.json --policy policies/
 
 ### Sentinel (Terraform Cloud Enterprise)
 
-HashiCorp's policy language. SaaS feature.
+Ngôn ngữ policy của HashiCorp. Chỉ có trong bản SaaS (Terraform Cloud Enterprise).
 
 ### Checkov custom check
+
+Viết check tuỳ chỉnh bằng Python:
 
 ```python
 # checks/no_public_s3.py
@@ -396,9 +402,11 @@ class NoPublicS3(BaseResourceCheck):
         return CheckResult.PASSED
 ```
 
-## Drift detection
+## Drift detection (Phát hiện thay đổi ngoài Terraform)
 
-Schedule daily:
+Khi có người sửa infrastructure thủ công qua AWS Console — Terraform state sẽ lệch (drift). Cần detect tự động:
+
+Schedule chạy hàng ngày:
 
 ```yaml
 on:
@@ -440,46 +448,46 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
 ```
 
-Drift → Slack alert → investigate manual change.
+Khi `terraform plan` exit code 2 = có thay đổi cần apply → drift đã xảy ra → gửi alert lên Slack → team điều tra ai đã thay đổi thủ công.
 
-## Best practices summary
+## Best practices tổng kết
 
-### Code organization
+### Code organization (Tổ chức code)
 
-- Module per logical component (vpc, ecs, rds).
-- Environment per directory (dev, staging, prod).
-- Shared state remote (S3 + DynamoDB lock).
-- Pin version everything (module, provider, Terraform).
+- 1 module cho mỗi component logic (vpc, ecs, rds).
+- 1 directory cho mỗi environment (dev, staging, prod).
+- Shared state lưu remote (S3 + DynamoDB lock).
+- Pin (cố định) version mọi thứ: module, provider, Terraform.
 
 ### Workflow
 
-- PR mandatory cho main.
-- Plan visible PR.
-- Approve required for prod.
+- PR bắt buộc khi merge vào main.
+- Plan output hiển thị ngay trong PR.
+- Approve bắt buộc cho production.
 - Atlantis hoặc CI auto-plan.
-- Drift detection daily.
+- Drift detection chạy hàng ngày.
 
 ### Security
 
-- Checkov / tfsec / Terrascan in CI.
+- Checkov / tfsec / Terrascan tích hợp trong CI.
 - Policy as Code (OPA / Sentinel).
-- No secret in HCL (Secrets Manager + data source).
-- Least privilege IAM for CI.
-- OIDC instead of static credentials.
+- Không bao giờ hardcode secret trong HCL (dùng Secrets Manager + data source).
+- Least privilege IAM cho CI service account.
+- OIDC thay vì static credential (bài 1 phase 25).
 
 ### Testing
 
-- Module unit tests (Terratest).
-- Plan as PR check.
-- Cost diff visible (Infracost).
-- Manual smoke test post-apply.
+- Module unit test (Terratest).
+- Plan như một PR check bắt buộc.
+- Cost diff hiển thị (Infracost).
+- Manual smoke test sau khi apply.
 
 ### Operational
 
-- Backup state (S3 versioning).
+- Backup state (bật S3 versioning).
 - Audit log (CloudTrail).
-- Monitor cost (AWS Budgets).
-- Document everything.
+- Monitor cost (AWS Budgets + Cost Explorer).
+- Document mọi thứ — README cho mỗi module.
 
 ## Tổng kết phase 21
 
@@ -489,22 +497,22 @@ Drift → Slack alert → investigate manual change.
 3. Modules + composition + Terratest.
 4. CI/CD + Atlantis + security + cost.
 
-Skills:
-- Production-grade IaC với Terraform.
-- Multi-environment management.
+Skill đạt được:
+- IaC production-grade với Terraform.
+- Quản lý multi-environment.
 - Module versioning + sharing.
 - PR-based workflow.
-- Drift detection + cost optimization.
+- Drift detection + tối ưu chi phí.
 
 ## Tóm tắt bài 4
 
-- **CI plan visible PR** = mandatory.
-- **Atlantis** = native Terraform PR automation.
+- **CI hiển thị plan trên PR** = bắt buộc.
+- **Atlantis** = automation Terraform native trong PR.
 - **Checkov + tfsec + Terrascan** security scan.
-- **Infracost** cost diff PR comment.
+- **Infracost** hiển thị cost diff trong PR comment.
 - **OPA / Sentinel** policy as code.
-- **Drift detection** scheduled + Slack alert.
-- **OIDC** AWS role assume thay static credential.
-- Best practices: pin version, environment separation, secret manager, audit log.
+- **Drift detection** chạy theo lịch + alert Slack.
+- **OIDC** assume AWS role thay cho static credential.
+- Best practices: pin version, tách environment, dùng secret manager, audit log đầy đủ.
 
 **Phase kế tiếp** → [Phase 22 — Ansible](../phase-22-ansible/01-ansible-basics.md)

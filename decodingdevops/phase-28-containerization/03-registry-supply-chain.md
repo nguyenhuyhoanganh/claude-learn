@@ -1,21 +1,21 @@
 # Bài 3: Container registry, image lifecycle, supply chain security
 
-Bài cuối phase 28. **Registry management** + image lifecycle + supply chain security cho production.
+Bài cuối phase 28. **Quản lý registry** + image lifecycle + supply chain security cho production.
 
-## Container registries
+## Container registries (Các registry phổ biến)
 
 | Registry | Pros | Cost |
 |---|---|---|
-| **Docker Hub** | Universal | Free public, $$ private |
+| **Docker Hub** | Universal, công cộng phổ biến | Free public, $$ private |
 | **GitHub Container Registry (GHCR)** | Tích hợp GitHub | Free public, paid private |
-| **AWS ECR** | AWS integrated, IAM | $0.10/GB-month |
-| **Google Artifact Registry** | GCP integrated | $0.10/GB-month |
-| **Azure Container Registry** | Azure | $5/day basic |
-| **Nexus** | Self-host, multi-format | Free self-host |
-| **Harbor** | OSS, vuln scan built-in | Free self-host |
-| **Quay** | RedHat, security | Free public |
+| **AWS ECR** | Tích hợp AWS, IAM | $0.10/GB-tháng |
+| **Google Artifact Registry** | Tích hợp GCP | $0.10/GB-tháng |
+| **Azure Container Registry** | Tích hợp Azure | $5/ngày (basic) |
+| **Nexus** | Self-host, hỗ trợ nhiều format | Free self-host |
+| **Harbor** | OSS, có vuln scan built-in | Free self-host |
+| **Quay** | RedHat, security tốt | Free public |
 
-## AWS ECR deep
+## AWS ECR deep dive
 
 ### Create + lifecycle policy
 
@@ -26,7 +26,7 @@ aws ecr create-repository \
     --image-tag-mutability IMMUTABLE \
     --encryption-configuration encryptionType=KMS
 
-# Lifecycle policy — auto-cleanup
+# Lifecycle policy — tự động cleanup
 cat > lifecycle.json <<EOF
 {
   "rules": [
@@ -61,9 +61,9 @@ aws ecr put-lifecycle-policy \
     --lifecycle-policy-text file://lifecycle.json
 ```
 
-`IMMUTABLE` = can't overwrite tag → reproducibility.
+`IMMUTABLE` = không cho overwrite tag → đảm bảo reproducibility (cùng tag luôn cho cùng image).
 
-### Cross-account replication
+### Cross-account replication (Nhân bản giữa các account)
 
 ```bash
 aws ecr put-replication-configuration \
@@ -80,11 +80,11 @@ aws ecr put-replication-configuration \
     }'
 ```
 
-Multi-region replication cho DR.
+Multi-region replication cho disaster recovery.
 
-### Pull through cache
+### Pull through cache (Cache trung gian)
 
-ECR proxy cho Docker Hub:
+ECR đóng vai trò proxy cho Docker Hub:
 
 ```bash
 aws ecr create-pull-through-cache-rule \
@@ -93,27 +93,27 @@ aws ecr create-pull-through-cache-rule \
 ```
 
 Pull `123.dkr.ecr.us-east-1.amazonaws.com/dockerhub/library/nginx:1.25`
-→ ECR check cache → fetch from Docker Hub if miss → store locally.
+→ ECR check cache → fetch từ Docker Hub nếu miss → cache lại.
 
-Benefits:
-- Bypass Docker Hub rate limit.
-- Faster pull (same region as ECR).
-- VPC endpoint route private.
+Lợi ích:
+- Bypass Docker Hub rate limit (200 pull / 6h cho anonymous).
+- Pull nhanh hơn (cùng region với ECR).
+- VPC endpoint cho phép route private.
 
 ## Image tagging strategy
 
 | Pattern | Pros | Cons |
 |---|---|---|
-| `latest` | Easy | Not reproducible |
-| `v1.0.0` (SemVer) | Clear | Manual update |
-| `git-abc1234` (commit SHA) | Reproducible | Long |
-| `2026-05-31-abc1234` | Time + commit | Long |
-| Branch name (`main`, `dev`) | Branch-based deploy | Mutable |
-| Multiple tags | Flexible | Confusing |
+| `latest` | Dễ | Không reproducible |
+| `v1.0.0` (SemVer) | Rõ ràng | Manual update |
+| `git-abc1234` (commit SHA) | Reproducible | Dài |
+| `2026-05-31-abc1234` | Time + commit | Dài |
+| Branch name (`main`, `dev`) | Deploy theo branch | Mutable (có thể đổi) |
+| Multiple tags | Linh hoạt | Có thể confusing |
 
-### Recommended
+### Recommended (Khuyến nghị)
 
-Build with multiple tags:
+Build với nhiều tag:
 
 ```bash
 SHA=$(git rev-parse --short HEAD)
@@ -127,8 +127,8 @@ docker tag vprofile $REGISTRY/vprofile:$BRANCH-latest
 docker push --all-tags $REGISTRY/vprofile
 ```
 
-Production deploy use `$SHA` → reproducible.
-Latest tag for `main` branch convenience.
+Production deploy dùng `$SHA` → reproducible 100%.
+Tag `latest` cho branch `main` chỉ dùng để tiện.
 
 ### Immutable tag
 
@@ -139,7 +139,7 @@ aws ecr put-image-tag-mutability \
     --image-tag-mutability IMMUTABLE
 ```
 
-Can't overwrite `:v1.0.0` once pushed. Avoid accidental overwrite.
+Sau khi push `:v1.0.0` rồi → không thể overwrite. Tránh accidentally overwrite (lỗi vô tình thay image).
 
 ## Image scanning + policy
 
@@ -151,13 +151,15 @@ aws ecr put-image-scanning-configuration \
     --repository-name vprofile \
     --image-scanning-configuration scanOnPush=true
 
-# Or Enhanced scanning (Inspector v2)
+# Hoặc Enhanced scanning (qua Inspector v2)
 aws inspector2 enable --resource-types ECR
 ```
 
-Findings: vulnerabilities + CVE references.
+Findings: lỗ hổng + CVE references.
 
-### Cross-tool scan in CI
+### Cross-tool scan trong CI
+
+Dùng nhiều scanner song song để tăng coverage:
 
 ```yaml
 # .github/workflows/security.yml
@@ -198,25 +200,25 @@ jobs:
           image: ghcr.io/acme/vprofile:latest
 ```
 
-3 tool → high coverage, false positive reduction.
+3 tool → coverage cao, giảm false positive (cảnh báo nhầm).
 
-## SBOM — Software Bill of Materials
+## SBOM — Software Bill of Materials (Danh mục thành phần phần mềm)
 
-Generate at build:
+Generate khi build:
 
 ```bash
-# Buildx
+# Qua Buildx
 docker buildx build \
     --sbom=true \
     --provenance=mode=max \
     -t ghcr.io/acme/vprofile:v1.0 \
     --push .
 
-# Or Syft separate
+# Hoặc Syft riêng
 syft ghcr.io/acme/vprofile:v1.0 -o spdx-json > sbom.json
 ```
 
-SBOM = JSON list mọi component:
+SBOM = JSON liệt kê mọi component có trong image:
 
 ```json
 {
@@ -229,9 +231,9 @@ SBOM = JSON list mọi component:
 }
 ```
 
-Compliance: regulators require SBOM (EO 14028).
+Compliance: regulator yêu cầu SBOM (vd: Executive Order 14028 của Mỹ).
 
-## Cosign — image signing
+## Cosign — Image signing (Ký số image)
 
 ### Generate keys
 
@@ -240,22 +242,22 @@ Compliance: regulators require SBOM (EO 14028).
 cosign generate-key-pair
 # cosign.key (private), cosign.pub (public)
 
-# Or KMS-backed
+# Hoặc dùng KMS-backed key
 cosign generate-key-pair --kms awskms:///alias/cosign-key
 ```
 
-### Sign
+### Sign image
 
 ```bash
 COSIGN_PASSWORD=xxx cosign sign \
     --key cosign.key \
     ghcr.io/acme/vprofile:v1.0
 
-# Or keyless (OIDC)
+# Hoặc keyless (qua OIDC)
 cosign sign --identity-token $OIDC_TOKEN ghcr.io/acme/vprofile:v1.0
 ```
 
-### Verify
+### Verify signature
 
 ```bash
 cosign verify --key cosign.pub ghcr.io/acme/vprofile:v1.0
@@ -263,13 +265,13 @@ cosign verify --key cosign.pub ghcr.io/acme/vprofile:v1.0
 # Output: trust validated, image attestations
 ```
 
-### Sign attestations
+### Sign attestations (Chữ ký kèm metadata)
 
 ```bash
-# Sign SBOM
+# Sign SBOM kèm image
 cosign attest --predicate sbom.json --key cosign.key ghcr.io/acme/vprofile:v1.0
 
-# Sign vulnerability report
+# Sign vulnerability report kèm image
 cosign attest --predicate vuln-report.json --key cosign.key ...
 ```
 
@@ -300,20 +302,20 @@ spec:
                       -----END PUBLIC KEY-----
 ```
 
-Pod with unsigned image → admission webhook reject.
+Pod dùng image chưa ký → admission webhook reject (không cho deploy).
 
-## Sigstore + keyless signing
+## Sigstore + Keyless signing (Ký không cần lưu key)
 
-Use OIDC identity instead of static key:
+Dùng OIDC identity thay vì key tĩnh:
 
 ```bash
-# Sign via GitHub OIDC (no key file)
+# Sign qua GitHub OIDC (không cần file key)
 cosign sign --identity-token $(curl -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
     "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sigstore" | jq -r .value) \
     ghcr.io/acme/vprofile:v1.0
 ```
 
-Signature stored in **Rekor** transparency log (immutable public ledger).
+Signature được lưu vào **Rekor** transparency log (sổ cái công khai, không thể sửa).
 
 Verify:
 
@@ -324,9 +326,9 @@ cosign verify \
     ghcr.io/acme/vprofile:v1.0
 ```
 
-Modern best practice — no key management.
+Đây là **best practice hiện đại nhất** — không cần quản lý key.
 
-## Slim images — minimize attack surface
+## Slim images — Giảm thiểu attack surface
 
 ### Distroless
 
@@ -344,7 +346,7 @@ USER nonroot:nonroot
 ENTRYPOINT ["/app"]
 ```
 
-~5 MB image. No shell, no apt, no anything.
+Image ~5 MB. **Không có shell**, **không có apt**, **không có gì cả** → kẻ tấn công có vào được container cũng không làm gì được.
 
 ### Alpine
 
@@ -353,9 +355,9 @@ FROM alpine:3.19
 RUN apk add --no-cache nginx
 ```
 
-~10 MB. musl libc (different from glibc — some apps incompatible).
+~10 MB. Dùng musl libc (khác với glibc — một số app có thể không tương thích).
 
-### Scratch (Go static binary)
+### Scratch (Cho Go static binary)
 
 ```dockerfile
 FROM scratch
@@ -364,9 +366,9 @@ COPY --from=builder /app /app
 CMD ["/app"]
 ```
 
-~5 MB. Cannot exec into.
+~5 MB. Không thể exec vào container (không có shell).
 
-## CI/CD with hardening
+## CI/CD with hardening (Pipeline hardened đầy đủ)
 
 ```yaml
 # .github/workflows/release.yml
@@ -438,7 +440,7 @@ jobs:
           sbom-path: ./sbom.spdx.json
 ```
 
-Pipeline produce:
+Pipeline này produce:
 - Tagged image (semver + SHA).
 - SBOM attestation.
 - Provenance attestation.
@@ -447,40 +449,40 @@ Pipeline produce:
 
 ## Supply chain — SLSA framework
 
-Supply-chain Levels for Software Artifacts:
+SLSA = Supply-chain Levels for Software Artifacts (Mức bảo mật cho artifact phần mềm):
 
 | Level | Requirements |
 |---|---|
-| **L1** | Documented build process |
-| **L2** | Hosted build service, provenance authenticated |
-| **L3** | Hardened build platform, source verified |
-| **L4** | Two-person review, hermetic build |
+| **L1** | Process build được document |
+| **L2** | Build trên service hosted, provenance authenticated |
+| **L3** | Build platform hardened, source verified |
+| **L4** | Two-person review, hermetic build (build trong môi trường cô lập tuyệt đối) |
 
-GitHub Actions + cosign + SBOM = SLSA L3 achievable.
+GitHub Actions + cosign + SBOM = đạt được SLSA L3.
 
 ## Tổng kết phase 28
 
 3 bài cover:
 1. Compose basics + networking + volume.
-2. Containerize vProfile mỗi service multi-stage.
+2. Containerize vProfile mỗi service với multi-stage build.
 3. Registry + lifecycle + supply chain security.
 
-Skills:
-- Container ecosystem mature.
-- Production-grade image hardening.
+Skill đạt được:
+- Container ecosystem trưởng thành.
+- Hardening image production-grade.
 - Supply chain security với SBOM + cosign.
 
 ## Tóm tắt bài 3
 
-- **ECR + lifecycle policy** auto-cleanup old images.
-- **IMMUTABLE tag** prevent overwrite.
+- **ECR + lifecycle policy** tự động cleanup image cũ.
+- **IMMUTABLE tag** ngăn ngừa overwrite.
 - **Pull through cache** bypass Docker Hub rate limit.
-- **Tag strategy**: SHA + SemVer + branch multi-tag.
-- **Trivy + Grype + Snyk** multi-tool scan.
+- **Tag strategy**: SHA + SemVer + branch — nhiều tag song song.
+- **Trivy + Grype + Snyk** scan multi-tool.
 - **SBOM** = compliance + transparency.
-- **Cosign keyless** signing với OIDC + Rekor log.
+- **Cosign keyless** ký số image với OIDC + Rekor log.
 - **Kyverno** K8s policy enforce signature.
-- **Distroless / scratch** minimum attack surface.
-- **SLSA** supply chain maturity model.
+- **Distroless / scratch** giảm tối đa attack surface.
+- **SLSA** maturity model cho supply chain security.
 
 **Phase kế tiếp** → [Phase 29 — Kubernetes](../phase-29-kubernetes/01-k8s-basics.md)

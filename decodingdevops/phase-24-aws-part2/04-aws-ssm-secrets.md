@@ -1,31 +1,32 @@
-# Bài 4: Systems Manager, Secrets Manager, Organizations, governance
+# Bài 4: Systems Manager, Secrets Manager, Organizations, Governance
 
-Bài cuối phase 24. Operational service + multi-account governance.
+Bài cuối của phase 24. Tổng hợp các service vận hành (operational) + governance (quản trị) cho mô hình multi-account.
 
 ## Systems Manager (SSM)
 
-Manage EC2 + on-prem at scale.
+Service để quản lý EC2 + on-premises ở quy mô lớn.
 
-### Session Manager — SSH replacement
+### Session Manager — Thay thế SSH
 
 ```bash
-# Connect (no SSH key, no bastion needed)
+# Connect vào EC2 (không cần SSH key, không cần bastion host)
 aws ssm start-session --target i-xxx
 
-# Run port forward
+# Port forwarding qua Session Manager (vd: forward MySQL port)
 aws ssm start-session \
     --target i-xxx \
     --document-name AWS-StartPortForwardingSession \
     --parameters '{"portNumber":["3306"],"localPortNumber":["13306"]}'
 
-# Audit log to S3 / CloudWatch
+# Audit log được ghi vào S3 / CloudWatch
 ```
 
-EC2 cần IAM role `AmazonSSMManagedInstanceCore`. Then any user với SSM permission có thể access. No bastion, no SSH key public.
+Yêu cầu: EC2 phải gắn IAM role `AmazonSSMManagedInstanceCore`. Sau đó user nào có quyền SSM đều có thể access. **Không cần bastion, không cần SSH key public** → giảm rất nhiều rủi ro bảo mật.
 
-### Run Command — execute on multi-instance
+### Run Command — Chạy lệnh trên nhiều instance
 
 ```bash
+# Chạy lệnh trên các instance cụ thể
 aws ssm send-command \
     --instance-ids i-xxx i-yyy i-zzz \
     --document-name AWS-RunShellScript \
@@ -35,26 +36,26 @@ aws ssm send-command \
     --max-concurrency 50% \
     --max-errors 5%
 
-# Or by tag
+# Chạy theo tag (target tất cả EC2 có tag Environment=production)
 aws ssm send-command \
     --targets "Key=tag:Environment,Values=production" \
     --document-name AWS-RunShellScript \
     --parameters '{"commands":["yum update -y"]}'
 
-# Or by ASG
+# Chạy theo Auto Scaling Group
 aws ssm send-command \
     --targets "Key=tag:AutoScalingGroupName,Values=vprofile-asg" \
     ...
 ```
 
-Cron-like: schedule với State Manager.
+Có thể schedule như cron qua **State Manager**.
 
-### Patch Manager
+### Patch Manager — Tự động vá lỗi OS
 
-Auto patch OS on fleet:
+Tự động update OS cho cả fleet (đội ngũ máy):
 
 ```bash
-# Define baseline
+# Định nghĩa patch baseline (tiêu chuẩn patch)
 aws ssm create-patch-baseline \
     --name vprofile-baseline \
     --operating-system AMAZON_LINUX_2023 \
@@ -71,7 +72,7 @@ aws ssm create-patch-baseline \
         }]
     }'
 
-# Apply weekly via maintenance window
+# Apply hàng tuần qua maintenance window
 aws ssm create-maintenance-window \
     --name vprofile-patching \
     --schedule "cron(0 2 ? * SUN *)" \
@@ -79,9 +80,9 @@ aws ssm create-maintenance-window \
     --cutoff 1
 ```
 
-### Parameter Store
+### Parameter Store — Lưu config + secret
 
-Hierarchical config + secret (free up to 10k params).
+Lưu config dạng **hierarchical** (phân cấp theo đường dẫn) + secret. **Free** đến 10,000 parameter.
 
 ```bash
 # Standard parameter (free)
@@ -90,14 +91,14 @@ aws ssm put-parameter \
     --value vprofile-rds.xxx.rds.amazonaws.com \
     --type String
 
-# Encrypted (still free)
+# Parameter encrypt (vẫn free)
 aws ssm put-parameter \
     --name /vprofile/prod/db/password \
     --value "SuperSecret123!" \
     --type SecureString \
     --key-id alias/aws/ssm
 
-# Advanced parameter ($0.05/10k)
+# Advanced parameter ($0.05 / 10k API call)
 aws ssm put-parameter \
     --name /vprofile/prod/config \
     --value "$(cat config.json)" \
@@ -105,18 +106,18 @@ aws ssm put-parameter \
     --tier Advanced
 ```
 
-Read in app:
+Đọc từ app:
 
 ```python
 import boto3
 ssm = boto3.client("ssm")
 
-# Single
+# Đọc 1 parameter
 db_host = ssm.get_parameter(Name="/vprofile/prod/db/host")["Parameter"]["Value"]
 db_pass = ssm.get_parameter(Name="/vprofile/prod/db/password",
                              WithDecryption=True)["Parameter"]["Value"]
 
-# By path (all under /vprofile/prod/)
+# Đọc theo path (tất cả parameter dưới /vprofile/prod/)
 resp = ssm.get_parameters_by_path(
     Path="/vprofile/prod/",
     Recursive=True,
@@ -124,11 +125,9 @@ resp = ssm.get_parameters_by_path(
 )
 ```
 
-EC2/Lambda IAM role với `ssm:GetParameter` permission.
+Yêu cầu EC2 / Lambda có IAM role với quyền `ssm:GetParameter`.
 
-### State Manager
-
-Configuration drift detection:
+### State Manager — Phát hiện và sửa Config drift
 
 ```bash
 aws ssm create-association \
@@ -142,35 +141,36 @@ aws ssm create-association \
     }'
 ```
 
-Daily 6am → run Ansible playbook → enforce config.
+Mỗi sáng 6h → chạy Ansible playbook → enforce config về đúng trạng thái mong muốn. Nếu có ai thay đổi thủ công (drift) → sẽ bị undo.
 
 ## Secrets Manager
 
-Like Parameter Store SecureString but with:
-- **Auto-rotation** (RDS password tự đổi periodically).
-- **Versioning** (current + previous version).
-- **Cross-account share**.
+Giống Parameter Store SecureString nhưng có thêm:
+
+- **Auto-rotation** (tự động rotate — vd: đổi password RDS định kỳ).
+- **Versioning** (có version current + previous, rollback được).
+- **Cross-account share** (share giữa nhiều AWS account).
 - **Replication** cross-region.
 
-Cost: $0.40/secret/month + $0.05/10k API call.
+**Cost**: $0.40 / secret / tháng + $0.05 / 10k API call. Đắt hơn Parameter Store nhưng tính năng mạnh hơn.
 
-### Create + auto-rotate RDS password
+### Tạo secret + Auto-rotate password RDS
 
 ```bash
 aws secretsmanager create-secret \
     --name prod/vprofile/rds \
     --secret-string '{"username":"admin","password":"InitialPass123!"}'
 
-# Enable auto-rotate
+# Bật auto-rotate
 aws secretsmanager rotate-secret \
     --secret-id prod/vprofile/rds \
     --rotation-lambda-arn arn:aws:lambda:us-east-1:123:function:SecretsManagerRDSMariaDBRotationSingleUser \
     --rotation-rules AutomaticallyAfterDays=30
 ```
 
-Every 30 days → Lambda rotate RDS password + update secret. App auto-fetch new password.
+Mỗi 30 ngày → Lambda function rotate password RDS + update secret. App tự fetch password mới — không cần can thiệp thủ công.
 
-### Use in ECS task
+### Dùng secret trong ECS task
 
 ```json
 "secrets": [{
@@ -179,9 +179,9 @@ Every 30 days → Lambda rotate RDS password + update secret. App auto-fetch new
 }]
 ```
 
-ECS inject env var DB_PASSWORD = password field từ secret.
+ECS tự inject env var `DB_PASSWORD` = giá trị field `password` từ secret.
 
-### Cross-account access
+### Cross-account access (Chia sẻ secret giữa các account)
 
 ```json
 {
@@ -195,11 +195,11 @@ ECS inject env var DB_PASSWORD = password field từ secret.
 }
 ```
 
-Account 222 read secret from account 111. Avoid duplicate secret.
+Account 222 có thể đọc secret từ account 111 — tránh duplicate secret ở nhiều account.
 
-## CloudTrail — audit log
+## CloudTrail — Audit log toàn bộ API call
 
-Every API call logged:
+Mỗi API call vào AWS đều được log lại:
 
 ```bash
 aws cloudtrail create-trail \
@@ -213,7 +213,7 @@ aws cloudtrail create-trail \
 aws cloudtrail start-logging --name org-trail
 ```
 
-Query với Athena:
+Query log bằng Athena (SQL trên S3):
 
 ```sql
 SELECT
@@ -227,9 +227,9 @@ WHERE eventName = 'TerminateInstances'
 ORDER BY eventTime DESC;
 ```
 
-Critical: untrust trusted user, regulatory compliance, incident investigation.
+CloudTrail là **bắt buộc** cho: detect untrusted user (user không tin cậy), regulatory compliance (tuân thủ luật), incident investigation (điều tra sự cố).
 
-## Config — compliance + drift
+## AWS Config — Compliance + drift detection
 
 ```bash
 aws configservice put-configuration-recorder \
@@ -237,20 +237,22 @@ aws configservice put-configuration-recorder \
     --recording-group allSupported=true,includeGlobalResourceTypes=true
 ```
 
-Predefined rules:
-- S3 bucket public access.
-- RDS encryption.
-- EC2 with IMDSv1.
-- ELB without HTTPS.
+Các predefined rule (rule có sẵn) thường dùng:
+- S3 bucket có public access không.
+- RDS có encryption không.
+- EC2 có dùng IMDSv1 (phiên bản cũ, kém bảo mật) không.
+- ELB có yêu cầu HTTPS không.
 
-Custom rules với Lambda.
+Có thể viết custom rule bằng Lambda.
 
-Auto-remediation: rule fail → trigger SSM Automation → fix.
+**Auto-remediation**: Khi rule fail → trigger SSM Automation → tự fix vấn đề.
 
-## Organizations — multi-account
+## Organizations — Multi-account governance
+
+Mô hình quản lý nhiều AWS account:
 
 ```text
-Management Account (billing)
+Management Account (billing — trả tiền tập trung)
 ├── OU: Production
 │   ├── prod-app (account)
 │   ├── prod-data (account)
@@ -261,30 +263,32 @@ Management Account (billing)
 │   └── sandbox
 └── OU: Security
     ├── security (consolidated CloudTrail + GuardDuty)
-    └── audit (read-only auditor)
+    └── audit (auditor read-only)
 ```
+
+OU = Organizational Unit (đơn vị tổ chức).
 
 ### Setup
 
 ```bash
-# Enable Organizations
+# Bật Organizations
 aws organizations create-organization --feature-set ALL
 
-# Create OU
+# Tạo OU
 aws organizations create-organizational-unit \
     --parent-id r-xxx \
     --name Production
 
-# Create account
+# Tạo account mới
 aws organizations create-account \
     --email aws+prod-app@acme.com \
     --account-name prod-app \
     --iam-user-access-to-billing DENY
 ```
 
-### Service Control Policy (SCP)
+### Service Control Policy (SCP) — Guardrail (rào chắn)
 
-Limit max permission for account:
+Giới hạn quyền tối đa cho một account — kể cả root user cũng không vượt qua được:
 
 ```json
 {
@@ -308,11 +312,11 @@ Limit max permission for account:
 }
 ```
 
-Even root user trong dev account không thể launch t3.16xlarge.
+Kể cả root user trong dev account cũng **không thể** launch instance t3.16xlarge. Vô cùng hữu ích cho cost control + security.
 
-### Centralized billing
+### Centralized billing (Billing tập trung)
 
-Management account see all account billing → reserved instance share, savings plan.
+Management account thấy được billing của tất cả các account → tận dụng được Reserved Instance share, Savings Plan.
 
 ### Cross-account IAM
 
@@ -327,90 +331,90 @@ Management account see all account billing → reserved instance share, savings 
 }
 ```
 
-Admin trong prod account assume role trong dev → manage without separate login.
+Admin trong prod account assume role vào dev → quản lý nhiều account mà không cần đăng nhập riêng từng cái.
 
 ## IAM Identity Center (SSO)
 
-Replace per-account user:
+Thay thế việc tạo user riêng cho từng account:
 
-1. Identity source: Active Directory / Okta / built-in.
-2. Permission sets: defined roles (Admin, Developer, ReadOnly).
-3. Assign user/group → account + permission set.
+1. **Identity source**: Active Directory / Okta / built-in directory.
+2. **Permission sets**: Định nghĩa các role (Admin, Developer, ReadOnly).
+3. **Assign**: Gán user/group vào account + permission set.
 
-User login portal → choose account + role → assume.
+User login vào portal trung tâm → chọn account + role → assume.
 
-Audit: who accessed what when.
+**Audit**: log đầy đủ ai vào account nào, làm gì, khi nào.
 
 ## AWS Control Tower
 
-Auto setup Organizations + landing zone + guardrails. Recommended cho enterprise new account.
+Tự động setup Organizations + landing zone + guardrails sẵn. Khuyến nghị dùng cho enterprise mới bắt đầu — tiết kiệm cả tháng setup thủ công.
 
-## Cost optimization advanced
+## Cost optimization advanced (Tối ưu chi phí nâng cao)
 
 ### Trusted Advisor
 
-Free dashboard:
-- Idle EC2.
-- Underutilized EBS.
-- Old snapshot.
-- Public S3 bucket.
+Dashboard miễn phí check các vấn đề thường gặp:
+- EC2 đang idle (không dùng).
+- EBS volume underutilized (chưa khai thác hết).
+- Old snapshot (snapshot cũ tốn dung lượng).
+- S3 bucket có public access (rủi ro bảo mật).
 
 ### Compute Optimizer
 
-ML-based right-sizing:
-- EC2: suggest smaller instance.
-- EBS: suggest gp2 → gp3.
-- Lambda: suggest memory tune.
+Đề xuất right-sizing dựa trên ML:
+- EC2: gợi ý chuyển sang instance nhỏ hơn nếu underutilized.
+- EBS: gợi ý chuyển gp2 → gp3 (rẻ hơn).
+- Lambda: gợi ý tinh chỉnh memory tối ưu.
 
 ### Compute Savings Plan
 
-Commit $/hour 1-3 năm, apply across:
-- EC2 (any family).
+Cam kết chi $X / giờ trong 1-3 năm, áp dụng cho:
+- EC2 (mọi instance family).
 - Fargate.
 - Lambda.
 
-Save 27-72% vs On-Demand.
+**Tiết kiệm 27-72%** so với On-Demand.
 
 ### EC2 Instance Savings Plan
 
-Commit specific family (e.g., m5) — higher discount but less flexible.
+Cam kết cụ thể 1 instance family (vd: m5) — discount cao hơn nhưng kém linh hoạt hơn.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| SSM agent not running | Session Manager fail | Verify cloudwatch-agent installed |
-| Secret rotate but app cache password | App fail after rotation | Cache TTL short hoặc refresh on auth fail |
-| CloudTrail one region | Miss API call other region | Multi-region trail |
-| SCP too restrictive | Block admin work | Test in OU first |
-| Organizations no SCP | No guardrail | At least deny dangerous actions |
-| Patch baseline auto-approve all | Surprise update | Test in dev first |
-| Parameter Store standard limit 4 KB | Config truncated | Advanced tier 8 KB |
+| SSM agent không chạy | Session Manager fail | Verify SSM agent installed |
+| Secret rotate nhưng app cache password cũ | App fail sau rotation | Cache TTL ngắn hoặc refresh khi auth fail |
+| CloudTrail chỉ 1 region | Miss API call ở region khác | Multi-region trail |
+| SCP quá restrictive | Block luôn admin work | Test trong OU dev trước |
+| Organizations không có SCP | Không có guardrail | Tối thiểu deny các action nguy hiểm |
+| Patch baseline auto-approve all | Update bất ngờ gây outage | Test trong dev trước |
+| Parameter Store standard giới hạn 4 KB | Config bị truncate | Dùng Advanced tier (8 KB) |
 
 ## Tổng kết phase 24
 
-4 bài cover:
+4 bài đã cover:
 1. AWS service overview.
 2. Lambda + API Gateway + Step Functions + EventBridge.
 3. ECS + EKS + CloudFront + Route 53 advanced.
 4. SSM + Secrets Manager + Organizations + governance.
 
-Skills:
-- Serverless application architecture.
+Skill đạt được:
+- Thiết kế serverless application.
 - Container orchestration AWS-native.
 - Operational excellence với SSM.
 - Multi-account governance.
 
 ## Tóm tắt bài 4
 
-- **SSM Session Manager** replace SSH, audit log.
-- **SSM Parameter Store** free config/secret hierarchical.
-- **SSM Patch Manager** auto-patch fleet.
+- **SSM Session Manager** thay thế SSH, có audit log.
+- **SSM Parameter Store** free cho config/secret theo cấu trúc phân cấp.
+- **SSM Patch Manager** tự động patch fleet.
 - **Secrets Manager** auto-rotate + cross-account share.
 - **CloudTrail** audit + Athena query.
 - **Config** compliance + drift detection + auto-remediation.
-- **Organizations** multi-account + SCP guardrail.
-- **IAM Identity Center** SSO portal.
-- **Compute Optimizer + Savings Plan** advanced cost optimization.
+- **Organizations** multi-account + SCP làm guardrail.
+- **IAM Identity Center** SSO portal tập trung.
+- **Compute Optimizer + Savings Plan** tối ưu chi phí nâng cao.
 
 **Phase kế tiếp** → [Phase 25 — AWS CI/CD project](../phase-25-aws-cicd/01-aws-cicd.md)

@@ -1,8 +1,8 @@
 # Bài 4: Ansible Vault, dynamic inventory, AWX/Tower
 
-Bài cuối phase 22. Advanced features: secret management, dynamic inventory cloud, GUI orchestration.
+Bài cuối phase 22. Các tính năng nâng cao: quản lý secret, dynamic inventory cho cloud, GUI orchestration.
 
-## Ansible Vault — encrypt secret
+## Ansible Vault — Mã hoá secret
 
 ### Encrypt file
 
@@ -10,75 +10,77 @@ Bài cuối phase 22. Advanced features: secret management, dynamic inventory cl
 # Encrypt
 ansible-vault encrypt group_vars/all/secrets.yml
 
-# Plain file → encrypted (single password)
+# File plain → file đã encrypt (single password)
 ```
 
-File trước:
+File trước khi encrypt:
 
 ```yaml
 db_password: admin123
 api_key: sk-xxx
 ```
 
-Sau encrypt:
+Sau khi encrypt:
 
 ```
 $ANSIBLE_VAULT;1.1;AES256
 66303934633463323030...
 ```
 
+→ Có thể commit lên Git an toàn vì nội dung đã encrypted.
+
 ### Decrypt + edit
 
 ```bash
-# View
+# Xem nội dung
 ansible-vault view group_vars/all/secrets.yml
 
-# Edit (open editor, decrypt → edit → re-encrypt)
+# Edit (mở editor, decrypt → edit → re-encrypt tự động)
 ansible-vault edit group_vars/all/secrets.yml
 
-# Decrypt back to plain (avoid in repo)
+# Decrypt về plain text (tránh dùng trong repo)
 ansible-vault decrypt group_vars/all/secrets.yml
 
-# Rekey (change password)
+# Đổi password (rekey)
 ansible-vault rekey group_vars/all/secrets.yml
 ```
 
-### Run với vault
+### Chạy playbook với vault
 
 ```bash
-# Prompt password
+# Prompt password lúc chạy
 ansible-playbook site.yml --ask-vault-pass
 
-# Password file
+# Dùng file chứa password
 ansible-playbook site.yml --vault-password-file=~/.vault_pass
 
-# Multiple vaults với ID
+# Nhiều vault với ID khác nhau
 ansible-playbook site.yml \
     --vault-id dev@dev_pass.txt \
     --vault-id prod@prod_pass.txt
 ```
 
-### Vault IDs — multi-environment
+### Vault IDs — Multi-environment
 
-Encrypt với specific ID:
+Encrypt với ID cụ thể (cho mỗi môi trường):
 
 ```bash
 ansible-vault encrypt --vault-id prod@prompt secrets-prod.yml
 ansible-vault encrypt --vault-id dev@prompt secrets-dev.yml
 ```
 
-File header:
+File header sẽ có:
 
 ```
 $ANSIBLE_VAULT;1.2;AES256;prod
 ```
 
-Khi run: pass appropriate ID password.
+Khi chạy: cần pass password tương ứng với ID.
 
-### Encrypt single value
+### Encrypt một giá trị duy nhất (inline)
 
 ```yaml
-# Inline encrypted variable
+# Variable encrypted inline trong file plain
 db_password: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   663034343339623136...
@@ -94,32 +96,32 @@ Tạo:
 ansible-vault encrypt_string 'admin123' --name 'db_password'
 ```
 
-Output paste vào playbook/vars.
+Output paste vào playbook/vars file.
 
 ### Best practice với Vault
 
-- Password file (`.vault_pass`) **không commit**.
-- Use **pass manager** (1Password, LastPass) integrated với `ansible-vault`.
-- Rotate password periodically.
-- Different password per environment.
-- CI: env variable `ANSIBLE_VAULT_PASSWORD_FILE`.
+- Password file (`.vault_pass`) **tuyệt đối không commit** vào Git.
+- Dùng password manager (1Password, LastPass) tích hợp với `ansible-vault`.
+- Rotate password định kỳ.
+- Mỗi environment có password riêng.
+- Trong CI: dùng env variable `ANSIBLE_VAULT_PASSWORD_FILE`.
 
 ### Alternative: External Secret
 
 ```yaml
-# Lookup external
+# Lookup từ external secret store
 db_password: "{{ lookup('aws_secret', 'prod/db/password') }}"
 db_password: "{{ lookup('hashi_vault', 'secret=secret/prod/db:password') }}"
 
-# Lookup environment
+# Lookup từ env variable
 api_key: "{{ lookup('env', 'API_KEY') }}"
 ```
 
-Pros: no encrypted file in repo, central rotation.
+Ưu điểm so với Ansible Vault: không có file encrypted trong repo, rotate tập trung tại source secret.
 
-## Dynamic inventory
+## Dynamic inventory — Inventory tự động từ cloud
 
-Static inventory:
+Static inventory (file ini):
 
 ```ini
 [web]
@@ -127,11 +129,11 @@ web01 ansible_host=192.168.1.10
 web02 ansible_host=192.168.1.11
 ```
 
-Issue: cloud → IP đổi liên tục. Dynamic inventory query API.
+Vấn đề: với cloud, IP thay đổi liên tục (instance bị terminate, spot, autoscaling). Dynamic inventory query trực tiếp cloud API để lấy danh sách host.
 
 ### AWS dynamic inventory
 
-`inventory.aws_ec2.yml`:
+File `inventory.aws_ec2.yml`:
 
 ```yaml
 plugin: amazon.aws.aws_ec2
@@ -139,7 +141,7 @@ regions:
   - us-east-1
   - us-west-2
 
-# Group instances by tag
+# Group instance theo tag
 keyed_groups:
   - prefix: tag
     key: tags
@@ -148,12 +150,12 @@ keyed_groups:
   - prefix: role
     key: tags.Role
 
-# Filter
+# Filter chỉ lấy instance phù hợp
 filters:
   tag:Project: vprofile
   instance-state-name: running
 
-# Hostname source
+# Nguồn hostname
 hostnames:
   - tag:Name
   - private-ip-address
@@ -164,26 +166,26 @@ compose:
   ansible_user: 'ec2-user'
 ```
 
-Use:
+Cách dùng:
 
 ```bash
-# Test
+# Test (xem inventory được generate)
 ansible-inventory -i inventory.aws_ec2.yml --list
 
-# Run
+# Run playbook
 ansible-playbook -i inventory.aws_ec2.yml site.yml --limit role_web
 ```
 
-Groups auto-generate: `env_production`, `role_web`, `tag_Name_web01`, ...
+Group được tự động tạo: `env_production`, `role_web`, `tag_Name_web01`, ...
 
-### Required plugins
+### Plugin cần cài
 
 ```bash
 ansible-galaxy collection install amazon.aws community.aws
 pip install boto3 botocore
 ```
 
-### Other cloud
+### Cloud khác
 
 ```bash
 # GCP
@@ -199,60 +201,60 @@ plugin: community.digitalocean.digitalocean
 plugin: kubernetes.core.k8s
 ```
 
-### Static + dynamic combined
+### Kết hợp static + dynamic
 
 ```bash
-# Multi-source inventory
+# Inventory đa nguồn
 ansible-playbook \
     -i inventory/static.ini \
     -i inventory/aws_ec2.yml \
     site.yml
 ```
 
-## Ansible Tower / AWX
+## Ansible Tower / AWX — GUI orchestration
 
-GUI để run playbook + RBAC + audit + scheduled.
+GUI để chạy playbook + RBAC + audit + schedule.
 
-### Install AWX (open source Tower)
+### Cài AWX (bản open-source của Tower)
 
-Use AWX Operator on K8s:
+Dùng AWX Operator trên K8s:
 
 ```bash
 helm repo add awx-operator https://ansible.github.io/awx-operator/
 helm install -n awx --create-namespace awx-operator awx-operator/awx-operator
 ```
 
-Browser → AWX UI:
-- Projects: Git repo Ansible code.
-- Inventories: hosts + groups.
-- Credentials: SSH key, vault password, cloud credentials.
-- Job Templates: playbook + inventory + credential + extra vars.
-- Schedules: cron-like trigger.
-- Workflows: chain templates DAG.
-- Surveys: prompt user input.
-- Notifications: Slack, email, webhook.
+Browser → AWX UI bao gồm:
+- **Projects**: Git repo chứa code Ansible.
+- **Inventories**: hosts + groups.
+- **Credentials**: SSH key, vault password, cloud credentials.
+- **Job Templates**: playbook + inventory + credential + extra vars.
+- **Schedules**: trigger theo lịch (như cron).
+- **Workflows**: nối nhiều template theo DAG (directed acyclic graph).
+- **Surveys**: prompt user nhập input lúc chạy.
+- **Notifications**: Slack, email, webhook.
 
 ### Use case
 
-- Self-service deploy: dev click button → AWX run deploy playbook.
-- Scheduled: nightly backup at 2am.
-- Audit: who ran what when, output saved.
-- RBAC: team only see their resource.
-- Approval: require manager approve before run.
+- **Self-service deploy**: dev click button → AWX chạy deploy playbook.
+- **Scheduled**: backup hằng đêm lúc 2h sáng.
+- **Audit**: ai chạy gì, khi nào, output lưu lại.
+- **RBAC**: team chỉ thấy resource của mình.
+- **Approval**: yêu cầu manager duyệt trước khi chạy.
 
 ### Tower vs AWX
 
-- **Tower**: commercial RedHat, paid support.
-- **AWX**: open source, no support.
+- **Tower**: bản commercial của RedHat, có paid support.
+- **AWX**: open source, không có support.
 
-Similar feature, choose based on org.
+Tính năng tương tự, lựa chọn dựa vào nhu cầu tổ chức.
 
-## Ansible Pull (vs Push)
+## Ansible Pull (đối lập với Push)
 
-Default = push (Ansible from controller). Sometimes need pull (server fetch + run locally):
+Mặc định = push (Ansible chạy từ controller đẩy lên target). Đôi khi cần pull (server tự fetch + chạy local):
 
 ```bash
-# On managed host
+# Trên managed host
 ansible-pull -U https://github.com/acme/ansible-config.git \
              -i localhost,
              -e env=prod \
@@ -260,37 +262,37 @@ ansible-pull -U https://github.com/acme/ansible-config.git \
 ```
 
 Use case:
-- Disposable infrastructure (cloud-init runs ansible-pull).
-- No central controller.
-- Self-converge nodes.
+- **Disposable infrastructure**: cloud-init chạy ansible-pull khi instance boot.
+- Không có central controller (vd: edge nodes).
+- Node tự converge config.
 
-## Performance optimization
+## Performance optimization (Tối ưu hiệu năng)
 
-### Forks
+### Forks (Chạy song song)
 
 ```ini
 # ansible.cfg
 forks = 100
 ```
 
-Parallel execution per host.
+Số host xử lý song song. Mặc định chỉ 5 — quá thấp cho fleet lớn.
 
-### Pipelining
+### Pipelining (Giảm SSH overhead)
 
 ```ini
 [ssh_connection]
 pipelining = True
 ```
 
-Reduce SSH connection per task → 2-4x faster.
+Giảm số kết nối SSH mỗi task → nhanh 2-4 lần.
 
-### Async tasks
+### Async tasks (Task chạy bất đồng bộ)
 
 ```yaml
 - name: Long task
   command: /opt/build.sh
-  async: 3600          # Max 1 hour
-  poll: 0              # Don't wait
+  async: 3600          # Max 1 giờ
+  poll: 0              # Không đợi
 
 - name: Check
   async_status:
@@ -301,9 +303,9 @@ Reduce SSH connection per task → 2-4x faster.
   delay: 60
 ```
 
-Useful cho long-running task không block playbook.
+Hữu ích cho task chạy lâu — không block playbook chính.
 
-### Fact caching
+### Fact caching (Cache thông tin host)
 
 ```ini
 [defaults]
@@ -313,53 +315,53 @@ fact_caching_connection = /tmp/ansible-facts
 fact_caching_timeout = 86400
 ```
 
-Skip gather_facts nếu cached, save 10-30s/host.
+Skip gather_facts nếu đã cache → tiết kiệm 10-30s mỗi host.
 
-### Strategy
+### Strategy (Chiến lược chạy task)
 
 ```yaml
 - hosts: all
-  strategy: free      # Each host run independent (vs default 'linear')
+  strategy: free      # Mỗi host chạy độc lập (mặc định 'linear')
   tasks: ...
 ```
 
-`free` strategy: host nhanh chạy trước, không đợi.
+`free` strategy: host nhanh chạy trước, không đợi host chậm.
 
-## Idempotency check
+## Idempotency check (Kiểm tra idempotency)
 
-Re-run playbook → output `changed=0`:
+Re-run playbook → output phải hiện `changed=0`:
 
 ```bash
 ansible-playbook site.yml --check --diff
-# Dry run: see what would change
+# Dry run: xem sẽ thay đổi gì
 ```
 
 Test idempotency:
 
 ```bash
 ansible-playbook site.yml
-# First run: changed=5
+# Lần 1: changed=5
 
 ansible-playbook site.yml
-# Second run: changed=0 ← Idempotent
+# Lần 2: changed=0 ← Idempotent ✅
 ```
 
-If second run shows changed → fix tasks not idempotent.
+Nếu lần 2 vẫn có `changed` → có task không idempotent → cần fix (vd: dùng `creates` cho command, dùng module `file` thay vì `shell mkdir`).
 
 ## Best practices summary
 
 | Category | Practice |
 |---|---|
-| Structure | Role-based, separate concern |
-| Variables | Defaults sensible, override per env |
-| Secrets | Ansible Vault hoặc external (Vault, Secrets Manager) |
-| Inventory | Dynamic cho cloud, static cho legacy |
-| Testing | Molecule + `--check --diff` |
-| Lint | `ansible-lint` strict |
-| CI/CD | Playbook in repo, validate PR |
-| Audit | AWX/Tower hoặc logging |
-| Performance | Forks 50+, pipelining, fact cache |
-| Documentation | README per role, examples |
+| **Structure** | Role-based, tách concern rõ ràng |
+| **Variables** | Default sensible, override per environment |
+| **Secrets** | Ansible Vault hoặc external (Vault, Secrets Manager) |
+| **Inventory** | Dynamic cho cloud, static cho legacy |
+| **Testing** | Molecule + `--check --diff` |
+| **Lint** | `ansible-lint` strict mode |
+| **CI/CD** | Playbook in repo, validate trong PR |
+| **Audit** | AWX/Tower hoặc logging tập trung |
+| **Performance** | Forks 50+, pipelining, fact cache |
+| **Documentation** | README cho mỗi role, kèm example |
 
 ## CI cho Ansible
 
@@ -385,7 +387,7 @@ jobs:
 
       - run: ansible-playbook --syntax-check site.yml
 
-      - name: Check mode
+      - name: Check mode (dry run)
         run: |
           ansible-playbook --check --diff \
               -i inventory/dev.aws_ec2.yml \
@@ -423,23 +425,23 @@ jobs:
 
 4 bài cover:
 1. Ansible basics + inventory + playbook + module.
-2. Playbook deep: conditionals, loops, handlers, blocks, tags.
+2. Playbook deep: conditional, loop, handler, block, tag.
 3. Roles + Galaxy + Collections + Molecule.
 4. Vault + dynamic inventory + AWX/Tower + performance.
 
-Skills:
+Skill đạt được:
 - Viết playbook + role idempotent production-grade.
-- Module ecosystem 3000+ tools.
-- Secret management.
-- Dynamic inventory cloud.
+- Module ecosystem 3000+ công cụ.
+- Quản lý secret.
+- Dynamic inventory cho cloud.
 - GUI orchestration với AWX.
 
 ## Tóm tắt bài 4
 
-- **Ansible Vault** encrypt secret file/string in repo.
-- **External secrets**: AWS Secrets Manager, Vault lookup.
+- **Ansible Vault** encrypt secret file/string trực tiếp trong repo.
+- **External secrets**: AWS Secrets Manager, Vault lookup — alternative tốt hơn cho production.
 - **Dynamic inventory** query cloud API (AWS, GCP, Azure, K8s).
-- **Tags + filter** trong inventory plugin → auto group.
+- **Tag + filter** trong inventory plugin → tự động group host.
 - **AWX/Tower** GUI orchestration với RBAC + audit + schedule.
 - **Performance**: forks, pipelining, fact cache, async.
 - CI: lint + molecule + check mode + apply.

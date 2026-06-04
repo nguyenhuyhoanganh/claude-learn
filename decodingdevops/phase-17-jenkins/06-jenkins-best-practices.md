@@ -1,35 +1,35 @@
 # Bài 6: Jenkins best practices — security, scaling, observability
 
-Bài cuối phase 17. Tổng hợp **best practices production-grade** + alternative khi rời Jenkins.
+Bài cuối của phase 17. Tổng hợp các **best practice cho Jenkins production** + các **giải pháp thay thế** khi đến lúc rời Jenkins.
 
-## Security checklist
+## Security checklist (Bảo mật)
 
-### Authentication
+### Authentication (Xác thực)
 
-- [ ] Disable anonymous read.
-- [ ] LDAP / SAML / OAuth integration (no local accounts).
-- [ ] MFA cho admin user (qua reverse proxy hoặc plugin).
-- [ ] Service accounts cho CI integration (Slack, Jira, ...).
+- [ ] **Disable anonymous read** — không cho phép user vô danh xem job.
+- [ ] Tích hợp LDAP / SAML / OAuth (không dùng tài khoản local riêng lẻ).
+- [ ] **MFA** (Multi-Factor Authentication — xác thực 2 lớp) cho admin user — qua reverse proxy hoặc plugin.
+- [ ] **Service account** riêng cho các integration CI (Slack, Jira, Email, ...).
 
-### Authorization
+### Authorization (Phân quyền)
 
-- [ ] **Role-based** authorization (RBAC plugin).
-- [ ] Project-based permission cho folder.
-- [ ] Build user identity propagate (Build User Vars plugin).
-- [ ] Restrict `script` step (sandboxed Groovy).
+- [ ] **Role-based authorization** (phân quyền theo vai trò) — dùng RBAC plugin.
+- [ ] Phân quyền theo từng folder/project.
+- [ ] Build user identity propagate (lan truyền danh tính user qua build) — Build User Vars plugin.
+- [ ] Hạn chế `script` step — bắt buộc sandboxed Groovy (chạy trong môi trường cô lập).
 
 ```groovy
-// Block tag: allow only safe methods
+// Block tag: chỉ cho phép method an toàn
 @Library('shared-lib@main') _
-// Sandbox prevent malicious code in pipeline
+// Sandbox ngăn code malicious trong pipeline
 ```
 
-### Credentials
+### Credentials (Thông tin nhạy cảm)
 
-- [ ] Use Credentials Store, never inline.
-- [ ] Mask password trong log (`maskPasswords` plugin).
-- [ ] External secret store: Vault, AWS Secrets Manager.
-- [ ] Rotate credential 90 ngày.
+- [ ] **Luôn dùng Credentials Store**, không bao giờ inline trong pipeline.
+- [ ] **Mask password** trong log (plugin `maskPasswords`).
+- [ ] Lưu external secret store: Vault, AWS Secrets Manager.
+- [ ] **Rotate credential** mỗi 90 ngày.
 
 ```groovy
 withCredentials([usernamePassword(credentialsId: 'nexus', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
@@ -40,59 +40,59 @@ withCredentials([usernamePassword(credentialsId: 'nexus', usernameVariable: 'USE
 ### Plugin
 
 - [ ] Auto-update plugin định kỳ.
-- [ ] Monitor security advisory (jenkins.io/security).
-- [ ] Remove unused plugin.
-- [ ] Test plugin upgrade trên staging.
+- [ ] Theo dõi security advisory (cảnh báo bảo mật) — jenkins.io/security.
+- [ ] Xoá plugin không dùng đến.
+- [ ] Test việc upgrade plugin trên môi trường staging trước.
 
-### Network
+### Network (Mạng)
 
-- [ ] HTTPS only (reverse proxy nginx).
-- [ ] Jenkins behind VPN/SSO gateway (Pomerium, Cloudflare Access).
-- [ ] Restrict agent connection (firewall rule).
-- [ ] Disable JNLP if not needed.
+- [ ] **HTTPS bắt buộc** — đặt reverse proxy (nginx) phía trước Jenkins.
+- [ ] Đặt Jenkins phía sau VPN / SSO gateway (Pomerium, Cloudflare Access).
+- [ ] Restrict agent connection — firewall rule chỉ cho agent kết nối từ IP cụ thể.
+- [ ] Disable JNLP nếu không dùng.
 
-### Audit
+### Audit (Ghi nhật ký kiểm tra)
 
-- [ ] Audit log mọi action (Audit Trail plugin).
-- [ ] Forward log → SIEM (Splunk, ELK).
-- [ ] Alert on:
-  - Failed login attempts.
-  - Plugin install.
-  - Credential changes.
-  - Pipeline modify.
+- [ ] Audit log mọi action — dùng Audit Trail plugin.
+- [ ] Forward log → SIEM (Security Information Event Management) như Splunk, ELK.
+- [ ] Alert (cảnh báo) khi:
+  - Failed login attempts (đăng nhập sai liên tục).
+  - Plugin install (cài plugin mới).
+  - Credential changes (thay đổi credential).
+  - Pipeline modify (sửa pipeline).
 
-## Scaling
+## Scaling (Mở rộng quy mô)
 
-### Master capacity
+### Master capacity (Dung lượng master)
 
-Master = orchestrator. Avoid build trên master.
+Master Jenkins chỉ làm orchestrator (điều phối). **Tránh build trực tiếp trên master** — sẽ ảnh hưởng đến performance toàn hệ thống.
 
 ```text
-Master config:
-- Number of executors: 0
+Master config khuyến nghị:
+- Number of executors: 0 (không cho build chạy trên master)
 - Java heap: -Xmx2g cho < 500 job
 - -Xmx4g cho 500-2000 job
 - -Xmx8g cho > 2000 job
 ```
 
-### Static agents
+### Static agents (Agent cố định)
 
-| Workload | Agent count |
+| Workload | Số agent |
 |---|---|
 | < 50 build/day | 2-3 agent |
 | 50-500 build/day | 5-10 agent |
-| > 500 build/day | K8s dynamic |
+| > 500 build/day | Nên dùng K8s dynamic agent |
 
-Static agent on EC2 → Auto Scaling Group:
+Static agent trên EC2 → đặt trong Auto Scaling Group:
 
 ```bash
 # Launch template với agent.jar + auto-connect
 # ASG: min 2, max 10, target tracking CPU 70%
 ```
 
-### Kubernetes dynamic agents
+### Kubernetes dynamic agents (Modern best practice)
 
-Modern best practice:
+Đây là best practice hiện đại nhất — agent được tạo và xoá tự động theo nhu cầu:
 
 ```yaml
 # casc.yaml
@@ -107,33 +107,34 @@ clouds:
       templates:
         - name: maven-builder
           label: maven
-          instanceCap: 50          # Max 50 concurrent pods
+          instanceCap: 50          # Tối đa 50 pod song song
           idleMinutes: 1
           ...
 ```
 
-Spawn pod khi job queue → terminate sau 1 phút idle.
+Cơ chế: Job chờ trong queue → Jenkins spawn pod trên K8s → chạy xong → pod tự terminate sau 1 phút idle (không hoạt động).
 
-Scale infinite mà không tốn cost idle.
+→ Scale gần như không giới hạn, không phải trả cost cho agent idle.
 
-### Job throttling
+### Job throttling (Giới hạn job đồng thời)
 
 ```groovy
 options {
-    throttle(['deploy-prod'])      // Max 1 build cùng lúc với tag này
+    throttle(['deploy-prod'])      // Tối đa 1 build chạy cùng lúc với tag này
 }
 ```
 
-Plugin Throttle Concurrent Builds.
+Dùng plugin Throttle Concurrent Builds. Hữu ích cho job critical như deploy production — tránh 2 deploy đồng thời gây race condition.
 
-### Pipeline performance
+### Pipeline performance (Tối ưu pipeline)
 
-Speedup:
-- **Cache deps**: PVC for `~/.m2`, `node_modules`.
-- **Parallel stages**.
-- **Skip stages** với `when` conditional.
-- **Shallow clone**: `git fetch --depth 1`.
-- **Layer Docker cache**.
+Các kỹ thuật tăng tốc:
+
+- **Cache dependency**: dùng PersistentVolumeClaim (PVC) cho `~/.m2`, `node_modules`.
+- **Parallel stages** — chạy song song nhiều stage độc lập.
+- **Skip stages** với `when` conditional — bỏ qua stage không cần.
+- **Shallow clone**: `git fetch --depth 1` — chỉ clone commit cuối cùng.
+- **Layer Docker cache** — tận dụng cache layer Docker giữa các build.
 
 ```groovy
 checkout([$class: 'GitSCM',
@@ -141,11 +142,11 @@ checkout([$class: 'GitSCM',
 ])
 ```
 
-## Observability
+## Observability (Quan sát hệ thống)
 
 ### Prometheus metrics
 
-Plugin "Prometheus metrics":
+Plugin "Prometheus metrics" expose endpoint cho Prometheus scrape:
 
 ```text
 GET /prometheus/
@@ -156,19 +157,19 @@ jenkins_queue_size_value{type="buildable"} 3
 jenkins_builds_duration_milliseconds{jobName="vprofile"} 245000
 ```
 
-Scrape Prometheus → Grafana dashboard:
-- Build duration trend.
-- Queue size.
-- Executor utilization.
-- Plugin update.
+Prometheus scrape metric → đẩy lên Grafana dashboard hiển thị:
+- Build duration trend (xu hướng thời gian build).
+- Queue size (kích thước queue chờ).
+- Executor utilization (tỉ lệ sử dụng executor).
+- Plugin update available.
 
-### Log aggregation
+### Log aggregation (Gom log)
 
-Jenkins log:
-- `/var/log/jenkins/jenkins.log`.
-- Per-build log trong `/var/lib/jenkins/jobs/<job>/builds/<n>/log`.
+Jenkins ghi log ở:
+- `/var/log/jenkins/jenkins.log` — log chính của Jenkins.
+- `/var/lib/jenkins/jobs/<job>/builds/<n>/log` — log của từng build.
 
-Forward log → ELK:
+Forward log → ELK (Elasticsearch + Logstash + Kibana):
 
 ```bash
 # Filebeat config
@@ -181,62 +182,62 @@ filebeat.inputs:
       service: jenkins
 ```
 
-Query failed build error pattern trong Kibana.
+Query trong Kibana để phát hiện pattern lỗi của các build fail.
 
-### Health check
+### Health check (Kiểm tra trạng thái)
 
 ```bash
-# Jenkins JSON status
+# Lấy JSON status từ Jenkins API
 curl -u user:token http://jenkins.acme.com/api/json?tree=jobs[name,color]
 
-# Or built-in health
+# Hoặc dùng built-in health endpoint
 curl http://jenkins.acme.com/login
-# 200 = healthy
+# Trả về 200 = Jenkins khoẻ
 ```
 
-Uptime monitor: Pingdom, UptimeRobot.
+Setup uptime monitor: Pingdom, UptimeRobot, hoặc internal monitoring.
 
-## Backup & Disaster Recovery
+## Backup & Disaster Recovery (Sao lưu và phục hồi sự cố)
 
-### Backup strategy
+### Backup strategy (Chiến lược sao lưu)
 
-3-2-1 rule:
-- **3** copies of data.
-- **2** different storage media.
-- **1** offsite.
+**Quy tắc 3-2-1** kinh điển:
+- **3** bản copy data.
+- **2** loại media lưu trữ khác nhau.
+- **1** bản đặt offsite (ở vị trí địa lý khác).
 
 ```text
 Daily backup:
-  ├── Local /var/backup (7 ngày)
-  ├── S3 (90 ngày, lifecycle Glacier sau 30d)
-  └── Cross-region S3 (90 ngày, DR)
+  ├── Local /var/backup (giữ 7 ngày)
+  ├── S3 (giữ 90 ngày, lifecycle chuyển sang Glacier sau 30 ngày)
+  └── Cross-region S3 (giữ 90 ngày — cho disaster recovery)
 ```
 
-### What to backup
+### What to backup (Sao lưu cái gì)
 
-Critical:
+**Critical (bắt buộc):**
 - `/var/lib/jenkins/config.xml`
 - `/var/lib/jenkins/jobs/*/config.xml`
 - `/var/lib/jenkins/users/`
 - `/var/lib/jenkins/secrets/`
 - `/var/lib/jenkins/credentials.xml`
 
-Skip:
-- `/var/lib/jenkins/workspace/` (build workspace, recreate được).
-- `/var/lib/jenkins/jobs/*/builds/` (log cũ, optional keep).
+**Skip (có thể bỏ qua):**
+- `/var/lib/jenkins/workspace/` (workspace tạm, có thể tạo lại).
+- `/var/lib/jenkins/jobs/*/builds/` (log build cũ, tuỳ chọn giữ).
 - `/var/lib/jenkins/caches/`.
 
-### Disaster Recovery test
+### Disaster Recovery test (Diễn tập phục hồi)
 
-Quarterly:
-1. Spin up Jenkins instance từ backup.
-2. Verify mọi job restorable.
-3. Verify credential decrypt được.
-4. Restore time = RTO.
+Thực hiện **mỗi quý**:
+1. Spin up Jenkins instance mới từ backup.
+2. Verify mọi job có thể restore được.
+3. Verify credential decrypt được (do encryption key có thể bị mất).
+4. Đo restore time → đây chính là RTO (Recovery Time Objective).
 
-## Job DSL — programmatic job creation
+## Job DSL — Tạo job bằng code
 
-Plugin "Job DSL" → Groovy script tạo job:
+Plugin "Job DSL" cho phép viết Groovy script để tạo job programmatically:
 
 ```groovy
 // jobs.groovy
@@ -267,7 +268,7 @@ job('vprofile-build') {
     }
 }
 
-// Tạo 5 job tương tự
+// Tạo 5 job tương tự bằng loop
 ['api', 'web', 'mobile', 'admin', 'worker'].each { name ->
     job("vprofile-${name}") {
         // ... template
@@ -275,47 +276,52 @@ job('vprofile-build') {
 }
 ```
 
-DSL job:
-- "Process Job DSLs" step trong seed job.
-- Run seed job → create/update tất cả jobs.
-- DSL script in Git → version control.
+Cách dùng DSL job:
+- Tạo "seed job" với bước "Process Job DSLs".
+- Chạy seed job → tự động create/update tất cả job theo script.
+- DSL script lưu trong Git → version control đầy đủ.
 
-## Folder organization
+→ Khi cần thêm/sửa nhiều job, chỉ sửa code rồi chạy seed job.
+
+## Folder organization (Tổ chức folder)
 
 ```text
 Jenkins/
-├── vprofile/
+├── vprofile/                  ← Folder cho product vProfile
 │   ├── build (Pipeline)
 │   ├── deploy (Pipeline)
 │   └── nightly (Pipeline)
-├── shared-services/
+├── shared-services/           ← Folder cho service dùng chung
 │   ├── infra-update (Pipeline)
 │   └── backup-rotate (Pipeline)
-└── seed/
+└── seed/                      ← Folder cho seed job
     └── job-dsl-seed (Freestyle)
 ```
 
-Folder = namespace + permission scope.
+Folder vừa là namespace (không gian tên), vừa là phạm vi permission — phân quyền team theo folder.
 
-## Alternative khi rời Jenkins
+## Khi nào nên rời Jenkins (Alternatives)
 
-| Reason | Alternative |
+| Lý do | Lựa chọn thay thế |
 |---|---|
-| Tired of plugin ops | **GitHub Actions** (SaaS) |
-| GitLab user | **GitLab CI/CD** |
-| K8s-native | **Tekton**, **Argo Workflows** |
-| GitOps | **Argo CD**, **Flux** |
+| Mệt với quản lý plugin | **GitHub Actions** (SaaS — không cần tự host) |
+| Đang dùng GitLab | **GitLab CI/CD** (tích hợp sẵn) |
+| Hệ thống K8s-native | **Tekton**, **Argo Workflows** |
+| Theo hướng GitOps | **Argo CD**, **Flux** |
 | Cloud-native AWS | **CodePipeline + CodeBuild** |
-| Modern UI | **CircleCI**, **Buildkite** |
+| Cần UI hiện đại | **CircleCI**, **Buildkite** |
 
-Migration strategy:
-1. Audit existing pipeline.
-2. Convert 1-2 simple pipelines → new tool.
-3. Run parallel 1-3 tháng.
-4. Migrate critical pipeline.
-5. Decommission Jenkins.
+### Migration strategy (Chiến lược chuyển đổi)
 
-## Comparison
+1. **Audit** mọi pipeline hiện có.
+2. **Convert** 1-2 pipeline đơn giản → tool mới.
+3. Chạy **song song** 1-3 tháng (parallel — Jenkins + tool mới).
+4. **Migrate** các pipeline critical.
+5. **Decommission** (ngừng sử dụng) Jenkins.
+
+→ Không bao giờ migrate "big bang" — chia thành nhiều giai đoạn, mỗi giai đoạn có rollback path.
+
+## So sánh các CI/CD tool
 
 | | Jenkins | GitHub Actions | GitLab CI | Tekton |
 |---|---|---|---|---|
@@ -323,77 +329,77 @@ Migration strategy:
 | SaaS | ✗ | ✓ | ✓ | ✗ |
 | Plugin | 1800+ | 20000+ actions | Less | Tasks |
 | Pipeline language | Groovy | YAML | YAML | YAML |
-| K8s-native | Via plugin | No | Limited | **Yes** |
-| Learning curve | Steep | Easy | Easy | Steep |
-| Modern UI | Old (Blue Ocean better) | Modern | Modern | CLI mostly |
-| Free tier | Free (self-host) | 2000 min | 400 min | Free (self-host) |
-| Best for | Legacy, complex | Modern, GitHub | GitLab user | Cloud-native |
+| K8s-native | Via plugin | Không | Hạn chế | **Có** |
+| Learning curve | Steep (khó) | Easy | Easy | Steep |
+| Modern UI | Cũ (Blue Ocean đẹp hơn) | Hiện đại | Hiện đại | Chủ yếu CLI |
+| Free tier | Free (self-host) | 2000 phút | 400 phút | Free (self-host) |
+| Phù hợp cho | Legacy, phức tạp | Modern, dùng GitHub | Dùng GitLab | Cloud-native |
 
-## Pipeline maturity model
+## Pipeline maturity model (Mô hình trưởng thành CI/CD)
 
-| Level | Characteristics |
+| Level | Đặc điểm |
 |---|---|
-| **0** | No CI/CD. Manual deploy. |
-| **1** | CI: build + test on commit. Manual deploy. |
-| **2** | CI/CD: auto-deploy to staging. Manual prod. |
-| **3** | Continuous Delivery: 1-click prod deploy. |
-| **4** | Continuous Deployment: auto prod on green. |
-| **5** | GitOps: declarative deploy, observability. |
+| **0** | Không có CI/CD. Deploy thủ công. |
+| **1** | CI: build + test mỗi commit. Deploy thủ công. |
+| **2** | CI/CD: auto-deploy đến staging. Prod vẫn thủ công. |
+| **3** | Continuous Delivery: 1-click deploy prod. |
+| **4** | Continuous Deployment: auto deploy prod khi build green. |
+| **5** | GitOps: declarative deploy + observability đầy đủ. |
 
-Phase 17 + 25 → bạn ở level 4. Argo CD/GitOps → level 5.
+Sau khi học xong Phase 17 + 25 → bạn đang ở level 4. Tiến lên Argo CD/GitOps → level 5.
 
-## Final checklist
+## Final checklist (Danh sách kiểm tra cuối cùng)
 
-Production Jenkins:
+Jenkins production phải có:
 
 - [ ] HTTPS + reverse proxy.
-- [ ] Configuration as Code.
+- [ ] Configuration as Code (JCasC).
 - [ ] Plugin auto-update.
-- [ ] LDAP/SAML auth.
-- [ ] RBAC.
-- [ ] Credentials Store (no inline).
-- [ ] Audit log.
-- [ ] Backup daily + S3.
-- [ ] DR test quarterly.
+- [ ] LDAP/SAML authentication.
+- [ ] RBAC (Role-Based Access Control).
+- [ ] Credentials Store (không bao giờ inline).
+- [ ] Audit log đầy đủ.
+- [ ] Backup hàng ngày + S3.
+- [ ] DR test mỗi quý.
 - [ ] K8s dynamic agents.
 - [ ] Prometheus metrics.
 - [ ] Log → ELK.
 - [ ] Multi-branch pipeline.
-- [ ] Pipeline in repo.
+- [ ] Pipeline ở trong repo (không trong Jenkins UI).
 - [ ] Shared library.
 - [ ] Quality gate (Sonar).
 - [ ] Security scan (Trivy, OWASP).
 - [ ] Notification (Slack/email).
 - [ ] Deploy strategy (Blue/Green, Canary).
-- [ ] Smoke test.
-- [ ] Approval cho prod.
+- [ ] Smoke test sau deploy.
+- [ ] Approval cho deploy prod.
 
 ## Tổng kết phase 17
 
-6 bài cover:
-1. Jenkins basics.
-2. Installation + JCasC + agents.
+6 bài đã cover:
+1. Jenkins basics — kiến trúc, các loại job.
+2. Installation + JCasC + agent setup.
 3. Declarative Pipeline syntax.
 4. vProfile CI/CD end-to-end.
-5. Shared Library.
-6. Best practices + alternatives.
+5. Shared Library (code dùng chung).
+6. Best practice + alternative.
 
-Skills:
-- Setup production Jenkins.
+Kỹ năng đạt được:
+- Setup Jenkins production-grade từ đầu.
 - Viết pipeline cho mọi tech stack.
-- Reusable code shared library.
-- Security hardening.
-- Migration path khi cần.
+- Tổ chức code dùng chung qua shared library.
+- Security hardening (làm cứng bảo mật).
+- Migration path khi cần đổi tool.
 
 ## Tóm tắt bài 6
 
-- **Security**: HTTPS, RBAC, Credentials Store, audit log, plugin update.
-- **Scaling**: K8s dynamic agents, ASG static agent, throttle.
-- **Observability**: Prometheus + Grafana + ELK.
-- **Backup 3-2-1** + quarterly DR test.
-- **Job DSL** programmatic job creation.
-- **Folder** organization + permission.
-- **Alternatives**: GitHub Actions, GitLab CI, Tekton.
-- Pipeline maturity: aim level 4-5 (Continuous Deployment + GitOps).
+- **Security**: HTTPS, RBAC, Credentials Store, audit log, plugin update đều đặn.
+- **Scaling**: K8s dynamic agents là best practice hiện đại, Auto Scaling Group cho static agent, throttle cho job nhạy cảm.
+- **Observability**: Prometheus + Grafana + ELK cho monitoring toàn diện.
+- **Backup 3-2-1** + DR test mỗi quý.
+- **Job DSL** để programmatic job creation.
+- **Folder** tổ chức kiêm phân quyền.
+- **Alternatives**: GitHub Actions, GitLab CI, Tekton tuỳ context.
+- Mục tiêu pipeline maturity: level 4-5 (Continuous Deployment + GitOps).
 
 **Phase kế tiếp** → [Phase 18 — GitHub Actions](../phase-18-github-actions/01-github-actions.md)

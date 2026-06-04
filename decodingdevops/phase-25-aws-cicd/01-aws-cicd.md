@@ -1,8 +1,8 @@
-# Bài 1: AWS CI/CD project — end-to-end pipeline trên AWS
+# Bài 1: AWS CI/CD project — Pipeline end-to-end trên AWS
 
-Capstone project: build pipeline **GitHub → Test → SonarCloud → Build → ECR → ECS** với CodePipeline native AWS.
+Đây là capstone project (dự án tổng kết): build pipeline **GitHub → Test → SonarCloud → Build → ECR → ECS** dùng CodePipeline native AWS.
 
-## Architecture
+## Architecture (Sơ đồ kiến trúc)
 
 ```text
                 Developer
@@ -33,21 +33,21 @@ Capstone project: build pipeline **GitHub → Test → SonarCloud → Build → 
                   Users
 ```
 
-## AWS CodePipeline services
+## Các service AWS CodePipeline
 
-| Service | Mục đích |
-|---|---|
-| **CodeCommit** | Git host (alternative GitHub) |
-| **CodeBuild** | Build server (alternative Jenkins build agent) |
-| **CodeArtifact** | Artifact repo (alternative Nexus) |
-| **CodeDeploy** | Deploy automation (Blue/Green, Rolling) |
-| **CodePipeline** | Orchestrator |
+| Service | Mục đích | Equivalent ngoài AWS |
+|---|---|---|
+| **CodeCommit** | Git host | GitHub, GitLab |
+| **CodeBuild** | Build server | Jenkins build agent |
+| **CodeArtifact** | Artifact repo | Nexus, Artifactory |
+| **CodeDeploy** | Deploy automation (Blue/Green, Rolling) | Custom script |
+| **CodePipeline** | Orchestrator | Jenkins pipeline |
 
-Có thể replace tool-by-tool: pipeline tổng hợp dùng cái nào tuỳ thuộc.
+→ Có thể replace từng phần (vd: dùng GitHub thay CodeCommit, Jenkins thay CodeBuild — kết hợp tuỳ ý).
 
 ## Bước 1: Source stage — GitHub
 
-CodePipeline trigger từ GitHub via webhook.
+CodePipeline trigger từ GitHub qua webhook.
 
 CodePipeline UI → Create pipeline → Source:
 - Provider: **GitHub (Version 2)**.
@@ -56,11 +56,11 @@ CodePipeline UI → Create pipeline → Source:
 - Branch: `main`.
 - Output artifact: source code.
 
-Mỗi push main → pipeline auto-run.
+Mỗi push lên main → pipeline tự chạy.
 
 ## Bước 2: Build stage — CodeBuild
 
-CodeBuild = Jenkins build agent managed.
+CodeBuild = Jenkins build agent nhưng được AWS quản hộ.
 
 ### buildspec.yml
 
@@ -122,28 +122,28 @@ reports:
 
 Console → CodeBuild → Create:
 - Name: `vprofile-build`.
-- Source: CodePipeline managed.
-- Environment: Amazon Linux 2, Standard runtime, **privileged** (cho Docker).
-- Service role: cho phép ECR push, S3 read/write.
-- Buildspec: từ source code.
+- Source: do CodePipeline cung cấp.
+- Environment: Amazon Linux 2, Standard runtime, bật **privileged mode** (cho Docker build).
+- Service role: cấp quyền push ECR, read/write S3.
+- Buildspec: lấy từ source code.
 
-Env variables:
-- `SONAR_TOKEN` (encrypted, from Parameter Store).
+Env variables cần set:
+- `SONAR_TOKEN` (encrypted, lấy từ Parameter Store).
 - `ECR_URI`: `123.dkr.ecr.us-east-1.amazonaws.com`.
 
-## Bước 3: ECR — image registry
+## Bước 3: ECR — Image registry
 
 ```bash
-# Create repo
+# Tạo repo
 aws ecr create-repository --repository-name vprofile
 
-# Get URI
+# Lấy URI
 aws ecr describe-repositories --repository-names vprofile \
     --query 'repositories[0].repositoryUri' --output text
 # 123.dkr.ecr.us-east-1.amazonaws.com/vprofile
 ```
 
-ECR scan vulnerability built-in:
+ECR có vulnerability scan built-in:
 
 ```bash
 aws ecr put-image-scanning-configuration \
@@ -151,9 +151,9 @@ aws ecr put-image-scanning-configuration \
     --image-scanning-configuration scanOnPush=true
 ```
 
-Push image → scan tự động → results visible in ECR console.
+→ Mỗi lần push image → scan tự động → kết quả hiển thị trong ECR console.
 
-## Bước 4: ECS — deploy target
+## Bước 4: ECS — Target deploy
 
 ### Task definition
 
@@ -222,11 +222,11 @@ aws ecs create-service \
     --health-check-grace-period-seconds 120
 ```
 
-ECS service:
-- Maintain 2 task running.
-- Auto-restart unhealthy.
-- ALB front (target group).
-- Rolling deploy on update.
+ECS service làm:
+- Maintain 2 task chạy liên tục.
+- Auto-restart task bị unhealthy.
+- ALB ở phía trước (target group).
+- Rolling deploy khi update.
 
 ## Bước 5: Deploy stage — CodePipeline
 
@@ -234,26 +234,26 @@ CodePipeline stage:
 - Provider: **Amazon ECS**.
 - Cluster: `vprofile-cluster`.
 - Service: `vprofile`.
-- Image definitions file: `imagedefinitions.json` (từ buildspec output).
+- Image definitions file: `imagedefinitions.json` (output từ buildspec).
 
 Khi deploy:
 1. CodePipeline đọc `imagedefinitions.json`.
 2. Update ECS service với image mới.
-3. ECS rolling deploy: launch task mới → wait healthy → kill task cũ.
+3. ECS rolling deploy: launch task mới → chờ healthy → kill task cũ.
 
-## Bước 6: Blue/Green với CodeDeploy
+## Bước 6: Blue/Green deploy với CodeDeploy
 
-Rolling deploy có thể gây partial outage. Blue/Green tốt hơn:
+Rolling deploy có thể gây partial outage (một số request lỗi). Blue/Green an toàn hơn:
 
 ```text
-Before:
+Trước khi deploy:
   ALB → Target Group Blue (current) ← 100% traffic
 
-Deploy:
+Trong khi deploy:
   Launch task mới vào Target Group Green
-  Wait green healthy
+  Chờ green healthy
   ALB switch → Green
-  Drain blue (5 min)
+  Drain blue (5 phút)
   Terminate blue
 ```
 
@@ -271,14 +271,14 @@ Resources:
           ContainerPort: 8080
 ```
 
-CodeDeploy support:
-- **Linear**: gradually shift % traffic.
-- **Canary**: 10% → wait → 100%.
-- **All-at-once**: instant switch.
+CodeDeploy hỗ trợ các chiến lược:
+- **Linear**: shift % traffic dần dần.
+- **Canary**: 10% → chờ → 100%.
+- **All-at-once**: switch ngay lập tức.
 
-## Bước 7: Pipeline complete
+## Bước 7: Pipeline hoàn chỉnh
 
-CodePipeline final:
+CodePipeline cuối cùng:
 
 ```text
 [Source]
@@ -293,7 +293,7 @@ CodeBuild: vprofile-build
   - Push ECR
         │
         ▼
-[Approval] ← manual review for prod
+[Approval] ← review thủ công cho prod
         │
         ▼
 [Deploy-Staging]
@@ -304,7 +304,7 @@ CodeDeploy → ECS staging service
 CodeBuild: curl /health
         │
         ▼
-[Approval-Prod] ← manual
+[Approval-Prod] ← thủ công
         │
         ▼
 [Deploy-Production]
@@ -316,46 +316,46 @@ CodeDeploy → ECS prod service (Blue/Green)
 CloudWatch dashboards:
 - Pipeline success/fail rate.
 - Build duration.
-- Deploy frequency (DORA metric).
+- Deploy frequency (DORA metric — Deployment Frequency).
 
 CloudWatch alarms:
-- Build fail → SNS Slack.
+- Build fail → SNS → Slack.
 - Deploy fail → PagerDuty.
 
 CloudWatch Events:
-- Pipeline state change → Lambda → update ticket.
+- Pipeline state change → Lambda → update ticket (Jira, Linear).
 
-## Cost breakdown approximation
+## Cost breakdown (ước tính)
 
-| Service | Cost (monthly) |
+| Service | Cost / tháng |
 |---|---|
-| CodePipeline | $1/pipeline/month + free ops |
-| CodeBuild | $0.005/minute (Linux) ≈ $10-20 |
-| ECR | $0.10/GB/month |
+| CodePipeline | $1/pipeline/tháng + free các stage cơ bản |
+| CodeBuild | $0.005/phút (Linux) ≈ $10-20 |
+| ECR | $0.10/GB/tháng |
 | ECS Fargate | 2 task × 0.5 vCPU × 1 GB ≈ $25 |
 | ALB | $20 |
 | RDS Multi-AZ | $30 |
 | ElastiCache | $12 |
-| CloudWatch logs | $0.50/GB/month |
-| **Total** | **~$110/month** |
+| CloudWatch logs | $0.50/GB/tháng |
+| **Total** | **~$110/tháng** |
 
-So với Jenkins self-host: tương đương cost nhưng zero ops.
+So với Jenkins self-host: cost tương đương nhưng zero ops (không phải tự vận hành Jenkins server).
 
-## Comparison CI/CD options
+## So sánh các option CI/CD
 
 | | CodePipeline | Jenkins | GitHub Actions |
 |---|---|---|---|
-| Setup time | 30 min | 2 hours | 10 min |
-| Cost | Pay per build | EC2 + ops | Free 2k min |
+| Setup time | 30 phút | 2 giờ | 10 phút |
+| Cost | Trả theo build | EC2 + chi phí ops | Free 2000 phút |
 | AWS integration | Native | Plugin | OIDC role |
-| Lock-in | AWS | None | GitHub |
-| UI | OK | Old | Modern |
+| Lock-in | AWS | Không | GitHub |
+| UI | OK | Cũ | Modern |
 | Marketplace | AWS native | 1800 plugin | 20000+ action |
 
-AWS CodePipeline tốt khi:
-- Toàn stack AWS.
-- Team không muốn quản Jenkins.
-- Compliance cần audit trail AWS native.
+AWS CodePipeline phù hợp khi:
+- Toàn bộ stack đã trên AWS.
+- Team không muốn quản Jenkins (no-ops).
+- Compliance yêu cầu audit trail AWS-native.
 
 ## IaC Pipeline với Terraform
 
@@ -379,25 +379,25 @@ module "vprofile_cicd" {
 }
 ```
 
-`terraform apply` → toàn bộ pipeline + ECR + IAM role + permission.
+Sau `terraform apply` → toàn bộ pipeline + ECR + IAM role + permission được tạo tự động.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Buildspec lỗi syntax | Build fail | Validate locally trước commit |
-| CodeBuild thiếu IAM permission | Build fail (push ECR) | Attach proper role |
-| Privileged mode tắt | Docker build fail | Enable trong environment |
-| ECS service không có health grace | Task killed before ready | `--health-check-grace-period-seconds 60+` |
-| Manual approval timeout | Pipeline stuck | Set timeout reasonable (1h, 24h) |
-| Image tag `latest` mãi | Không rollback được | Tag với git SHA |
-| Quên CloudWatch log retention | Disk + cost | Set 30d retention |
+| Buildspec sai syntax | Build fail | Validate locally trước khi commit |
+| CodeBuild thiếu IAM permission | Push ECR fail | Attach role đầy đủ |
+| Privileged mode chưa bật | Docker build fail | Enable trong environment config |
+| ECS service không có health grace period | Task bị kill trước khi ready | `--health-check-grace-period-seconds 60+` |
+| Manual approval không timeout | Pipeline stuck mãi | Set timeout hợp lý (1h, 24h) |
+| Dùng tag `latest` | Không rollback được | Tag bằng git SHA |
+| Quên CloudWatch log retention | Disk đầy + cost lớn | Set retention 30 ngày |
 
 ## Tổng kết phase 25
 
-Đã build:
+Đã build được:
 - End-to-end CI/CD pipeline AWS-native.
-- GitHub → Test → Sonar → Build → ECR → ECS deploy.
+- Flow: GitHub → Test → Sonar → Build → ECR → ECS deploy.
 - Blue/Green deployment với CodeDeploy.
 - Monitoring + alerting CloudWatch.
 - IaC qua Terraform.
@@ -406,12 +406,12 @@ vProfile sau section này = **production-grade SaaS** trên AWS.
 
 ## Tóm tắt bài 1
 
-- **CodePipeline** orchestrate stage: Source → Build → Deploy.
+- **CodePipeline** orchestrate các stage: Source → Build → Deploy.
 - **CodeBuild** = managed build server với `buildspec.yml`.
 - **ECR** registry với image scan built-in.
-- **ECS Fargate** = serverless container, ALB front.
+- **ECS Fargate** = serverless container, ALB ở phía trước.
 - **CodeDeploy Blue/Green** = zero-downtime deploy.
-- Cost ~$110/month cho stack production-grade.
-- Replace từng phần với Jenkins/GitHub Actions tùy preference.
+- Cost ~$110/tháng cho stack production-grade.
+- Có thể replace từng phần với Jenkins / GitHub Actions tuỳ preference.
 
 **Phase kế tiếp** → [Phase 26 — Bài 1: GCP và multi-cloud](../phase-26-gcp/01-gcp-overview.md)

@@ -130,7 +130,7 @@ rabbitmq.username=${MQ_USER:test}
 rabbitmq.password=${MQ_PASSWORD}
 ```
 
-App read `${ENV_VAR}` → no rebuild image per environment.
+App đọc `${ENV_VAR}` → không cần rebuild image mỗi environment.
 
 ## Web tier — nginx reverse proxy
 
@@ -219,7 +219,7 @@ server {
 
 ## Data tier — pre-built images
 
-MariaDB, Memcached, RabbitMQ — use official, configure via env + config file.
+MariaDB, Memcached, RabbitMQ — dùng official image, cấu hình qua env + file config.
 
 ### MariaDB config
 
@@ -258,7 +258,7 @@ local_infile = 0
 skip-symbolic-links
 ```
 
-`db/init/01-schema.sql` — vProfile schema loaded on first init.
+`db/init/01-schema.sql` — schema vProfile được load tự động khi MariaDB init lần đầu.
 
 ### RabbitMQ config
 
@@ -311,7 +311,7 @@ ENV RABBITMQ_LOAD_DEFINITIONS=/etc/rabbitmq/definitions.json
 }
 ```
 
-Pre-configured = no manual setup post-deploy.
+Đã pre-configured = không cần setup thủ công sau khi deploy.
 
 ## Final compose
 
@@ -497,17 +497,17 @@ EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.war"]
 ```
 
-No shell, no package manager, minimum attack surface.
+Không có shell, không có package manager → attack surface tối thiểu.
 
 ## Tóm tắt bài 2
 
 - **Multi-stage Dockerfile** mỗi service: builder + runtime.
-- **Config externalization** = env variable + secret mount.
+- **Externalize config** = env variable + secret mount, không hardcode trong image.
 - Pre-built data services (MariaDB, RabbitMQ) với custom config + init script.
-- **definitions.json** RabbitMQ pre-create user/queue.
-- **Healthcheck + depends_on condition** ordered startup.
-- **Frontend network** + **backend internal network** isolation.
+- **definitions.json** giúp RabbitMQ pre-create user / queue khi start.
+- **Healthcheck + depends_on condition** đảm bảo startup đúng thứ tự.
+- **Frontend network** + **backend internal network** để cô lập tier.
 - **Tag + push ECR** với version + latest.
-- **Distroless** image cho minimum size + security.
+- **Distroless** image cho size tối thiểu + security cao.
 
 **Bài kế tiếp** → [Bài 3: Container registry, image lifecycle, supply chain](03-registry-supply-chain.md)

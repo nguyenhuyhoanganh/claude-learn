@@ -1,18 +1,18 @@
 # Bài 3: Logs (Loki/ELK) + Distributed tracing (Jaeger)
 
-Metrics chỉ là 1/3 observability. Bài này dạy **logs aggregation** và **distributed tracing**.
+Metrics chỉ là 1/3 trong observability. Bài này dạy 2 phần còn lại: **logs aggregation** (tập trung log) và **distributed tracing** (truy vết qua nhiều service).
 
-## Loki — log như Prometheus
+## Loki — Log giống Prometheus
 
-**Loki** (Grafana Labs) = log aggregation rẻ + scale:
-- Index **only labels**, log content stored compressed.
-- 10-100x cheaper than ELK.
-- Query với LogQL (giống PromQL).
+**Loki** (do Grafana Labs phát triển) = log aggregation rẻ + scale được:
+- Index **chỉ label**, content log được lưu nén lại.
+- Rẻ hơn ELK 10-100 lần.
+- Query bằng LogQL (cú pháp giống PromQL).
 
 ### Stack
 
 ```text
-App → Promtail/Fluent Bit → Loki → Grafana
+App → Promtail / Fluent Bit → Loki → Grafana
 ```
 
 ### Loki Docker Compose
@@ -42,7 +42,7 @@ services:
     command: -config.file=/etc/promtail/config.yml
 ```
 
-### loki config
+### Loki config
 
 ```yaml
 auth_enabled: false
@@ -86,7 +86,7 @@ limits_config:
   max_entries_limit_per_query: 5000
 ```
 
-### Promtail config
+### Promtail config (Shipper — chuyển log lên Loki)
 
 ```yaml
 server:
@@ -99,7 +99,7 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # System logs
+  # System log
   - job_name: syslog
     static_configs:
       - targets: [localhost]
@@ -107,7 +107,7 @@ scrape_configs:
           job: syslog
           __path__: /var/log/syslog
 
-  # nginx
+  # Nginx log
   - job_name: nginx
     static_configs:
       - targets: [localhost]
@@ -115,7 +115,7 @@ scrape_configs:
           job: nginx
           __path__: /var/log/nginx/*.log
 
-  # Docker
+  # Docker container log
   - job_name: docker
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
@@ -124,7 +124,7 @@ scrape_configs:
         regex: '/(.*)'
         target_label: 'container'
 
-  # Tomcat app
+  # Tomcat app log với pipeline parse
   - job_name: vprofile-app
     static_configs:
       - targets: [localhost]
@@ -147,22 +147,22 @@ scrape_configs:
           format: '2006-01-02 15:04:05.000'
 ```
 
-Pipeline:
-- **multiline**: gộp stack trace thành 1 entry.
-- **regex**: parse cấu trúc.
-- **labels**: extract field thành label searchable.
-- **timestamp**: use log time thay shipper time.
+Các pipeline stage làm gì:
+- **multiline**: gộp stack trace nhiều dòng thành 1 log entry.
+- **regex**: parse cấu trúc log thành các field.
+- **labels**: extract field thành label để search được.
+- **timestamp**: dùng thời gian từ chính log (thay vì thời gian shipper).
 
-### LogQL queries
+### LogQL queries (Cú pháp query Loki)
 
 ```logql
-# All logs from app
+# Lấy tất cả log từ app
 {job="vprofile"}
 
-# Filter level
+# Filter theo level
 {job="vprofile", level="ERROR"}
 
-# Search content
+# Tìm content
 {job="vprofile"} |= "OutOfMemoryError"
 
 # Regex
@@ -171,19 +171,19 @@ Pipeline:
 # Exclude
 {job="vprofile"} != "DEBUG"
 
-# Parse + filter
+# Parse JSON + filter
 {job="nginx"}
   | json
   | status >= 500
 
-# Rate of errors
+# Tốc độ lỗi
 sum(rate({job="vprofile", level="ERROR"}[5m]))
 
-# Count by source
+# Đếm theo source
 sum by (logger) (count_over_time({job="vprofile"}[1h]))
 ```
 
-### Add Loki datasource Grafana
+### Thêm Loki datasource vào Grafana
 
 ```yaml
 - name: Loki
@@ -191,11 +191,11 @@ sum by (logger) (count_over_time({job="vprofile"}[1h]))
   url: http://loki:3100
 ```
 
-Grafana **Explore** view → switch datasource Loki → query LogQL → live tail.
+Grafana **Explore** view → switch datasource sang Loki → query LogQL → live tail log real-time.
 
-## ELK Stack — Elasticsearch + Kibana
+## ELK Stack — Elasticsearch + Logstash + Kibana
 
-Heavier than Loki nhưng full-text search mạnh hơn.
+Nặng hơn Loki nhưng full-text search mạnh hơn.
 
 ### Stack
 
@@ -273,32 +273,32 @@ output {
 
 ### Kibana
 
-UI: discover logs, build dashboard, full-text search.
+UI để: discover log, build dashboard, full-text search.
 
-Index management:
-- ILM (Index Lifecycle Management): hot → warm → cold → delete.
+Index management quan trọng:
+- **ILM** (Index Lifecycle Management): hot → warm → cold → delete (chuyển index qua nhiều stage để tiết kiệm chi phí).
 - Retention 30-90 ngày.
-- Snapshot to S3 cho long-term.
+- Snapshot lên S3 cho lưu trữ dài hạn.
 
 ### Loki vs ELK
 
 | | Loki | ELK |
 |---|---|---|
-| Cost | Low | High |
-| Index | Labels only | Full-text |
-| Search speed | Slow per-line | Fast |
-| Storage | Compressed object store | Disk-heavy |
-| Aggregation | Limited | Powerful |
-| Best for | Dev/debug, K8s logs | Production search-heavy |
-| Grafana integration | Native | Plugin |
+| Cost | Thấp | Cao |
+| Index | Chỉ label | Full-text |
+| Search speed | Chậm khi search per-line | Nhanh |
+| Storage | Object store nén | Disk-heavy |
+| Aggregation | Hạn chế | Mạnh |
+| Phù hợp cho | Dev/debug, K8s log | Production search nặng |
+| Tích hợp Grafana | Native | Qua plugin |
 
-Modern: **Loki + ELK combine** — Loki for cheap retention, ELK for hot recent.
+Modern: **Combine cả Loki + ELK** — Loki cho retention rẻ, ELK cho hot recent (search nhanh).
 
 ## Distributed tracing — Jaeger
 
-### Concept
+### Khái niệm
 
-Trace request đi qua nhiều service:
+Trace 1 request đi qua nhiều service:
 
 ```text
 User → API Gateway → Auth → User Service → DB
@@ -306,7 +306,9 @@ User → API Gateway → Auth → User Service → DB
                               Notification → Email
 ```
 
-Each hop = span. Trace = chain of spans với common ID.
+Mỗi hop = 1 span. Trace = chuỗi các span chung 1 trace ID.
+
+→ Quan trọng trong microservices: 1 request lỗi, biết được hop nào fail, hop nào chậm.
 
 ### Jaeger setup
 
@@ -350,10 +352,10 @@ otel:
   traces:
     exporter: otlp
     sampler: parentbased_traceidratio
-    sampler.arg: 0.1        # Sample 10%
+    sampler.arg: 0.1        # Sample 10% trace (giảm overhead)
 ```
 
-Hoặc Java agent (no code change):
+Hoặc dùng Java agent (không cần sửa code):
 
 ```bash
 java -javaagent:opentelemetry-javaagent.jar \
@@ -376,11 +378,11 @@ trace.set_tracer_provider(TracerProvider())
 otlp_exporter = OTLPSpanExporter(endpoint="http://jaeger:4317", insecure=True)
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(otlp_exporter))
 
-# Auto-instrument frameworks
+# Auto-instrument cho các framework phổ biến
 FlaskInstrumentor().instrument()
 RequestsInstrumentor().instrument()
 
-# Manual span
+# Span thủ công cho phần custom
 tracer = trace.get_tracer(__name__)
 
 @app.route("/users")
@@ -392,17 +394,17 @@ def list_users():
         return jsonify(users)
 ```
 
-### Read trace UI
+### Đọc trace trên UI
 
 Jaeger UI:
-- Service dropdown → operation → list traces.
-- Click trace → waterfall view spans.
-- Find slow operation by duration.
-- Span tags: HTTP code, error, user_id.
+- Service dropdown → operation → list trace.
+- Click vào 1 trace → xem waterfall view các span.
+- Tìm operation chậm theo duration.
+- Span tag: HTTP code, error, user_id, ...
 
-## Tempo — Loki for traces
+## Tempo — Loki cho trace
 
-**Tempo** (Grafana Labs): cheap distributed tracing như Loki for logs.
+**Tempo** (Grafana Labs): cheap distributed tracing — giống cách Loki làm với log.
 
 ```yaml
 services:
@@ -417,33 +419,33 @@ services:
       - "4317:4317"     # OTLP gRPC
 ```
 
-Grafana datasource → Tempo. Switch giữa metrics ↔ logs ↔ traces seamless.
+Grafana datasource → Tempo. Switch giữa metric ↔ log ↔ trace mượt mà trong cùng 1 UI.
 
-### Exemplars — link metric → trace
+### Exemplars — Link metric ↔ trace
 
-Prometheus metric với trace ID:
+Prometheus metric có gắn trace ID:
 
 ```text
 http_request_duration_seconds_bucket{...} 0.05 # trace_id=abc123
 ```
 
-Click metric spike trong Grafana → jump to specific trace.
+Click vào spike trên Grafana metric → jump thẳng đến trace cụ thể đã gây ra spike đó.
 
 ## LGTM stack — Grafana modern
 
-**Loki + Grafana + Tempo + Mimir** = all-in-one observability stack:
+**Loki + Grafana + Tempo + Mimir** = stack observability all-in-one:
 - **Loki** logs.
 - **Grafana** UI.
 - **Tempo** traces.
 - **Mimir** metrics (scalable Prometheus).
 
-Plus **Pyroscope** for profiling.
+Bổ sung **Pyroscope** cho profiling.
 
-Single vendor, integrated, cheaper than ELK + Jaeger + Prometheus federation.
+Single vendor, tích hợp tốt, rẻ hơn so với ELK + Jaeger + Prometheus federation.
 
-## Synthetic monitoring
+## Synthetic monitoring (Giám sát từ bên ngoài)
 
-Test endpoint từ outside thực sự:
+Test endpoint từ bên ngoài hệ thống — mô phỏng user thật:
 
 ### Blackbox exporter
 
@@ -479,12 +481,12 @@ Prometheus job:
       replacement: blackbox:9115
 ```
 
-Metrics:
-- `probe_success`: 0/1.
+Metric thu được:
+- `probe_success`: 0/1 (endpoint có sống không).
 - `probe_duration_seconds`: latency.
-- `probe_ssl_earliest_cert_expiry`: cert expiry.
+- `probe_ssl_earliest_cert_expiry`: ngày hết hạn cert TLS.
 
-Alert:
+Alert dựa trên các metric này:
 
 ```yaml
 - alert: EndpointDown
@@ -496,38 +498,38 @@ Alert:
   for: 1h
 ```
 
-### Synthetic Monitoring SaaS
+### Synthetic Monitoring SaaS (Thay vì self-host)
 
 - Pingdom.
 - UptimeRobot.
 - Datadog Synthetics.
 - StatusCake.
 
-Test từ multiple regions → user perspective real.
+Test từ nhiều region → phản ánh user perspective thật.
 
 ## Tổng kết phase 23
 
-3 bài cover:
+3 bài đã cover:
 1. Observability basics + Prometheus + Grafana.
 2. Production stack + PromQL + Alertmanager.
 3. Logs (Loki/ELK) + Distributed tracing (Jaeger/Tempo).
 
-Skills:
-- Setup production monitoring stack.
-- Write alert rules với golden signals + SLO.
+Skill đạt được:
+- Setup production monitoring stack đầy đủ.
+- Viết alert rule với golden signals + SLO.
 - Query LogQL + PromQL.
 - Instrument app với OpenTelemetry.
-- Sythetic monitoring endpoint + cert.
+- Synthetic monitoring endpoint + cert expiry.
 
 ## Tóm tắt bài 3
 
-- **Loki** = log cheap, label-only index, LogQL query.
-- **Promtail** ship log, pipeline stages parse + label.
-- **ELK** heavy nhưng full-text search mạnh.
+- **Loki** = log cheap, chỉ index label, query LogQL.
+- **Promtail** ship log, pipeline stage parse + label.
+- **ELK** nặng hơn nhưng full-text search mạnh.
 - **Jaeger / Tempo** distributed tracing với OpenTelemetry.
 - **Tempo + Loki + Mimir + Grafana** = LGTM unified stack.
-- **Exemplars** link metric ↔ trace.
+- **Exemplars** link metric ↔ trace để debug nhanh.
 - **Blackbox exporter** synthetic monitoring HTTP + TLS expiry.
-- Modern: **OpenTelemetry** = vendor-agnostic instrumentation standard.
+- Modern: **OpenTelemetry** = standard vendor-agnostic cho instrumentation.
 
 **Phase kế tiếp** → [Phase 24 — AWS Part 2](../phase-24-aws-part2/01-aws-advanced.md)

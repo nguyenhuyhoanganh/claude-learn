@@ -2,13 +2,13 @@
 
 20+ YAML files cho vProfile = nightmare. **Helm** = npm/apt cho K8s — package, template, version, share.
 
-## Helm concepts
+## Khái niệm Helm
 
 ```text
-Chart                 = package (folder of templates)
-Release               = installed chart instance
-Repository            = chart registry (like Docker Hub)
-Values                = config to override
+Chart                 = package (thư mục chứa các template)
+Release               = một chart đã cài đặt (instance)
+Repository            = chart registry (giống Docker Hub cho image)
+Values                = config để override default
 ```
 
 ## Setup
@@ -16,19 +16,19 @@ Values                = config to override
 ```bash
 brew install helm
 
-# Add repo
+# Thêm repo
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 
 # Search
 helm search repo nginx
-helm search hub wordpress    # Search Artifact Hub
+helm search hub wordpress    # Search trên Artifact Hub
 
 # Install
 helm install my-nginx bitnami/nginx --namespace web --create-namespace
 
-# List releases
+# Liệt kê release
 helm list -A
 
 # Upgrade
@@ -41,7 +41,7 @@ helm rollback my-nginx 1
 helm uninstall my-nginx -n web
 ```
 
-## Chart structure
+## Chart structure (Cấu trúc chart)
 
 ```text
 vprofile/
@@ -50,8 +50,8 @@ vprofile/
 ├── values.schema.json          # JSON Schema validation
 ├── README.md
 ├── templates/
-│   ├── _helpers.tpl            # Reusable template snippets
-│   ├── NOTES.txt               # Post-install message
+│   ├── _helpers.tpl            # Template snippet tái sử dụng
+│   ├── NOTES.txt               # Message hiển thị sau install
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   ├── ingress.yaml
@@ -101,14 +101,14 @@ dependencies:
 ```
 
 ```bash
-# Install dependencies
+# Cài dependency
 helm dependency update vprofile/
 ```
 
 ## values.yaml
 
 ```yaml
-# Default values for vProfile
+# Default values cho vProfile
 
 replicaCount: 3
 
@@ -216,11 +216,11 @@ rabbitmq:
 
 ## Templates
 
-### `_helpers.tpl`
+### `_helpers.tpl` (Template snippet tái sử dụng)
 
 ```yaml
 {{/*
-Common labels
+Common labels (label dùng chung)
 */}}
 {{- define "vprofile.labels" -}}
 helm.sh/chart: {{ include "vprofile.chart" . }}
@@ -325,55 +325,55 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
 ```
 
-### Other templates similar pattern
+### Các template khác theo pattern tương tự
 
 `configmap.yaml`, `secret.yaml`, `service.yaml`, `ingress.yaml`, `hpa.yaml`, `pdb.yaml`, ...
 
-### Template functions
+### Template functions (Các hàm template hay dùng)
 
 ```yaml
 {{ .Values.image.tag | default .Chart.AppVersion }}      # Default value
-{{ .Values.name | upper }}                                # Function
+{{ .Values.name | upper }}                                # Function chuyển đổi
 {{ .Values.name | quote }}                                # Quote string
 {{ toYaml .Values.resources | nindent 12 }}               # Convert + indent
 {{ tpl .Values.message . }}                               # Render template
 {{ include "vprofile.labels" . | nindent 4 }}             # Include named template
-{{ b64enc "hello" }}                                       # Base64 encode
+{{ b64enc "hello" }}                                       # Encode base64
 {{ sha256sum "data" }}                                     # Hash
 {{ randAlphaNum 16 }}                                      # Random string
 
 {{ if .Values.enabled }}...{{ end }}                       # Conditional
 {{ range .Values.hosts }}- {{ . }}{{ end }}                # Loop
-{{ with .Values.service }}{{ .port }}{{ end }}              # Scope change
-{{ required "DB password required" .Values.dbPassword }}   # Required value
+{{ with .Values.service }}{{ .port }}{{ end }}              # Đổi scope
+{{ required "DB password required" .Values.dbPassword }}   # Bắt buộc phải có
 ```
 
 ## Install + manage
 
 ```bash
-# Install with custom values
+# Install với custom values
 helm install vprofile ./vprofile \
     --namespace vprofile --create-namespace \
     --values values-prod.yaml \
     --set image.tag=v1.2.3 \
     --set secrets.dbPassword=SuperSecret
 
-# Dry run (preview)
+# Dry run (preview, không thực sự apply)
 helm install vprofile ./vprofile --dry-run --debug
 
 # Upgrade
 helm upgrade vprofile ./vprofile \
     --values values-prod.yaml \
     --set image.tag=v1.2.4 \
-    --reuse-values \                # Keep previous --set values
-    --atomic \                       # Rollback on fail
+    --reuse-values \                # Giữ lại --set values trước đó
+    --atomic \                       # Rollback nếu fail
     --timeout 10m
 
-# Diff before upgrade
+# Xem diff trước khi upgrade
 helm plugin install https://github.com/databus23/helm-diff
 helm diff upgrade vprofile ./vprofile
 
-# History
+# Lịch sử
 helm history vprofile
 
 # Rollback
@@ -383,12 +383,12 @@ helm rollback vprofile 1
 helm uninstall vprofile
 ```
 
-## Multi-environment values
+## Multi-environment values (Values cho nhiều môi trường)
 
 ```text
 charts/vprofile/
-├── values.yaml          # Defaults (common)
-├── values-dev.yaml      # Dev override
+├── values.yaml          # Mặc định (chung)
+├── values-dev.yaml      # Override cho dev
 ├── values-staging.yaml
 └── values-prod.yaml
 ```
@@ -418,43 +418,43 @@ Install:
 helm install vprofile ./vprofile -f values.yaml -f values-prod.yaml
 ```
 
-Later files override.
+File sau override file trước.
 
-## Publish chart
+## Publish chart (Phân phối chart)
 
-### Push to OCI registry
+### Push lên OCI registry
 
 ```bash
 # Package
 helm package ./vprofile
 # vprofile-1.0.0.tgz
 
-# Push to OCI (ECR, GHCR support OCI)
+# Push lên OCI (ECR, GHCR đều hỗ trợ OCI)
 helm push vprofile-1.0.0.tgz oci://ghcr.io/acme/charts
 
-# Use
+# Cách dùng
 helm install vprofile oci://ghcr.io/acme/charts/vprofile --version 1.0.0
 ```
 
-### Push to ChartMuseum
+### Push lên ChartMuseum
 
 ```bash
 helm push vprofile ./vprofile https://charts.acme.com/
 ```
 
-### GitHub Pages chart repo
+### Dùng GitHub Pages làm chart repo
 
 ```bash
 # Generate index
 helm repo index .
 
-# Push to GitHub Pages branch
+# Push lên branch gh-pages
 git checkout gh-pages
 cp ../vprofile-1.0.0.tgz .
 helm repo index .
 git add . && git commit -m "Release 1.0.0" && git push
 
-# Other users:
+# Người dùng khác:
 helm repo add acme https://acme.github.io/charts
 helm install vprofile acme/vprofile
 ```
@@ -489,10 +489,10 @@ helm lint ./vprofile
 # Check syntax + best practices
 
 helm template vprofile ./vprofile > rendered.yaml
-# Render templates locally cho review
+# Render template ở local để review
 
 helm install vprofile ./vprofile --dry-run --debug
-# Validate against cluster
+# Validate trên cluster (nhưng không thực sự apply)
 ```
 
 ## Helmfile — manage multiple releases
@@ -534,9 +534,9 @@ environments:
 helmfile -e production sync
 ```
 
-Declarative all releases for cluster.
+Declarative tất cả release của cluster trong 1 file.
 
-## ArgoCD — GitOps for Helm
+## ArgoCD — GitOps cho Helm
 
 `Application` manifest:
 
@@ -569,28 +569,28 @@ spec:
       - CreateNamespace=true
 ```
 
-ArgoCD continuously sync Git → cluster. GitOps deployment.
+ArgoCD liên tục sync Git → cluster. Đây là pattern GitOps deployment.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Hardcode value templates | Inflexible | Always use Values |
-| No required validation | Silent fail | `{{ required }}` for mandatory |
-| Indent wrong in template | YAML invalid | Use `nindent` consistently |
-| Chart version != app version | Confusion | Bump chart on template change |
-| Forget checksum annotation | ConfigMap change no restart | Add checksum |
-| `--reuse-values` lose new defaults | Outdated values | Combine with `--reset-values` carefully |
+| Hardcode value trong template | Cứng nhắc, không linh hoạt | Luôn dùng Values |
+| Không validate required field | Silent fail | Dùng `{{ required }}` cho field bắt buộc |
+| Indent sai trong template | YAML invalid | Dùng `nindent` nhất quán |
+| Chart version khác app version | Gây confusion | Bump chart khi template thay đổi |
+| Quên checksum annotation | ConfigMap đổi mà pod không restart | Thêm checksum annotation |
+| `--reuse-values` bỏ qua defaults mới | Values lỗi thời | Kết hợp với `--reset-values` cẩn thận |
 
 ## Tóm tắt bài 2
 
-- **Helm** = K8s package manager.
-- **Chart** = template package; **Release** = installed instance.
-- **values.yaml** defaults; override với `-f` or `--set`.
-- **Templates** + **`_helpers.tpl`** reusable snippets.
-- **Dependencies** sub-charts (mariadb, memcached).
-- **OCI registry** modern chart distribution.
-- **`helm test`**, `lint`, `template`, `--dry-run` validation.
-- **Helmfile** + **ArgoCD** multi-release management + GitOps.
+- **Helm** = package manager cho K8s.
+- **Chart** = package chứa template; **Release** = instance đã cài đặt.
+- **values.yaml** chứa default; override với `-f` hoặc `--set`.
+- **Templates** + **`_helpers.tpl`** chứa snippet tái sử dụng.
+- **Dependencies** cho phép dùng sub-chart (mariadb, memcached).
+- **OCI registry** = cách phân phối chart hiện đại.
+- **`helm test`**, `lint`, `template`, `--dry-run` để validate.
+- **Helmfile** + **ArgoCD** quản lý nhiều release + GitOps.
 
 **Bài kế tiếp** → [Bài 3: GitOps với ArgoCD và observability cho K8s](03-argocd-observability.md)

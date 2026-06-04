@@ -432,7 +432,7 @@ logger.warning("Disk usage high", extra={"usage": "85%"})
 logger.error("Deploy failed", exc_info=True)
 ```
 
-JSON log → ingest ELK/Loki/CloudWatch.
+JSON log → đẩy vào ELK / Loki / CloudWatch để query.
 
 ## Real-world: AWS resource cleanup tool
 
@@ -564,18 +564,18 @@ if __name__ == "__main__":
     main()
 ```
 
-Run weekly cron → save thousands $/year.
+Chạy weekly cron → tiết kiệm hàng nghìn đô / năm.
 
 ## Tóm tắt bài 3
 
-- **`subprocess.run`** capture output, check=True raise on fail.
-- **`requests.Session`** connection reuse + retry config.
-- **`httpx` async** parallel HTTP 10x faster.
-- **`boto3`** client vs resource (high-level).
-- **Pagination + waiter** trong boto3.
-- **`ThreadPoolExecutor`** I/O bound, **`ProcessPoolExecutor`** CPU bound.
-- **`asyncio`** modern concurrency.
-- **JSON logger** structured log cho ELK/CloudWatch.
-- Real tool: AWS cleanup → save real $.
+- **`subprocess.run`** capture output, `check=True` raise exception khi fail.
+- **`requests.Session`** reuse connection + retry config.
+- **`httpx` async** chạy HTTP song song nhanh hơn 10 lần.
+- **`boto3`** client (low-level) vs resource (high-level).
+- **Pagination + waiter** trong boto3 để xử lý kết quả lớn.
+- **`ThreadPoolExecutor`** cho I/O bound, **`ProcessPoolExecutor`** cho CPU bound.
+- **`asyncio`** concurrency hiện đại.
+- **JSON logger** ghi log structured cho ELK/CloudWatch.
+- Tool thực tế: AWS cleanup → tiết kiệm tiền thật.
 
 **Bài kế tiếp** → [Bài 4: CLI tool + packaging + testing](04-cli-packaging.md)

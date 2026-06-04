@@ -1,10 +1,10 @@
 # Bài 4: ConfigMap, Secret, RBAC, Pod Security
 
-Bài cuối phase 29 (deep). Config + Secret management + access control + security context.
+Bài cuối phase 29 (deep). Tổng hợp về quản lý config + secret + access control + security context cho pod.
 
 ## ConfigMap
 
-### Create
+### Tạo ConfigMap
 
 ```yaml
 apiVersion: v1
@@ -13,12 +13,12 @@ metadata:
   name: vprofile-config
   namespace: vprofile
 data:
-  # Plain key-value
+  # Cặp key-value đơn giản
   DB_HOST: "vprofile-db"
   DB_PORT: "3306"
   LOG_LEVEL: "INFO"
 
-  # Multi-line file content
+  # Nội dung file nhiều dòng
   application.properties: |
     server.port=8080
     logging.level.root=INFO
@@ -34,7 +34,7 @@ data:
     }
 ```
 
-Or from file:
+Hoặc tạo từ file có sẵn:
 
 ```bash
 kubectl create configmap vprofile-config \
@@ -43,7 +43,7 @@ kubectl create configmap vprofile-config \
     --from-literal=DB_HOST=vprofile-db
 ```
 
-### Mount as env
+### Mount như env variable
 
 ```yaml
 spec:
@@ -53,7 +53,7 @@ spec:
         - configMapRef:
             name: vprofile-config
 
-      # Or specific keys
+      # Hoặc inject từng key cụ thể
       env:
         - name: DB_URL
           valueFrom:
@@ -62,7 +62,7 @@ spec:
               key: DB_HOST
 ```
 
-### Mount as volume
+### Mount như volume
 
 ```yaml
 spec:
@@ -73,7 +73,7 @@ spec:
           mountPath: /app/config
         - name: nginx-conf
           mountPath: /etc/nginx/nginx.conf
-          subPath: nginx.conf       # Only mount 1 key as file
+          subPath: nginx.conf       # Chỉ mount 1 key thành file riêng
   volumes:
     - name: config
       configMap:
@@ -85,13 +85,13 @@ spec:
         name: vprofile-config
 ```
 
-`subPath` mount single file (vs whole directory) → preserve other files in target.
+`subPath` mount **1 file duy nhất** (thay vì cả directory) → giữ nguyên các file khác trong target directory.
 
-### Auto-reload
+### Auto-reload (Tự cập nhật khi ConfigMap thay đổi)
 
-ConfigMap update → volume-mounted files update (60s delay). Env variables **NOT** updated (need pod restart).
+ConfigMap update → file mount qua volume tự cập nhật (delay 60s). **Env variable KHÔNG cập nhật** — phải restart pod.
 
-Trigger restart on ConfigMap change:
+Trigger restart pod khi ConfigMap thay đổi:
 
 ```yaml
 spec:
@@ -101,9 +101,9 @@ spec:
         checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
 ```
 
-Helm pattern: checksum annotation change → rolling update.
+Pattern này phổ biến trong Helm: checksum annotation thay đổi → trigger rolling update.
 
-Or use **Reloader** tool: auto-restart Deployment khi ConfigMap/Secret change.
+Hoặc dùng tool **Reloader**: tự động restart Deployment khi ConfigMap/Secret thay đổi.
 
 ## Secret
 
@@ -113,11 +113,11 @@ kind: Secret
 metadata:
   name: vprofile-secrets
 type: Opaque
-stringData:                 # Plain, auto-encode
+stringData:                 # Giá trị plain, K8s tự encode base64
   db-password: SuperSecret123!
   api-key: sk-xxx
 
-data:                       # Pre-base64-encoded
+data:                       # Giá trị đã base64 sẵn
   jwt-secret: cmVhbHN1cGVyc2VjcmV0
 ```
 
@@ -126,14 +126,14 @@ echo -n 'SuperSecret123!' | base64
 # U3VwZXJTZWNyZXQxMjMh
 ```
 
-### Secret types
+### Các loại Secret
 
 | Type | Mục đích |
 |---|---|
-| `Opaque` | Generic |
-| `kubernetes.io/dockerconfigjson` | Docker registry credentials |
+| `Opaque` | Secret thông thường (mặc định) |
+| `kubernetes.io/dockerconfigjson` | Credential cho Docker registry |
 | `kubernetes.io/tls` | TLS cert + key |
-| `kubernetes.io/service-account-token` | SA token |
+| `kubernetes.io/service-account-token` | Token cho ServiceAccount |
 | `kubernetes.io/basic-auth` | Username + password |
 | `kubernetes.io/ssh-auth` | SSH key |
 
@@ -145,7 +145,7 @@ kubectl create secret docker-registry ghcr-credentials \
     --docker-username=$GITHUB_USER \
     --docker-password=$GITHUB_TOKEN
 
-# Use in pod
+# Dùng trong pod
 spec:
   imagePullSecrets:
     - {name: ghcr-credentials}
@@ -159,7 +159,7 @@ kubectl create secret tls vprofile-tls \
     --key=tls.key
 ```
 
-### Use Secret
+### Cách dùng Secret trong pod
 
 ```yaml
 spec:
@@ -184,12 +184,12 @@ spec:
 
 ## Secret management — Production
 
-Default Secret = **base64**, **NOT encrypted**. Stored plain in etcd.
+Secret mặc định = **base64 encode**, **KHÔNG phải encrypt**. Lưu plain trong etcd → bất kỳ ai có quyền đọc etcd đều thấy được.
 
-### Encryption at rest
+### Encryption at rest (Mã hoá khi lưu)
 
 ```yaml
-# kube-apiserver config
+# Cấu hình của kube-apiserver
 apiVersion: apiserver.config.k8s.io/v1
 kind: EncryptionConfiguration
 resources:
@@ -201,11 +201,11 @@ resources:
       - identity: {}
 ```
 
-Encrypt Secret before storing in etcd.
+Cấu hình này encrypt Secret trước khi lưu vào etcd.
 
-### External Secrets Operator
+### External Secrets Operator (Lấy secret từ external store)
 
-Pull secret từ external vault:
+Pull secret từ kho secret bên ngoài (vd: AWS Secrets Manager, Vault):
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
@@ -241,19 +241,19 @@ spec:
         property: password
 ```
 
-Pull AWS Secrets Manager → create K8s Secret → auto-rotate.
+Cách hoạt động: External Secrets Operator pull secret từ AWS Secrets Manager → tạo K8s Secret tương ứng → tự rotate khi source thay đổi.
 
 ### Sealed Secrets (Bitnami)
 
-Encrypt Secret → commit to Git safely:
+Encrypt Secret → có thể commit thẳng lên Git mà vẫn an toàn:
 
 ```bash
 # Encrypt
 kubeseal --controller-namespace=kube-system --controller-name=sealed-secrets \
     -o yaml < secret.yaml > sealed-secret.yaml
 
-# Commit sealed-secret.yaml to Git
-# Cluster controller decrypts → creates Secret
+# Commit file sealed-secret.yaml lên Git
+# Controller trong cluster sẽ decrypt → tạo Secret thật
 ```
 
 ### HashiCorp Vault + CSI
@@ -274,11 +274,11 @@ spec:
         secretKey: "password"
 ```
 
-Pod mount → CSI fetch from Vault → mount as file. No K8s Secret at all.
+Pod mount → CSI driver fetch từ Vault → mount thành file. **Không hề tạo K8s Secret** → secret không bao giờ chạm etcd.
 
-## RBAC
+## RBAC (Role-Based Access Control)
 
-### Role + RoleBinding (namespace-scoped)
+### Role + RoleBinding (Phạm vi namespace)
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -316,7 +316,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-### ClusterRole + ClusterRoleBinding (cluster-wide)
+### ClusterRole + ClusterRoleBinding (Phạm vi toàn cluster)
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -329,7 +329,7 @@ rules:
     verbs: [get, list, watch]
 ```
 
-### ServiceAccount
+### ServiceAccount (Identity cho pod)
 
 ```yaml
 apiVersion: v1
@@ -338,34 +338,34 @@ metadata:
   name: vprofile-app
   namespace: vprofile
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::123:role/vprofile-app   # IRSA
+    eks.amazonaws.com/role-arn: arn:aws:iam::123:role/vprofile-app   # IRSA cho AWS
 ```
 
-Used by pod:
+Dùng trong pod:
 
 ```yaml
 spec:
   serviceAccountName: vprofile-app
 ```
 
-Pod auto-mount SA token at `/var/run/secrets/kubernetes.io/serviceaccount/token` cho API calls.
+Pod tự động mount SA token tại `/var/run/secrets/kubernetes.io/serviceaccount/token` → dùng cho API call vào K8s API server.
 
-### Built-in roles
+### Built-in roles (Role có sẵn)
 
 ```bash
-# View
+# Xem các ClusterRole built-in (loại trừ system role)
 kubectl get clusterroles | grep -v ^system:
 
-# Built-in
-cluster-admin       # Full access (use sparingly)
-admin               # Full to namespace (no cluster resource)
-edit                # Modify resources
-view                # Read-only
+# Các role chuẩn:
+cluster-admin       # Full access toàn cluster (dùng cực kỳ hạn chế)
+admin               # Full quyền trong namespace (không có quyền cluster-level)
+edit                # Chỉnh sửa được resource
+view                # Chỉ đọc
 ```
 
-Don't extend `cluster-admin` to user. Create custom Role.
+**Không nên** gán `cluster-admin` cho user thường. Tạo custom Role với quyền tối thiểu cần thiết.
 
-### IRSA — IAM for ServiceAccount (AWS)
+### IRSA — IAM Roles for ServiceAccount (Trên AWS)
 
 ```bash
 eksctl create iamserviceaccount \
@@ -376,19 +376,19 @@ eksctl create iamserviceaccount \
     --approve
 ```
 
-Pod with SA → AWS SDK auto-fetch role credentials → S3 access without keys.
+Pod gắn SA này → AWS SDK trong pod tự fetch IAM role credential → access S3 mà không cần lưu access key.
 
-### Workload Identity (GCP)
+### Workload Identity (Trên GCP)
 
-Equivalent on GKE. K8s SA bind to GCP SA.
+Tương đương IRSA trên GKE — bind K8s ServiceAccount với GCP ServiceAccount.
 
 ## Pod Security
 
-### SecurityContext
+### SecurityContext (Bảo mật ở cấp pod / container)
 
 ```yaml
 spec:
-  securityContext:           # Pod-level
+  securityContext:           # Cấp pod (áp dụng cho mọi container)
     runAsNonRoot: true
     runAsUser: 1000
     runAsGroup: 1000
@@ -401,23 +401,23 @@ spec:
 
   containers:
     - name: app
-      securityContext:        # Container-level (override pod-level)
+      securityContext:        # Cấp container (override cấp pod)
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
         capabilities:
           drop: [ALL]
-          add: [NET_BIND_SERVICE]   # If need bind <1024
+          add: [NET_BIND_SERVICE]   # Nếu cần bind port < 1024
         runAsUser: 1000
 ```
 
-### Pod Security Standards
+### Pod Security Standards (Chuẩn bảo mật pod)
 
-3 levels:
-- **Privileged**: anything (default).
-- **Baseline**: minimal restrictions.
-- **Restricted**: hardened, recommended for app.
+3 mức:
+- **Privileged**: cho phép mọi thứ (mặc định, không hardening).
+- **Baseline**: hạn chế tối thiểu.
+- **Restricted**: hardened nghiêm ngặt, khuyến nghị cho app production.
 
-Enforce per namespace:
+Áp dụng theo namespace:
 
 ```yaml
 apiVersion: v1
@@ -430,11 +430,11 @@ metadata:
     pod-security.kubernetes.io/warn: restricted
 ```
 
-Pod violating standard → rejected (enforce) or logged (audit/warn).
+Pod vi phạm chuẩn → bị reject (chế độ enforce) hoặc chỉ log lại (chế độ audit/warn).
 
 ### OPA Gatekeeper / Kyverno
 
-Custom policy engine. Example: require all images from approved registry.
+Custom policy engine — viết policy tuỳ chỉnh. Ví dụ: bắt buộc mọi image phải từ registry đã được approve.
 
 Kyverno:
 
@@ -458,9 +458,9 @@ spec:
               - image: "ghcr.io/acme/* | *.dkr.ecr.*.amazonaws.com/*"
 ```
 
-## Resource quotas + limits
+## Resource quotas + limits (Hạn ngạch tài nguyên)
 
-### ResourceQuota — namespace-level
+### ResourceQuota — Hạn ngạch cấp namespace
 
 ```yaml
 apiVersion: v1
@@ -479,9 +479,9 @@ spec:
     pods: "50"
 ```
 
-Tổng resource trong namespace không vượt quá.
+Tổng tài nguyên trong namespace không được vượt quá các giá trị trên.
 
-### LimitRange — default per pod
+### LimitRange — Mặc định cho từng pod
 
 ```yaml
 apiVersion: v1
@@ -492,7 +492,7 @@ metadata:
 spec:
   limits:
     - type: Container
-      default:                # Default if not set
+      default:                # Mặc định nếu pod không set
         cpu: 500m
         memory: 512Mi
       defaultRequest:
@@ -506,29 +506,29 @@ spec:
         memory: 64Mi
 ```
 
-Pod without resource spec → use defaults. Pod exceed max → rejected.
+Pod không khai báo resource → dùng default. Pod vượt max → bị reject.
 
 ## Tổng kết phase 29
 
-4 bài cover:
-1. K8s architecture + core objects.
+4 bài đã cover:
+1. K8s architecture + các object cốt lõi.
 2. Workload types: Deployment, StatefulSet, DaemonSet, Job/CronJob, HPA/VPA.
 3. Networking: Service, Ingress, NetworkPolicy.
 4. Config + Secret + RBAC + Pod Security.
 
-Skills:
+Skill đạt được:
 - Deploy app trên K8s production-grade.
 - Network architecture multi-tier.
-- Security: RBAC + NetworkPolicy + Pod Security + external secrets.
+- Security đa lớp: RBAC + NetworkPolicy + Pod Security + external secrets.
 
 ## Tóm tắt bài 4
 
-- **ConfigMap** for non-secret config; **Secret** for sensitive (base64, encrypt at rest).
-- **External Secrets Operator** + **Sealed Secrets** + **Vault CSI** modern patterns.
-- **RBAC**: Role + RoleBinding (namespace), ClusterRole + ClusterRoleBinding (cluster).
-- **ServiceAccount** + **IRSA** (AWS) / **Workload Identity** (GCP) cho cloud credential.
-- **SecurityContext** + **Pod Security Standards** restricted level.
-- **OPA Gatekeeper / Kyverno** custom policy.
-- **ResourceQuota** + **LimitRange** namespace governance.
+- **ConfigMap** cho config không nhạy cảm; **Secret** cho dữ liệu nhạy cảm (base64, cần encrypt at rest).
+- **External Secrets Operator** + **Sealed Secrets** + **Vault CSI** là các pattern hiện đại để quản secret production.
+- **RBAC**: Role + RoleBinding (cấp namespace), ClusterRole + ClusterRoleBinding (cấp cluster).
+- **ServiceAccount** + **IRSA** (AWS) / **Workload Identity** (GCP) cho phép pod dùng cloud credential mà không cần lưu key.
+- **SecurityContext** + **Pod Security Standards** mức restricted = hardening nghiêm ngặt.
+- **OPA Gatekeeper / Kyverno** cho phép viết custom policy tuỳ chỉnh.
+- **ResourceQuota** + **LimitRange** quản trị tài nguyên theo namespace.
 
 **Phase kế tiếp** → [Phase 30 — App on K8s](../phase-30-app-on-k8s/01-deploy-vprofile-k8s.md)

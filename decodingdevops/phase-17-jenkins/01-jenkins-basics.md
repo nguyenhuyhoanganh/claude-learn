@@ -1,23 +1,23 @@
 # Bài 1: Jenkins basics — CI/CD server quan trọng nhất
 
-Jenkins = **CI/CD server mở open-source phổ biến nhất**. 70%+ tổ chức Java dùng. Master Jenkins = nắm vững job lương cao DevOps.
+Jenkins = **CI/CD server open-source phổ biến nhất**. 70%+ tổ chức Java đang dùng. Master Jenkins = nắm vững một skill cốt lõi cho DevOps engineer lương cao.
 
 ## Jenkins là gì?
 
-> Jenkins = automation server, chạy **job** (build/test/deploy) khi có trigger (commit, schedule, manual).
+> Jenkins = automation server, chạy các **job** (build / test / deploy) khi có trigger (commit, schedule, manual).
 
-Đặc điểm:
-- **Open source** (MIT).
+Đặc điểm chính:
+- **Open source** (license MIT).
 - **Plugin ecosystem khổng lồ** (~1800 plugin).
-- Self-host (control + customize).
-- 2 paradigm: **Freestyle job** (UI), **Pipeline as Code** (Jenkinsfile).
+- Self-host (bạn tự control + customize).
+- Hỗ trợ 2 paradigm: **Freestyle job** (qua UI) và **Pipeline as Code** (Jenkinsfile).
 
 ## Setup Jenkins
 
 ### Cài đặt
 
 ```bash
-# Add Jenkins repo
+# Thêm Jenkins repo
 sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
 sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
@@ -31,25 +31,25 @@ sudo dnf install -y jenkins
 sudo systemctl enable --now jenkins
 ```
 
-Default port: **8080**. Initial admin password:
+Port mặc định: **8080**. Lấy initial admin password:
 
 ```bash
 sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 ```
 
-Browser: `http://server:8080` → paste password → install suggested plugins → tạo admin user.
+Browser: `http://server:8080` → paste password → install suggested plugin → tạo admin user.
 
-## Concepts
+## Các khái niệm cốt lõi
 
 ### Job/Project
 
-Unit of work. Có 2 loại:
-- **Freestyle**: UI config, dễ start, hạn chế.
-- **Pipeline**: code Jenkinsfile, mạnh, version control.
+Đơn vị công việc. Có 2 loại:
+- **Freestyle**: config qua UI, dễ bắt đầu nhưng hạn chế.
+- **Pipeline**: code Jenkinsfile, mạnh, version control được.
 
 ### Build
 
-Lần chạy của 1 job. Mỗi build có:
+1 lần chạy của 1 job. Mỗi build có:
 - Build number (#1, #2, ...).
 - Status (Success, Failed, Aborted, Unstable).
 - Logs.
@@ -59,28 +59,27 @@ Lần chạy của 1 job. Mỗi build có:
 
 Folder trên agent chứa source code + build output.
 
-### Trigger
+### Trigger (Khi nào job chạy)
 
-Khi nào job chạy:
 - **Manual**: click "Build Now".
-- **SCM polling**: check Git mỗi N phút.
-- **Webhook**: GitHub/GitLab push trigger ngay.
-- **Schedule**: cron-like (vd nightly).
+- **SCM polling**: kiểm tra Git mỗi N phút.
+- **Webhook**: GitHub/GitLab push → trigger ngay (real-time).
+- **Schedule**: cron-like (vd: nightly build).
 - **Upstream**: job khác trigger.
 
 ### Plugin
 
-Extend Jenkins. Top plugin DevOps:
+Extend chức năng Jenkins. Top plugin cho DevOps:
 - **Git** (built-in).
 - **Pipeline** (built-in).
-- **Blue Ocean** — modern UI.
+- **Blue Ocean** — UI hiện đại.
 - **Docker** — build/push image.
-- **Kubernetes** — deploy + run agent.
+- **Kubernetes** — deploy + chạy agent dynamic.
 - **SonarQube Scanner**.
 - **Slack Notification**.
-- **Credentials Binding** — inject secret.
+- **Credentials Binding** — inject secret an toàn.
 
-## Jenkinsfile — pipeline as code
+## Jenkinsfile — Pipeline as code
 
 ```groovy
 pipeline {
@@ -134,20 +133,20 @@ pipeline {
 
 ### Declarative vs Scripted
 
-**Declarative** (bài này) — `pipeline { ... }` block, structured.
-**Scripted** — Groovy free-form, flexible nhưng phức tạp.
+**Declarative** (bài này dùng) — block `pipeline { ... }`, có cấu trúc cố định.
+**Scripted** — Groovy free-form, linh hoạt nhưng phức tạp hơn.
 
-Modern Jenkins: declarative chính.
+Jenkins hiện đại: **dùng declarative làm chính**.
 
-## Anatomy
+## Anatomy của Pipeline (Cấu trúc các section)
 
 | Section | Mục đích |
 |---|---|
-| `agent` | Where to run (any, label, docker, none) |
-| `stages` | Logical step (Build, Test, Deploy) |
-| `steps` | Action inside stage (sh, git, junit, ...) |
-| `when` | Conditional execution |
-| `post` | Action after stage/pipeline (always, success, failure, unstable, changed) |
+| `agent` | Chạy ở đâu (any, label, docker, none) |
+| `stages` | Các bước logic (Build, Test, Deploy) |
+| `steps` | Action trong stage (sh, git, junit, ...) |
+| `when` | Điều kiện chạy stage |
+| `post` | Action sau stage/pipeline (always, success, failure, unstable, changed) |
 | `environment` | Env variables |
 | `tools` | Auto-install tool (Maven, JDK) |
 | `parameters` | User input khi trigger |
@@ -155,25 +154,25 @@ Modern Jenkins: declarative chính.
 
 ## Multi-branch pipeline
 
-Auto detect branch + PR, run pipeline per branch:
+Tự động detect branch + PR, chạy pipeline riêng cho mỗi branch:
 
-1. Create "Multibranch Pipeline" job.
+1. Tạo job "Multibranch Pipeline".
 2. Source: GitHub repo.
 3. Jenkins scan: tìm `Jenkinsfile` ở mỗi branch.
-4. Tự tạo job con cho mỗi branch.
+4. Tự tạo sub-job cho mỗi branch.
 
-Use case:
+Use case điển hình:
 - `main` branch → deploy production.
 - `dev` branch → deploy staging.
-- PR → run test, không deploy.
+- PR → chỉ chạy test, không deploy.
 
-## Credentials management
+## Credentials management (Quản lý secret)
 
-Secret (password, SSH key, API token) → **Jenkins Credentials Store**:
+Secret (password, SSH key, API token) → lưu vào **Jenkins Credentials Store**:
 
 UI: Manage Jenkins → Credentials → System → Global → Add.
 
-Loại:
+Các loại:
 - Username/password.
 - SSH private key.
 - Secret text (API token).
@@ -186,7 +185,7 @@ Inject vào pipeline:
 pipeline {
     agent any
     environment {
-        AWS_CREDS = credentials('aws-prod')          // Hai biến: AWS_CREDS_USR, AWS_CREDS_PSW
+        AWS_CREDS = credentials('aws-prod')          // Tạo 2 biến: AWS_CREDS_USR, AWS_CREDS_PSW
         SONAR_TOKEN = credentials('sonar-token')      // 1 biến
     }
     stages {
@@ -200,11 +199,11 @@ pipeline {
 }
 ```
 
-> **Không bao giờ** hardcode credential trong Jenkinsfile.
+> **Tuyệt đối không** hardcode credential trong Jenkinsfile.
 
-## Agents — distributed build
+## Agents — Distributed build
 
-Jenkins **master** = controller. Build chạy trên **agent** (slave).
+Jenkins **master** = controller. Build thực sự chạy trên **agent** (slave).
 
 ```text
 Master (controller)
@@ -224,13 +223,13 @@ pipeline {
 }
 ```
 
-Agent provision:
-- **Static**: VM cố định, JNLP/SSH connect master.
-- **Cloud dynamic**: K8s/AWS provision khi cần, terminate sau build.
+Cách provision agent:
+- **Static**: VM cố định, connect master qua JNLP/SSH.
+- **Cloud dynamic**: K8s/AWS provision agent khi cần, terminate sau khi build xong.
 
-Modern recommend: **Kubernetes agents** (Jenkins K8s plugin).
+Modern khuyến nghị: **Kubernetes agent** (qua Jenkins K8s plugin).
 
-## CI/CD pipeline cho vProfile
+## CI/CD pipeline cho vProfile (Production-grade example)
 
 ```groovy
 pipeline {
@@ -343,30 +342,30 @@ pipeline {
 ```
 
 Đây là **pipeline production-grade**:
-- Checkout → Build → Test → Quality scan → Quality gate → Publish → Deploy staging → Smoke → Approval → Deploy prod.
+- Flow: Checkout → Build → Test → Quality scan → Quality gate → Publish → Deploy staging → Smoke test → Approval → Deploy prod.
 - Notify Slack.
-- Use credentials managed.
-- SSH agent forward.
+- Dùng credential managed (không hardcode).
+- SSH agent forwarding để deploy.
 
 ## Best practices
 
-| Practice | Why |
+| Practice | Lý do |
 |---|---|
-| Jenkinsfile in repo | Version control config |
+| Jenkinsfile trong repo | Version control config |
 | Pipeline as code | Reproducible |
-| Multi-branch | Auto detect feature branch |
-| Build in container | Reproducible env |
-| Cleanup workspace | `cleanWs()` plugin |
-| Timeout each stage | Avoid hanging |
-| Parallel stages | Speed up |
-| Use shared library | DRY across project |
-| Backup `/var/lib/jenkins/` | Recovery |
-| HA: master active/passive | Avoid SPOF |
+| Multi-branch | Tự động detect feature branch |
+| Build trong container | Môi trường reproducible |
+| Cleanup workspace | Plugin `cleanWs()` |
+| Timeout cho mỗi stage | Tránh hanging |
+| Parallel stage | Speed up build |
+| Dùng shared library | DRY (Don't Repeat Yourself) qua nhiều project |
+| Backup `/var/lib/jenkins/` | Phục hồi khi crash |
+| HA: master active/passive | Tránh SPOF |
 
 ## Backup
 
 ```bash
-# Backup config + jobs
+# Backup config + job
 tar -czf jenkins-backup-$(date +%F).tar.gz \
     /var/lib/jenkins/jobs/ \
     /var/lib/jenkins/users/ \
@@ -375,56 +374,58 @@ tar -czf jenkins-backup-$(date +%F).tar.gz \
     /var/lib/jenkins/credentials.xml
 ```
 
-Hoặc plugin **ThinBackup**.
+Hoặc dùng plugin **ThinBackup** (tự động hoá).
 
-## Trade-off Jenkins
+## Trade-off của Jenkins
 
 ### Pros
+
 - Free, open source.
-- Mature, plugin nhiều nhất.
-- Self-host control.
+- Mature, plugin nhiều nhất ngành.
+- Self-host = full control.
 - Active community.
 
 ### Cons
+
 - Vận hành phức tạp (plugin update, version conflict).
 - UI cũ.
-- Configuration sprawl.
-- Security: plugin vuln thường xuyên.
+- Configuration sprawl (config rải rác khó quản).
+- Security: plugin có vuln thường xuyên.
 
-### Alternatives modern
+### Alternative hiện đại
 
 | Tool | Pros |
 |---|---|
 | **GitHub Actions** | Tích hợp GitHub, free tier rộng, YAML đơn giản |
-| **GitLab CI** | Tích hợp GitLab, mạnh built-in |
+| **GitLab CI** | Tích hợp GitLab, built-in mạnh |
 | **CircleCI** | SaaS, fast |
 | **Drone** | Lightweight, container-native |
-| **Argo CD** | GitOps for K8s |
+| **Argo CD** | GitOps cho K8s |
 | **Tekton** | Cloud-native pipeline cho K8s |
 
-Khoá học làm cả Jenkins (section 17) và GitHub Actions (section 18) → so sánh.
+Khoá học sẽ làm cả Jenkins (section 17) và GitHub Actions (section 18) → để so sánh.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Hardcode credential | Lộ secret | Credentials Store |
-| Job chạy trên master | Master overload | Agent dedicated |
+| Hardcode credential trong code | Lộ secret | Dùng Credentials Store |
+| Job chạy trên master | Master overload | Dùng agent dedicated |
 | Không cleanup workspace | Disk đầy | `cleanWs()` |
 | Plugin outdated | Vuln | Auto-update plugin định kỳ |
-| Pipeline không in repo | Khó track | Jenkinsfile commit Git |
+| Pipeline không lưu in repo | Khó track thay đổi | Commit Jenkinsfile vào Git |
 | Single master | SPOF | HA setup hoặc backup nghiêm túc |
-| Slow build | Productivity giảm | Parallel + cache |
+| Build chậm | Productivity giảm | Parallel + cache |
 
 ## Tóm tắt bài 1
 
 - **Jenkins** = CI/CD server self-host phổ biến nhất.
-- **Jenkinsfile** = pipeline as code (declarative recommend).
-- 6+ stage typical: Checkout → Build → Test → Sonar → Publish → Deploy.
+- **Jenkinsfile** = pipeline as code (khuyến nghị declarative).
+- 6+ stage điển hình: Checkout → Build → Test → Sonar → Publish → Deploy.
 - **Credentials Store** inject secret an toàn.
-- **Multi-branch** auto detect branch + PR.
+- **Multi-branch** tự động detect branch + PR.
 - **Agent** distribute build — Kubernetes agent là pattern modern.
-- Backup `/var/lib/jenkins/` mandatory.
-- Alternatives: GitHub Actions, GitLab CI, CircleCI, Drone, Tekton.
+- Backup `/var/lib/jenkins/` bắt buộc.
+- Alternative: GitHub Actions, GitLab CI, CircleCI, Drone, Tekton.
 
 **Phase kế tiếp** → [Phase 18 — Bài 1: GitHub Actions](../phase-18-github-actions/01-github-actions.md)

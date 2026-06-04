@@ -1,6 +1,6 @@
 # Bài 1: Monitoring và Observability — Prometheus, Grafana, ELK
 
-Deploy được app chỉ là 1 nửa. **Quan sát** được app chạy thế nào = nửa còn lại. Bài này giới thiệu 3 trụ cột observability và toolkit standard.
+Deploy được app chỉ là 1 nửa công việc. **Quan sát được app chạy thế nào** = nửa còn lại. Bài này giới thiệu 3 trụ cột observability và toolkit chuẩn ngành.
 
 ## 3 trụ cột observability
 
@@ -18,35 +18,35 @@ Deploy được app chỉ là 1 nửa. **Quan sát** được app chạy thế n
 
 | | Metrics | Logs | Traces |
 |---|---|---|---|
-| Type | Number time series | Text events | Request path |
-| Cardinality | Low (CPU, RAM) | High (per request) | Per request |
+| Loại | Số liệu time series | Sự kiện text | Đường đi của request |
+| Cardinality | Thấp (CPU, RAM) | Cao (mỗi request) | Mỗi request |
 | Storage | TSDB (Prometheus) | Document store (ELK) | Trace DB (Jaeger) |
-| Cost | Cheap | Med | Med |
-| Use | Aggregate, alert | Debug specific event | Find slow service |
+| Cost | Rẻ | Trung bình | Trung bình |
+| Dùng để | Aggregate, alert | Debug event cụ thể | Tìm service chậm |
 
-## Tools landscape
+## Toolkit landscape (Bức tranh tổng thể)
 
 | Category | Tool |
 |---|---|
 | **Metrics** | Prometheus, InfluxDB, Datadog, CloudWatch |
 | **Logs** | Elasticsearch + Kibana (ELK), Loki, Splunk, Datadog Logs |
 | **Traces** | Jaeger, Tempo, Zipkin, Datadog APM |
-| **Dashboards** | Grafana (universal), Kibana (logs), Datadog |
+| **Dashboards** | Grafana (universal), Kibana (cho logs), Datadog |
 | **Alerting** | Alertmanager, PagerDuty, Opsgenie, Slack |
-| **All-in-one** | Datadog, New Relic, Dynatrace (paid SaaS) |
-| **Open source stack** | LGTM (Loki/Grafana/Tempo/Mimir) by Grafana Labs |
+| **All-in-one (SaaS)** | Datadog, New Relic, Dynatrace |
+| **Open source stack** | LGTM (Loki/Grafana/Tempo/Mimir) của Grafana Labs |
 
-Khoá học focus **Prometheus + Grafana** (open source standard).
+Khoá học focus vào **Prometheus + Grafana** — chuẩn open source phổ biến nhất.
 
 ## Prometheus
 
-> **Prometheus** = time-series database + pull-based metrics scraper. Sinh ra ở SoundCloud, donate cho CNCF, là **chuẩn metrics ngành**.
+> **Prometheus** = time-series database + metrics scraper kiểu pull. Ra đời tại SoundCloud, được donate cho CNCF, hiện là **chuẩn metrics của ngành**.
 
 ### Architecture
 
 ```text
 +──────────────+   scrape    +────────────────+
-│ App with     │ ◄────────── │  Prometheus    │
+│ App với      │ ◄────────── │  Prometheus    │
 │ /metrics     │  HTTP pull  │  server        │
 │ endpoint     │   15s       │                │
 +──────────────+             │  TSDB          │
@@ -60,7 +60,7 @@ Khoá học focus **Prometheus + Grafana** (open source standard).
                              +────────────────+
 ```
 
-Pull-based: Prometheus **gọi** target HTTP `/metrics` mỗi 15s. Khác push (StatsD, Telegraf).
+Cơ chế pull-based: Prometheus **chủ động gọi** target HTTP `/metrics` mỗi 15s. Khác với push-based (StatsD, Telegraf — app tự đẩy metric đến server).
 
 ### Metric format
 
@@ -77,33 +77,33 @@ node_cpu_seconds_total{cpu="0",mode="user"} 12345.67
 node_cpu_seconds_total{cpu="0",mode="idle"} 98765.43
 ```
 
-Components:
-- **Name**: `http_requests_total`.
-- **Labels**: `{method="GET", status="200"}` — high cardinality.
-- **Value**: number.
+Cấu trúc metric:
+- **Name** (tên): `http_requests_total`.
+- **Labels** (nhãn): `{method="GET", status="200"}` — high cardinality.
+- **Value** (giá trị): số.
 
-### 4 metric types
+### 4 metric types (4 loại metric)
 
 | Type | Mô tả | Ví dụ |
 |---|---|---|
-| **Counter** | Tăng dần, reset 0 khi restart | `http_requests_total` |
-| **Gauge** | Lên/xuống tùy ý | `memory_usage_bytes`, `temperature` |
-| **Histogram** | Distribution (bucket) | `request_duration_seconds` |
-| **Summary** | Như histogram, client-side quantile | `response_size_bytes` |
+| **Counter** | Chỉ tăng dần, reset về 0 khi app restart | `http_requests_total` |
+| **Gauge** | Có thể lên/xuống tuỳ ý | `memory_usage_bytes`, `temperature` |
+| **Histogram** | Distribution (chia bucket) | `request_duration_seconds` |
+| **Summary** | Giống histogram, tính quantile ở client | `response_size_bytes` |
 
-### Exporter
+### Exporter (Bộ chuyển đổi)
 
-App **không** tự expose metrics → exporter làm cầu nối:
+Khi app **không tự** expose metric ở format Prometheus → cần exporter làm cầu nối:
 
-| Exporter | Cho |
+| Exporter | Dùng cho |
 |---|---|
 | **node_exporter** | Linux server (CPU, RAM, disk, network) |
 | **cAdvisor** | Container |
 | **mysqld_exporter** | MySQL |
 | **redis_exporter** | Redis |
 | **nginx_exporter** | nginx |
-| **kube-state-metrics** | Kubernetes state |
-| **blackbox_exporter** | HTTP/ICMP probe |
+| **kube-state-metrics** | State của Kubernetes |
+| **blackbox_exporter** | HTTP / ICMP probe |
 
 Setup node_exporter:
 
@@ -155,7 +155,7 @@ scrape_configs:
   - job_name: 'vprofile-app'
     static_configs:
       - targets: ['app01:8080']
-    metrics_path: '/actuator/prometheus'    # Spring Boot
+    metrics_path: '/actuator/prometheus'    # Endpoint của Spring Boot
 EOF
 
 ./prometheus --config.file=prometheus.yml
@@ -163,54 +163,54 @@ EOF
 
 Browser: `http://localhost:9090`.
 
-### PromQL — query language
+### PromQL — Ngôn ngữ query
 
 ```promql
-# Current metric
+# Metric hiện tại
 http_requests_total
 
 # Filter
 http_requests_total{status="500"}
 
-# Rate (per second)
+# Rate (mỗi giây)
 rate(http_requests_total[5m])
 
 # Aggregate
 sum by (status) (rate(http_requests_total[5m]))
 
-# Math
+# Toán học
 node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100
 
-# Threshold
+# So sánh ngưỡng
 node_cpu_seconds_total > 80
 ```
 
 ## Grafana
 
-> **Grafana** = dashboard + visualization. Data source agnostic (Prometheus, MySQL, Elasticsearch, ...).
+> **Grafana** = dashboard + visualization. Hỗ trợ rất nhiều data source (Prometheus, MySQL, Elasticsearch, ...).
 
 ```bash
 docker run -d -p 3000:3000 --name grafana grafana/grafana
 ```
 
-Browser: `http://localhost:3000` → login `admin/admin` → set new password.
+Browser: `http://localhost:3000` → đăng nhập `admin/admin` → set password mới.
 
 ### Setup dashboard
 
 1. Configuration → Data Sources → Add → Prometheus → URL `http://prometheus:9090`.
 2. Dashboard → Import → ID `1860` (Node Exporter Full) → Done.
 
-Hàng nghìn dashboard có sẵn ở [grafana.com/dashboards](https://grafana.com/grafana/dashboards).
+Có hàng nghìn dashboard có sẵn tại [grafana.com/dashboards](https://grafana.com/grafana/dashboards).
 
 ### Custom panel
 
-Query PromQL:
+Query bằng PromQL:
 
 ```promql
 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
 ```
 
-Panel hiện CPU usage % cho mỗi server.
+Panel hiển thị % CPU usage cho từng server.
 
 ## Alertmanager
 
@@ -235,7 +235,7 @@ receivers:
       - service_key: 'YOUR_KEY'
 ```
 
-Prometheus rules:
+Prometheus rules (định nghĩa alert):
 
 ```yaml
 # rules.yml
@@ -249,7 +249,7 @@ groups:
           severity: warning
         annotations:
           summary: "High CPU on {{ $labels.instance }}"
-          description: "CPU > 80% for 5 minutes"
+          description: "CPU > 80% trong 5 phút"
 
       - alert: DiskFull
         expr: node_filesystem_avail_bytes / node_filesystem_size_bytes < 0.1
@@ -260,9 +260,9 @@ groups:
           summary: "Disk almost full on {{ $labels.instance }}"
 ```
 
-Khi rule trigger → Prometheus gửi alert → Alertmanager → Slack/PagerDuty.
+Khi rule trigger → Prometheus gửi alert đến Alertmanager → Alertmanager forward đến Slack/PagerDuty.
 
-## ELK Stack — log
+## ELK Stack — Log
 
 ```text
 +──────────+     +──────────+     +────────────+     +───────+
@@ -274,13 +274,13 @@ Khi rule trigger → Prometheus gửi alert → Alertmanager → Slack/PagerDuty
 ```
 
 - **Elasticsearch**: distributed search engine.
-- **Logstash**: log processor (parse, transform).
-- **Kibana**: web UI cho search + visualize.
-- **Beats**: lightweight collectors (Filebeat, Metricbeat, Auditbeat).
+- **Logstash**: log processor (parse, transform log).
+- **Kibana**: web UI để search + visualize.
+- **Beats**: collector nhẹ (Filebeat cho file log, Metricbeat cho metric, Auditbeat cho audit).
 
-Modern alternative: **Loki** (Grafana Labs) — like Prometheus but for logs, cheaper.
+Alternative hiện đại: **Loki** (Grafana Labs) — giống Prometheus nhưng cho log, rẻ hơn nhiều.
 
-### Setup ELK Docker
+### Setup ELK qua Docker
 
 ```bash
 docker run -d --name elasticsearch \
@@ -300,7 +300,7 @@ Kibana: `http://localhost:5601`.
 
 ## Distributed tracing — Jaeger
 
-Microservices → request đi qua nhiều service → cần trace.
+Trong microservices → 1 request đi qua nhiều service → cần trace để debug:
 
 ```text
 User → API Gateway → Auth Service → User Service → DB
@@ -308,7 +308,7 @@ User → API Gateway → Auth Service → User Service → DB
                                        └──► Notification Service → Email
 ```
 
-Mỗi span = 1 hop. Trace = chuỗi span.
+Mỗi span = 1 hop. Trace = chuỗi các span liên kết.
 
 Setup Jaeger:
 
@@ -321,28 +321,28 @@ docker run -d --name jaeger \
 
 UI: `http://localhost:16686`.
 
-App instrumented với OpenTelemetry SDK → gửi span vào Jaeger.
+App được instrument với OpenTelemetry SDK → gửi span vào Jaeger.
 
 ## Golden signals — Google SRE
 
-4 metric **must monitor**:
+4 metric **bắt buộc phải monitor**:
 
-1. **Latency** — request response time.
-2. **Traffic** — req/s.
-3. **Errors** — error rate %.
-4. **Saturation** — CPU/RAM/disk %.
+1. **Latency** — thời gian response của request.
+2. **Traffic** — số request/giây.
+3. **Errors** — tỉ lệ lỗi (%).
+4. **Saturation** — mức sử dụng tài nguyên CPU/RAM/disk (%).
 
-Mỗi service phải có 4 metric này. Alert khi vi phạm SLO.
+Mỗi service production phải có 4 metric này. Alert khi vượt SLO.
 
 ## SLI / SLO / SLA
 
 | Term | Mô tả | Ví dụ |
 |---|---|---|
-| **SLI** (Indicator) | Metric đo | `success_rate = success / total` |
-| **SLO** (Objective) | Target | success_rate > 99.9% |
-| **SLA** (Agreement) | Contract với user + penalty | 99.95% uptime, refund nếu < |
+| **SLI** (Indicator) | Metric để đo | `success_rate = success / total` |
+| **SLO** (Objective) | Mục tiêu nội bộ | success_rate > 99.9% |
+| **SLA** (Agreement) | Cam kết với khách hàng + penalty | 99.95% uptime, refund nếu dưới mức |
 
-Pattern: define SLO → calculate error budget → quyết định deploy mới hay focus stability.
+Pattern: define SLO → tính error budget → quyết định nên deploy tính năng mới hay focus vào stability.
 
 ## Logging best practices
 
@@ -359,11 +359,11 @@ log.info("user_login", extra={
 ```
 
 ```text
-# JSON output
+# Output dạng JSON
 {"level":"info","msg":"user_login","user_id":1234,"ip":"1.2.3.4","ts":1717000000}
 ```
 
-JSON log → query dễ trong Kibana/Loki.
+Log dạng JSON → query trong Kibana/Loki dễ dàng theo từng field.
 
 ## Setup observability cho vProfile
 
@@ -383,44 +383,44 @@ JSON log → query dễ trong Kibana/Loki.
        Promtail collect /var/log
                       ▲
                       │
-         Filebeat / Promtail in each VM
+         Filebeat / Promtail trên mỗi VM
 ```
 
-## CloudWatch — AWS native alternative
+## CloudWatch — Alternative trên AWS
 
-Nếu trên AWS, CloudWatch tích hợp sẵn:
-- Metrics: free 10 alarm, paid more.
+Nếu chạy trên AWS, CloudWatch tích hợp sẵn:
+- Metrics: free 10 alarm, nhiều hơn thì tính phí.
 - Logs: log group + log stream.
 - Insights query.
 - Dashboards.
 
-Pros: zero setup, IAM integrated.
-Cons: lock-in AWS, expensive at scale.
+Ưu điểm: zero setup, tích hợp IAM.
+Nhược điểm: vendor lock-in AWS, đắt khi scale lớn.
 
-Pattern: dev/lab Prometheus, prod CloudWatch hoặc DataDog.
+Pattern phổ biến: dev/lab dùng Prometheus, prod dùng CloudWatch hoặc Datadog.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| Cardinality explosion | Prometheus OOM | Tránh label per-user/per-request |
-| Log không structured | Khó query | JSON log từ đầu |
-| Alert noisy | Ignored | Tune threshold, suppress |
-| No SLO | Random debate | Define SLO clearly |
-| Storage không retention | Disk full | Set retention 15-30d |
-| Single Prometheus | SPOF | Federation hoặc Thanos cho HA |
-| Quên backup dashboard | Mất config | Grafana provisioning Git |
+| Cardinality explosion (quá nhiều giá trị label) | Prometheus OOM | Tránh label per-user / per-request |
+| Log không structured | Khó query | Dùng JSON log từ đầu |
+| Alert noisy (nhiều cảnh báo nhiễu) | Bị bỏ qua | Tinh chỉnh threshold, suppress |
+| Không có SLO | Tranh cãi mà không có data | Define SLO rõ ràng |
+| Storage không có retention | Disk đầy | Set retention 15-30 ngày |
+| Single Prometheus instance | SPOF | Federation hoặc Thanos cho HA |
+| Quên backup dashboard | Mất config | Grafana provisioning lưu Git |
 
 ## Tóm tắt bài 1
 
-- **3 trụ cột**: metrics (Prometheus), logs (ELK/Loki), traces (Jaeger).
-- **Prometheus pull-based**, 4 metric types (counter, gauge, histogram, summary).
-- **Exporter** bridge cho app không có /metrics native (node_exporter, cAdvisor).
-- **PromQL** query: rate, sum by, math.
-- **Grafana** dashboard universal — Prometheus + ELK + nhiều data source.
-- **Alertmanager** route alert → Slack, PagerDuty.
+- **3 trụ cột observability**: metrics (Prometheus), logs (ELK/Loki), traces (Jaeger).
+- **Prometheus** pull-based, 4 metric type (counter, gauge, histogram, summary).
+- **Exporter** làm cầu nối cho app không có endpoint /metrics native (node_exporter, cAdvisor).
+- **PromQL** query: rate, sum by, math operation.
+- **Grafana** dashboard universal — hỗ trợ Prometheus + ELK + nhiều data source khác.
+- **Alertmanager** route alert đến Slack, PagerDuty.
 - **Golden signals**: latency, traffic, errors, saturation.
 - **SLI/SLO/SLA** — define target trước, không reactive.
-- AWS native: CloudWatch (free tier limited, expensive scale).
+- AWS native: CloudWatch (free tier hạn chế, đắt khi scale).
 
 **Phase kế tiếp** → [Phase 24 — Bài 1: AWS Part 2 nâng cao](../phase-24-aws-part2/01-aws-advanced.md)

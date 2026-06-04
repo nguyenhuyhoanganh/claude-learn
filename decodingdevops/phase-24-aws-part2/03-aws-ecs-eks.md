@@ -1,17 +1,17 @@
 # Bài 3: ECS, EKS, CloudFront, Route 53 advanced
 
-Bài này cover container orchestration AWS (ECS, EKS) + CDN + advanced DNS routing.
+Bài này cover container orchestration trên AWS (ECS, EKS) + CDN + DNS routing nâng cao.
 
 ## ECS — Elastic Container Service
 
-AWS-native container orchestration. Simpler than K8s.
+Container orchestration native của AWS. Đơn giản hơn K8s.
 
 ### Concepts
 
 ```text
-Cluster (logical group)
-└── Service (manage tasks)
-    └── Task (running container[s])
+Cluster (nhóm logic)
+└── Service (quản lý task)
+    └── Task (container đang chạy)
         └── Container definition
 ```
 
@@ -19,11 +19,11 @@ Cluster (logical group)
 
 | | EC2 | Fargate |
 |---|---|---|
-| Manage host | You | AWS |
-| Cost | Cheaper | +20% |
-| Customize | Full | Limited |
-| Scale time | Minutes | Seconds |
-| Best for | Cost-sensitive, custom | Simplicity |
+| Quản host | Bạn tự quản | AWS quản |
+| Cost | Rẻ hơn | +20% |
+| Customize | Đầy đủ | Hạn chế |
+| Scale time | Vài phút | Vài giây |
+| Phù hợp | Nhạy cảm cost, cần customize | Đơn giản |
 
 ### Task definition
 
@@ -80,7 +80,7 @@ Cluster (logical group)
 }
 ```
 
-Multi-container task = sidecar pattern.
+Multi-container task = sidecar pattern (vd: app + monitoring agent).
 
 ### Service
 
@@ -104,12 +104,12 @@ aws ecs create-service \
     --propagate-tags TASK_DEFINITION
 ```
 
-`deploymentCircuitBreaker` = auto-rollback nếu deploy fail. Modern best practice.
+`deploymentCircuitBreaker` = tự động rollback nếu deploy fail. Đây là best practice hiện đại.
 
 ### Service Auto Scaling
 
 ```bash
-# Register target
+# Đăng ký target có thể scale
 aws application-autoscaling register-scalable-target \
     --service-namespace ecs \
     --resource-id service/vprofile/app \
@@ -132,23 +132,23 @@ aws application-autoscaling put-scaling-policy \
     }'
 ```
 
-### CapacityProviders — mix Fargate + Spot
+### CapacityProviders — Mix Fargate + Spot
 
 ```yaml
 CapacityProviderStrategy:
   - CapacityProvider: FARGATE
     Weight: 1
-    Base: 2                  # Min 2 on-demand
+    Base: 2                  # Tối thiểu 2 on-demand
   - CapacityProvider: FARGATE_SPOT
-    Weight: 4                # Rest as spot
+    Weight: 4                # Còn lại dùng spot
 ```
 
-70% Fargate Spot → save 50%.
+70% Fargate Spot → tiết kiệm khoảng 50%.
 
-### ECS Exec — like `docker exec`
+### ECS Exec — Giống `docker exec`
 
 ```bash
-# Update service với enable-execute-command
+# Update service với enable-execute-command rồi:
 aws ecs execute-command \
     --cluster vprofile \
     --task TASK_ID \
@@ -157,28 +157,28 @@ aws ecs execute-command \
     --command "/bin/bash"
 ```
 
-Debug container without SSH host.
+Debug container mà không cần SSH vào host.
 
-### ECS vs Fargate decision
+### ECS vs Fargate — Lúc nào dùng cái nào?
 
-Use ECS EC2 khi:
-- Need GPU.
-- Need specific instance type.
-- Long-running workload (Reserved Instance saving).
-- Need privileged container.
-- Cost-sensitive.
+Dùng **ECS EC2** khi:
+- Cần GPU.
+- Cần instance type cụ thể.
+- Workload chạy dài hạn (tận dụng Reserved Instance).
+- Cần privileged container.
+- Nhạy cảm về chi phí.
 
-Use Fargate khi:
-- Variable workload.
-- Want zero ops.
-- Multi-tenant isolation.
-- Quick PoC.
+Dùng **Fargate** khi:
+- Workload biến đổi nhiều.
+- Muốn zero ops.
+- Cần multi-tenant isolation.
+- Quick PoC (proof of concept).
 
 ## EKS — Managed Kubernetes
 
-Phase 29-30 will deep-dive K8s. Brief setup here.
+Phase 29-30 sẽ deep-dive K8s. Ở đây chỉ setup nhanh.
 
-### Create cluster với eksctl
+### Tạo cluster với eksctl
 
 ```yaml
 # cluster.yaml
@@ -236,7 +236,7 @@ iam:
 
 ```bash
 eksctl create cluster -f cluster.yaml
-# ~15 phút
+# Mất ~15 phút
 
 aws eks update-kubeconfig --name vprofile-prod --region us-east-1
 kubectl get nodes
@@ -244,7 +244,7 @@ kubectl get nodes
 
 ### Fargate cho EKS
 
-Run K8s pod như serverless container:
+Chạy K8s pod như serverless container:
 
 ```yaml
 fargateProfiles:
@@ -255,11 +255,11 @@ fargateProfiles:
           tier: app
 ```
 
-Pod schedule trên Fargate auto. No node management.
+Pod được schedule lên Fargate tự động. Không phải quản node.
 
-### Karpenter — modern autoscaler
+### Karpenter — Cluster autoscaler hiện đại
 
-Replace cluster-autoscaler:
+Thay thế cluster-autoscaler truyền thống:
 
 ```yaml
 apiVersion: karpenter.sh/v1beta1
@@ -287,11 +287,11 @@ spec:
     consolidationPolicy: WhenUnderutilized
 ```
 
-Karpenter:
-- Bin-packing.
-- Mix instance types.
-- Spot + on-demand mix.
-- Faster scaling than CA.
+Ưu điểm của Karpenter:
+- Bin-packing tối ưu (xếp pod sao cho dùng tối ưu node).
+- Mix nhiều instance type.
+- Mix Spot + on-demand.
+- Scale nhanh hơn Cluster Autoscaler.
 
 ### EKS Add-ons
 
@@ -321,19 +321,19 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller ...
 
 | | CloudFront Functions | Lambda@Edge |
 |---|---|---|
-| Runtime | JS only | Node.js + Python |
-| Cost | $0.10/M | $0.60/M + duration |
+| Runtime | Chỉ JavaScript | Node.js + Python |
+| Cost | $0.10 / triệu | $0.60 / triệu + duration |
 | Max time | 1 ms | 5-30s |
-| Use case | Header manipulation, simple redirect | Complex logic, A/B test |
+| Phù hợp | Thao tác header, redirect đơn giản | Logic phức tạp, A/B test |
 
-### CloudFront Function
+### CloudFront Function (Ví dụ)
 
 ```javascript
 function handler(event) {
     var request = event.request;
     var headers = request.headers;
 
-    // Redirect HTTP → HTTPS (CloudFront does this automatic but example)
+    // Redirect HTTP → HTTPS (CloudFront có sẵn nhưng đây là ví dụ)
     if (headers['cloudfront-forwarded-proto'] && headers['cloudfront-forwarded-proto'].value === 'http') {
         return {
             statusCode: 301,
@@ -342,16 +342,16 @@ function handler(event) {
         };
     }
 
-    // Add security header
+    // Thêm security header
     headers['strict-transport-security'] = {value: 'max-age=31536000; includeSubDomains'};
 
     return request;
 }
 ```
 
-### Origin Failover
+### Origin Failover (Tự fallback khi origin chính fail)
 
-Primary origin fail → fallback origin auto:
+Primary origin fail → fallback sang origin dự phòng tự động:
 
 ```yaml
 OriginGroups:
@@ -363,9 +363,9 @@ OriginGroups:
       - OriginId: secondary-alb-different-region
 ```
 
-DR pattern: primary us-east-1 down → CloudFront route to us-west-2.
+DR pattern: primary us-east-1 down → CloudFront tự route sang us-west-2.
 
-### Signed URL / Cookie
+### Signed URL / Cookie (URL có chữ ký)
 
 ```python
 from botocore.signers import CloudFrontSigner
@@ -383,7 +383,7 @@ url = signer.generate_presigned_url(
 )
 ```
 
-Use case: private content distribution, video DRM, expiring download link.
+Use case: phân phối content riêng tư, video DRM, link download có thời hạn.
 
 ## Route 53 advanced
 
@@ -393,10 +393,10 @@ Use case: private content distribution, video DRM, expiring download link.
 |---|---|
 | **Simple** | 1 record → 1 IP |
 | **Weighted** | A/B test, gradual rollout |
-| **Latency** | Route to lowest-latency region |
-| **Failover** | Primary fail → secondary |
-| **Geolocation** | Different content per country |
-| **Geoproximity** | Bias toward region |
+| **Latency** | Route đến region có latency thấp nhất |
+| **Failover** | Primary fail → chuyển secondary |
+| **Geolocation** | Trả nội dung khác nhau theo quốc gia |
+| **Geoproximity** | Bias theo region |
 | **Multi-value** | DNS-level "load balance" |
 
 ### Failover example
@@ -422,7 +422,7 @@ aws route53 change-resource-record-sets ... '{
 }'
 ```
 
-Health check fail → Route 53 return secondary IP.
+Khi health check primary fail → Route 53 trả về IP của secondary.
 
 ### Health check + SNS notification
 
@@ -454,7 +454,7 @@ aws cloudwatch put-metric-alarm \
 
 ### DNSSEC
 
-Sign zone với KMS key:
+Ký zone với KMS key (chống DNS spoofing):
 
 ```bash
 aws route53 create-key-signing-key \
@@ -466,29 +466,29 @@ aws route53 create-key-signing-key \
 aws route53 enable-hosted-zone-dnssec --hosted-zone-id $ZONE
 ```
 
-Update registrar với DS record → DNSSEC chain established.
+Cập nhật DS record ở nhà đăng ký domain → DNSSEC chain được thiết lập.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| ECS task no graceful shutdown | Connection drop | Handle SIGTERM trong app |
-| Fargate ephemeral storage default 20GB | Disk full | Increase via task def |
-| EKS cluster outdated | EOL support | Upgrade every 12-18 month |
-| Karpenter consolidation aggressive | Pod restart often | Tune `disruption.consolidationPolicy` |
-| CloudFront cache HTML | Stale | Short TTL for HTML, long for asset |
-| Route 53 TTL high + change | DNS propagate slow | Set low TTL before change |
-| Health check cost | $0.50/check/month | Limit to critical endpoints |
+| ECS task không graceful shutdown | Connection bị drop | Handle SIGTERM trong app |
+| Fargate ephemeral storage mặc định 20GB | Disk đầy | Tăng qua task def |
+| EKS cluster không update | Hết EOL support | Upgrade mỗi 12-18 tháng |
+| Karpenter consolidation quá aggressive | Pod restart thường xuyên | Tinh chỉnh `disruption.consolidationPolicy` |
+| CloudFront cache HTML | Content cũ | TTL ngắn cho HTML, dài cho asset |
+| Route 53 TTL cao + đổi record | DNS propagate chậm | Set TTL thấp trước khi đổi |
+| Health check tốn tiền | $0.50 / check / tháng | Giới hạn cho endpoint critical |
 
 ## Tóm tắt bài 3
 
-- **ECS** AWS-native container, Fargate serverless or EC2 cost-saving.
-- **CapacityProviders** mix Fargate Spot + on-demand.
-- **ECS Exec** debug container without SSH host.
-- **EKS** managed K8s với eksctl + Karpenter modern autoscaler.
-- **CloudFront Functions** vs Lambda@Edge (cost vs feature).
-- **Origin failover** + signed URL for advanced CDN.
+- **ECS** AWS-native container, Fargate serverless hoặc EC2 tiết kiệm cost.
+- **CapacityProviders** mix Fargate Spot + on-demand để tối ưu chi phí.
+- **ECS Exec** debug container mà không cần SSH host.
+- **EKS** managed K8s với eksctl + Karpenter (autoscaler hiện đại).
+- **CloudFront Functions** vs Lambda@Edge (cost vs feature trade-off).
+- **Origin failover** + signed URL cho CDN nâng cao.
 - **Route 53 policies**: weighted, latency, failover, geolocation, multi-value.
-- **Health check** + DNSSEC for production DNS.
+- **Health check** + DNSSEC cho DNS production.
 
 **Bài kế tiếp** → [Bài 4: AWS Systems Manager + Secrets Manager + Organizations](04-aws-ssm-secrets.md)

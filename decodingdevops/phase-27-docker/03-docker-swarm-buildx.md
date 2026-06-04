@@ -1,21 +1,21 @@
 # Bài 3: Docker Swarm, Buildx, security scanning
 
-Bài cuối phase 27. Multi-host orchestration, advanced build, image security.
+Bài cuối phase 27. Multi-host orchestration, build nâng cao, image security.
 
 ## Docker Swarm
 
-Native cluster mode of Docker. Simpler than K8s, less features.
+Cluster mode native của Docker. Đơn giản hơn K8s, nhưng ít feature hơn.
 
 ### Init swarm
 
 ```bash
-# Manager
+# Trên manager node
 docker swarm init --advertise-addr 10.0.0.10
 
 # Output:
 docker swarm join --token SWMTKN-1-xxx 10.0.0.10:2377
 
-# Run trên worker nodes
+# Chạy lệnh trên trên các worker node để join
 ```
 
 ```bash
@@ -28,7 +28,7 @@ docker node ls
 
 ### Deploy stack
 
-`docker-stack.yml` (subset of Compose):
+`docker-stack.yml` (subset của Compose):
 
 ```yaml
 version: '3.9'
@@ -74,11 +74,11 @@ docker stack ps vprofile
 # Update image
 docker service update --image nginx:1.26 vprofile_web
 
-# Rollback
+# Rollback về version trước
 docker service rollback vprofile_web
 ```
 
-### Secrets in Swarm
+### Secrets trong Swarm
 
 ```bash
 echo "MySecret123" | docker secret create db_password -
@@ -90,38 +90,38 @@ docker service create \
     my-app
 ```
 
-Encrypted at rest in Raft, only on nodes need it.
+Secret được encrypt at rest trong Raft store, chỉ có sẵn ở những node thực sự cần.
 
 ### Swarm vs K8s
 
 | | Swarm | K8s |
 |---|---|---|
-| Setup | 1 command | Complex |
-| Learning curve | Low | High |
-| Features | Basic | Comprehensive |
-| Community | Declining | Massive |
-| Production | Small-medium | Any scale |
+| Setup | 1 command | Phức tạp |
+| Learning curve | Thấp | Cao |
+| Feature | Cơ bản | Toàn diện |
+| Community | Đang giảm | Khổng lồ |
+| Production | Small-medium | Mọi quy mô |
 
-Modern recommend K8s. Swarm OK cho small team không cần K8s features.
+Modern khuyến nghị K8s. Swarm vẫn OK cho team nhỏ không cần feature K8s.
 
-## Buildx — modern build
+## Buildx — Modern build (Build hiện đại)
 
-### Multi-platform build
+### Multi-platform build (Build cho nhiều kiến trúc CPU)
 
 ```bash
-# Setup builder (one-time)
+# Setup builder (chỉ làm 1 lần)
 docker buildx create --name multibuilder --use --bootstrap
 
-# Build cho amd64 + arm64
+# Build cho cả amd64 + arm64
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
     -t myregistry/app:v1 \
     --push .
 ```
 
-Single command build cho cả x86 + ARM (Mac M1, AWS Graviton, Raspberry Pi).
+1 command build cho cả x86 + ARM (Mac M1, AWS Graviton, Raspberry Pi).
 
-### Cache backends
+### Cache backends (Nơi lưu cache)
 
 ```bash
 # Local cache
@@ -149,9 +149,9 @@ docker buildx build \
     .
 ```
 
-`mode=max` = cache all layers (vs `min` = only final).
+`mode=max` = cache tất cả layer (vs `min` = chỉ final).
 
-### Bake — Dockerfile + Compose hybrid
+### Bake — Hybrid Dockerfile + Compose
 
 `docker-bake.hcl`:
 
@@ -172,13 +172,13 @@ target "app" {
 target "worker" {
   context = "./worker"
   tags = ["myregistry/worker:${VERSION}"]
-  inherits = ["app"]      # Inherit settings
+  inherits = ["app"]      # Kế thừa settings từ target "app"
 }
 ```
 
 ```bash
 docker buildx bake --push
-# Build cả 3 targets parallel
+# Build cả 3 target song song
 ```
 
 ### BuildKit cache mounts
@@ -197,9 +197,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -o /app
 ```
 
-Cache persist across builds. Build go app: first 60s, subsequent 5s.
+Cache persist giữa các build. Build Go app: lần đầu 60s, lần sau 5s.
 
-### Secret mount
+### Secret mount (Mount secret tạm thời lúc build)
 
 ```dockerfile
 # syntax=docker/dockerfile:1.6
@@ -218,9 +218,9 @@ docker buildx build \
     -t app .
 ```
 
-Private npm registry credential never end up in image layer.
+Credential private npm registry **không bao giờ end up trong image layer** — chỉ tồn tại trong RAM lúc RUN.
 
-### SSH mount
+### SSH mount (Mount SSH agent lúc build)
 
 ```dockerfile
 # syntax=docker/dockerfile:1.6
@@ -234,7 +234,7 @@ RUN --mount=type=ssh \
 docker buildx build --ssh default -t app .
 ```
 
-Use SSH agent for private git access during build.
+Dùng SSH agent để access private git repo trong lúc build.
 
 ## Image scanning
 
@@ -244,67 +244,67 @@ Use SSH agent for private git access during build.
 # Scan local image
 docker scout cves myapp:v1.0
 
-# Quick view
+# Quick view (tổng quan)
 docker scout quickview myapp:v1.0
 
-# Compare vs base image
+# So sánh với base image
 docker scout compare myapp:v1.0 --to myapp:v0.9
 
-# Recommendations
+# Recommendations (gợi ý fix)
 docker scout recommendations myapp:v1.0
 ```
 
 ### Trivy
 
 ```bash
-# Install
+# Cài đặt
 brew install aquasecurity/trivy/trivy
-# Or via Docker
+# Hoặc qua Docker
 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
     aquasec/trivy image myapp:v1.0
 
-# Scan + SARIF output (cho CI)
+# Scan + xuất SARIF (cho CI)
 trivy image --severity CRITICAL,HIGH \
     --format sarif --output trivy-report.sarif \
     myapp:v1.0
 
-# Scan filesystem (pre-build)
+# Scan filesystem (trước khi build)
 trivy fs --severity CRITICAL,HIGH .
 
-# Scan Kubernetes manifests
+# Scan Kubernetes manifest
 trivy config k8s-manifest.yaml
 
 # Scan IaC (Terraform)
 trivy config terraform/
 ```
 
-### Grype + Syft
+### Grype + Syft (Anchore)
 
 ```bash
 # Syft = generate SBOM (Software Bill of Materials)
 syft myapp:v1.0 -o spdx-json > sbom.json
 
-# Grype = scan vulnerabilities
+# Grype = scan vulnerability
 grype myapp:v1.0
-grype sbom:sbom.json     # Scan from SBOM
+grype sbom:sbom.json     # Scan trực tiếp từ SBOM
 ```
 
 ### Snyk
 
 ```bash
-# Install
+# Cài đặt
 brew tap snyk/tap && brew install snyk
 
 # Scan
 snyk container test myapp:v1.0
-snyk container monitor myapp:v1.0    # Continuous monitor
+snyk container monitor myapp:v1.0    # Monitor liên tục
 ```
 
-Commercial dashboard.
+Commercial product với dashboard riêng.
 
-## SBOM + Provenance
+## SBOM + Provenance (Bằng chứng nguồn gốc)
 
-### Generate at build
+### Generate khi build
 
 ```bash
 docker buildx build \
@@ -314,8 +314,8 @@ docker buildx build \
     --push .
 ```
 
-`--sbom` = software components list.
-`--provenance` = build attestation (who/where/how built).
+- `--sbom` = liệt kê software component có trong image.
+- `--provenance` = build attestation (ai/ở đâu/như thế nào build).
 
 Inspect:
 
@@ -337,9 +337,9 @@ cosign sign --key cosign.key myregistry/app:v1
 cosign verify --key cosign.pub myregistry/app:v1
 ```
 
-Supply chain security: only deploy signed images.
+Supply chain security: chỉ deploy image đã được sign.
 
-K8s policy:
+K8s policy enforce:
 
 ```yaml
 apiVersion: kyverno.io/v1
@@ -361,103 +361,103 @@ spec:
                     publicKeys: "ssh-rsa AAAA..."
 ```
 
-Pod with unsigned image → reject.
+Pod dùng image chưa sign → reject.
 
-## Rootless Docker
+## Rootless Docker (Chạy Docker không cần root)
 
-Run Docker without root (security):
+Tăng bảo mật bằng cách chạy Docker daemon dưới user thường:
 
 ```bash
-# Install
+# Cài đặt
 dockerd-rootless-setuptool.sh install
 
-# Configure
+# Cấu hình
 systemctl --user enable docker
 loginctl enable-linger $USER
 
-# Use
+# Sử dụng bình thường
 docker run hello-world
 ```
 
-Slightly slower, some network limits, but much safer.
+Hơi chậm hơn một chút, một số network bị giới hạn, nhưng **an toàn hơn nhiều**.
 
-## Podman — Docker alternative
+## Podman — Alternative cho Docker
 
-Drop-in replacement, daemonless:
+Drop-in replacement, không cần daemon:
 
 ```bash
 podman run hello-world
 podman pull alpine
 podman build -t myapp .
 
-# Compose-compatible
+# Tương thích Compose
 podman-compose up -d
 
-# Pod (multi-container)
+# Pod (multi-container — giống K8s Pod)
 podman pod create --name vprofile
 podman run -d --pod vprofile --name db mariadb
 podman run -d --pod vprofile --name app my-app
 ```
 
-Pros: rootless default, no daemon, K8s YAML support.
+Ưu điểm: rootless mặc định, không daemon, hỗ trợ K8s YAML.
 
-RedHat default container engine.
+Đây là container engine mặc định của RedHat.
 
 ## Best practices summary
 
 ### Dockerfile
 
 - Multi-stage build.
-- Layer order (ít đổi → nhiều đổi).
+- Order layer (ít đổi → nhiều đổi).
 - `--no-install-recommends` + cleanup.
 - Non-root user.
 - HEALTHCHECK.
 - Exec form CMD.
-- Pin base image SHA digest.
+- Pin base image bằng SHA digest.
 
 ### Build
 
 - Buildx multi-platform.
-- Cache mounts (deps, build).
-- Secret mounts (npm token, SSH).
+- Cache mount (cho dependency, build artifact).
+- Secret mount (cho npm token, SSH key).
 - SBOM + Provenance.
-- Sign with cosign.
+- Sign với cosign.
 
 ### Registry
 
-- Scan on push (ECR scan, Docker Scout).
-- Cleanup old images (lifecycle policy).
-- Pull-through cache (no rate limit).
-- Private repository default.
+- Scan khi push (ECR scan, Docker Scout).
+- Cleanup image cũ (lifecycle policy).
+- Pull-through cache (tránh rate limit).
+- Private repository mặc định.
 
 ### Deploy
 
-- Pin version (not :latest).
-- Resource limits.
+- Pin version cụ thể (không dùng `:latest`).
+- Resource limit.
 - Readiness/liveness probe.
-- Verify signature before deploy.
+- Verify signature trước khi deploy.
 
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Fix |
 |---|---|---|
-| `apt install` no `-y` | Build hang waiting input | Always `-y` |
-| Copy `.git` | Image size + secret leak | `.dockerignore` |
-| Multi-arch không buildx | Wrong arch | Use `--platform` |
-| Cache không persist | Build slow | Cache mount |
-| `latest` tag | Reproducibility | Pin SHA digest |
-| Scan only on registry | Late find vuln | Scan pre-push |
-| Sign optional | Supply chain attack | Mandatory cosign |
-| Root container | Privilege escalation | USER 1000 |
+| `apt install` thiếu `-y` | Build treo chờ input | Luôn dùng `-y` |
+| Copy `.git` vào image | Image lớn + lộ secret | Dùng `.dockerignore` |
+| Multi-arch không dùng buildx | Sai architecture | Dùng `--platform` |
+| Cache không persist | Build chậm | Dùng cache mount |
+| Tag `latest` | Không reproducible | Pin SHA digest |
+| Scan chỉ trên registry | Phát hiện vuln muộn | Scan trước khi push |
+| Sign optional | Supply chain attack | Cosign bắt buộc |
+| Container chạy root | Privilege escalation | `USER 1000` |
 
 ## Tóm tắt bài 3
 
-- **Swarm** simple cluster, less features than K8s.
-- **Buildx** multi-platform + cache backends (local, gha, registry, s3).
-- **Bake** group multiple builds with shared config.
-- **Cache mounts + secret mounts + SSH mounts** in Dockerfile.
-- **Docker Scout** built-in scan; **Trivy/Grype/Snyk** alternatives.
+- **Swarm** cluster đơn giản, ít feature hơn K8s.
+- **Buildx** multi-platform + nhiều cache backend (local, gha, registry, s3).
+- **Bake** group nhiều build với shared config.
+- **Cache mount + secret mount + SSH mount** trong Dockerfile.
+- **Docker Scout** built-in scan; **Trivy/Grype/Snyk** alternative.
 - **SBOM + Provenance + cosign** supply chain security.
-- **Rootless Docker** + **Podman** modern alternatives.
+- **Rootless Docker** + **Podman** = modern alternative an toàn hơn.
 
 **Phase kế tiếp** → [Phase 28 — Containerization](../phase-28-containerization/01-containerization.md)

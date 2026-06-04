@@ -1,26 +1,26 @@
-# Bài 3: GitHub Actions + AWS OIDC — modern alternative
+# Bài 3: GitHub Actions + AWS OIDC — Phương án hiện đại
 
-Bài 1-2 dùng CodePipeline. Bài này dùng **GitHub Actions** orchestrate, **AWS service** execute — modern hybrid.
+Bài 1-2 dùng CodePipeline. Bài này dùng **GitHub Actions để orchestrate**, **AWS service để execute** — pattern hybrid hiện đại.
 
-## Vì sao hybrid?
+## Vì sao chọn hybrid?
 
 | | All-AWS (CodePipeline) | Hybrid (GitHub Actions + AWS) |
 |---|---|---|
-| Source | GitHub (via CodeStar) | GitHub native |
-| Pipeline view | CodePipeline UI | GitHub Actions UI (better) |
+| Source | GitHub (qua CodeStar) | GitHub native |
+| Pipeline view | CodePipeline UI | GitHub Actions UI (tốt hơn) |
 | Logs | CloudWatch | GitHub UI |
 | Cost | Pipeline + Build + Deploy | Actions minutes + AWS service usage |
-| Marketplace | AWS-only | 20000+ actions |
-| Learning curve | AWS console | Engineer already knows GitHub |
-| Self-hosted runner | N/A | Yes (cost saving) |
+| Marketplace | Chỉ của AWS | 20000+ actions |
+| Learning curve | AWS console | Engineer đã biết GitHub |
+| Self-hosted runner | Không có | Có (tiết kiệm chi phí) |
 
-Modern team: GitHub Actions for orchestration, AWS for compute/deploy.
+Modern team thường chọn: GitHub Actions cho orchestration, AWS cho compute/deploy.
 
-## OIDC trust setup
+## OIDC trust setup (Cấu hình tin cậy)
 
-GitHub Actions OIDC → AWS IAM role → temporary credentials. **No static access key**.
+GitHub Actions OIDC → AWS IAM role → nhận credential tạm thời. **Không cần lưu access key tĩnh**.
 
-### Step 1: Create OIDC provider
+### Step 1: Tạo OIDC provider
 
 ```bash
 aws iam create-open-id-connect-provider \
@@ -29,9 +29,9 @@ aws iam create-open-id-connect-provider \
     --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
 ```
 
-One-time setup per AWS account.
+Chỉ làm 1 lần cho mỗi AWS account.
 
-### Step 2: IAM role with trust policy
+### Step 2: IAM role với trust policy
 
 ```json
 {
@@ -54,12 +54,12 @@ One-time setup per AWS account.
 }
 ```
 
-Strict condition:
-- `repo:acme/vprofile:ref:refs/heads/main` — only main branch.
-- `repo:acme/vprofile:environment:production` — only when workflow uses production environment.
-- `repo:acme/*` — any repo in acme org.
+Strict condition (điều kiện chặt chẽ):
+- `repo:acme/vprofile:ref:refs/heads/main` — chỉ branch main mới assume được.
+- `repo:acme/vprofile:environment:production` — chỉ khi workflow dùng environment "production".
+- `repo:acme/*` — bất kỳ repo nào trong organization "acme".
 
-### Step 3: Permissions policy
+### Step 3: Permissions policy (Quyền role được phép làm)
 
 ```json
 {
@@ -98,13 +98,13 @@ Strict condition:
 }
 ```
 
-Least privilege — only what pipeline needs.
+Theo nguyên tắc least privilege — chỉ cấp quyền pipeline thực sự cần.
 
 ## Workflow assume role
 
 ```yaml
 permissions:
-  id-token: write     # MANDATORY cho OIDC
+  id-token: write     # BẮT BUỘC cho OIDC
   contents: read
 
 jobs:
@@ -120,7 +120,7 @@ jobs:
           aws-region: us-east-1
 
       - run: aws sts get-caller-identity
-      # Shows assumed role, temp credentials valid 1 hour
+      # Output: role đã assume, credential tạm thời valid trong 1 giờ
 ```
 
 ## ECR build + push
@@ -147,7 +147,7 @@ jobs:
     sbom: true
 ```
 
-`provenance` + `sbom` = supply chain security attestations.
+`provenance` + `sbom` = supply chain security attestation.
 
 ## ECS deploy
 
@@ -158,7 +158,7 @@ jobs:
         --task-definition vprofile \
         --query taskDefinition > taskdef.json
 
-- name: Update image in task definition
+- name: Update image trong task definition
   id: render-task
   uses: aws-actions/amazon-ecs-render-task-definition@v1
   with:
@@ -176,7 +176,7 @@ jobs:
     wait-for-minutes: 15
 ```
 
-CodeDeploy alternative:
+Alternative với CodeDeploy:
 
 ```yaml
 - name: Deploy via CodeDeploy Blue/Green
@@ -211,7 +211,7 @@ CodeDeploy alternative:
         rollout status deployment/vprofile --timeout=15m
 ```
 
-Or Helm:
+Hoặc dùng Helm:
 
 ```yaml
 - uses: azure/setup-helm@v3
@@ -246,7 +246,7 @@ Or Helm:
         --function-version $VERSION
 ```
 
-Hoặc SAM deploy:
+Hoặc dùng SAM deploy:
 
 ```yaml
 - uses: aws-actions/setup-sam@v2
@@ -259,50 +259,48 @@ Hoặc SAM deploy:
 
 ## CodeArtifact (artifact repo)
 
-Alternative to Nexus on AWS:
+Alternative cho Nexus trên AWS:
 
 ```bash
-# Create domain
+# Tạo domain
 aws codeartifact create-domain --domain acme
 
-# Create repo
+# Tạo repo
 aws codeartifact create-repository \
     --domain acme \
     --repository maven-releases \
     --description "Maven release artifacts"
 
-# Upstream: Maven Central
+# Upstream proxy Maven Central
 aws codeartifact associate-external-connection \
     --domain acme \
     --repository maven-releases \
     --external-connection "public:maven-central"
 ```
 
-Maven settings.xml use CodeArtifact:
+Maven settings.xml dùng CodeArtifact:
 
 ```bash
 aws codeartifact login --tool maven --domain acme --repository maven-releases
 ```
 
-Cost: $0.05/GB-month + $0.0005/request.
+Cost: $0.05 / GB-tháng + $0.0005 / request.
 
-## Cost comparison
-
-For 100 build/day:
+## Cost comparison (Cho 100 build/ngày)
 
 | | Pure CodePipeline | GitHub Actions + AWS |
 |---|---|---|
-| Pipeline | $1/pipeline/month | Free (GitHub) |
-| Build | $0.005/min × ~5 min × 100 = $75 | $0.008/min × ~5 min × 100 = $120 |
-| But GitHub free tier | N/A | -$80 (first 2000 min free) |
+| Pipeline | $1/pipeline/tháng | Free (GitHub) |
+| Build | $0.005/phút × ~5 phút × 100 = $75 | $0.008/phút × ~5 phút × 100 = $120 |
+| GitHub free tier | Không có | -$80 (2000 phút đầu free) |
 | Deploy | Free (CodeDeploy EC2/ECS) | Free |
 | **Total** | **~$80** | **~$40** |
 
-GitHub Actions cheaper for small team. Self-hosted runner makes it nearly free.
+GitHub Actions rẻ hơn cho team nhỏ. Self-hosted runner còn rẻ hơn nữa (gần như free).
 
 ## Self-hosted runner trên AWS
 
-EKS Actions Runner Controller:
+Dùng EKS với Actions Runner Controller (ARC):
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -332,7 +330,7 @@ spec:
       scaleDownThreshold: '0.3'
 ```
 
-Runner pod chạy K8s → cost = EC2 (cheap với Spot).
+Runner pod chạy trên K8s → cost chỉ là EC2 (rẻ nếu dùng Spot).
 
 ```yaml
 jobs:
@@ -345,22 +343,22 @@ jobs:
 3 bài cover:
 1. CodePipeline + CodeBuild + CodeDeploy overview.
 2. CodeBuild deep + CodeDeploy strategies.
-3. GitHub Actions + OIDC modern alternative.
+3. GitHub Actions + OIDC = modern alternative.
 
-Skills:
+Skill đạt được:
 - Setup CI/CD AWS-native.
-- GitHub Actions deploy AWS with OIDC.
+- Deploy AWS từ GitHub Actions qua OIDC.
 - Blue/Green + Canary deployment.
 - Self-hosted runner trên EKS.
 
 ## Tóm tắt bài 3
 
-- **OIDC** = GitHub Actions → AWS IAM role assume, no static credential.
-- Trust policy with `sub` condition restrict by repo/branch/environment.
-- `aws-actions/configure-aws-credentials@v4` set up temporary creds.
+- **OIDC** = GitHub Actions → assume AWS IAM role, không cần lưu credential tĩnh.
+- Trust policy với điều kiện `sub` để giới hạn theo repo / branch / environment.
+- `aws-actions/configure-aws-credentials@v4` setup credential tạm thời.
 - `amazon-ecr-login` + `docker/build-push-action` cho ECR.
 - `amazon-ecs-render-task-definition` + `amazon-ecs-deploy-task-definition` cho ECS.
-- Self-hosted runner trên EKS với ARC → near-free build.
+- Self-hosted runner trên EKS với ARC → build gần như miễn phí.
 - Cost: GitHub Actions thường rẻ hơn CodePipeline cho team nhỏ.
 
 **Phase kế tiếp** → [Phase 26 — GCP](../phase-26-gcp/01-gcp-overview.md)
