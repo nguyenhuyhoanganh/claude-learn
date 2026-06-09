@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 
-COURSE_SLUG = "software-architecture-system-design-practical-case-studies"
+COURSE_SLUG = "learn-to-code-with-rust"
 OUTPUT_DIR = Path(__file__).parent
 COOKIES_FILE = OUTPUT_DIR / "cookies.json"
 PREFERRED_LOCALE = "en_US"
