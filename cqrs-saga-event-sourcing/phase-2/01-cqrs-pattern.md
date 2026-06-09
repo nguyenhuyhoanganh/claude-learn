@@ -1,195 +1,145 @@
-# Bài 1: CQRS Pattern — Command Query Responsibility Segregation
+# Bài 1: CQRS — tách lệnh ghi và lệnh đọc thành hai thế giới
+
+Phase 1 giải cross-service queries bằng API Composition, nhưng ta thừa nhận nó chỉ hợp dự án nhỏ — gọi 4 service ở runtime cho mỗi lần đọc là đắt. Với enterprise xử lý triệu giao dịch/ngày, cần một cách đọc rẻ hơn nhiều. Đó là **CQRS**. Phase 2 thuần lý thuyết (CQRS + Event Sourcing); Phase 3 mới code. Hãy hiểu thật chắc đã.
 
 ## CQRS là gì?
 
-**CQRS = Command Query Responsibility Segregation** — Tách biệt trách nhiệm giữa lệnh (write) và truy vấn (read).
+> **CQRS = Command Query Responsibility Segregation** = tách trách nhiệm xử lý **lệnh ghi (command)** và **lệnh đọc (query)** thành hai component riêng, thậm chí hai database riêng.
 
-Mọi thao tác với dữ liệu đều rơi vào một trong hai loại:
-- **Command**: Thay đổi dữ liệu — Create, Update, Delete
-- **Query**: Đọc dữ liệu — SELECT, không thay đổi gì
+Mọi business logic bạn viết đều rơi vào đúng một trong hai nhóm:
 
-CQRS đề xuất: **tách hai loại này thành hai component riêng biệt với hai database riêng biệt**.
+| Nhóm | Bản chất | Thao tác |
+|---|---|---|
+| **Command** | Thay đổi / tạo / xóa dữ liệu | Insert, Update, Delete, Modify |
+| **Query** | Chỉ đọc, không đụng vào dữ liệu | Select / read |
 
----
+CQRS đề xuất hai việc:
+1. Tách **API ghi** và **API đọc** thành hai component độc lập.
+2. Dùng **database riêng** cho ghi và cho đọc.
 
-## Kiến trúc CQRS
-
-```
-                    ┌─────────────────────┐
-Client              │   Write Side        │
- │                  │   (Command)         │
- ├─ Write request ──►                     │
- │                  │  Command Handler    │
- │                  │       │             │
- │                  │       ▼             │
- │                  │   Write Database    │
- │                  │   (Event Store)     │
- │                  └──────────┬──────────┘
- │                             │
- │                    Publish Event
- │                             │
- │                             ▼
- │                    ┌──────────────────┐
- │                    │   Event Bus      │
- │                    │ (Kafka/RabbitMQ) │
- │                    └──────────┬───────┘
- │                               │
- │                    Consume Event
- │                               │
- │                    ┌──────────▼──────────┐
- │                    │   Read Side         │
- │                    │   (Query)           │
- └─ Read request ─────►                     │
-                      │  Query Handler      │
-                      │       │             │
-                      │       ▼             │
-                      │   Read Database     │
-                      │   (Optimized)       │
-                      └─────────────────────┘
+```text
+              ┌──────────── WRITE SIDE (Command) ───────────┐
+ write req ──►│  Command Component → Write/Command Database  │
+              └───────────────────┬──────────────────────────┘
+                                  │ publish event
+                                  ▼
+                      ┌──────── Event Bus ────────┐
+                      │   (Kafka / RabbitMQ)      │
+                      └───────────┬───────────────┘
+                                  │ consume event
+              ┌──────────── READ SIDE (Query) ──────────────┐
+ read  req ──►│  Query Component → Read Database (optimized) │
+              └──────────────────────────────────────────────┘
 ```
 
-### Luồng hoạt động
+Luồng:
+1. Ai gọi API **thay đổi** data → **Command Component** xử lý → ghi vào **Write Database**.
+2. Command Component **publish một event** lên **Event Bus**.
+3. **Query Component** đọc event từ bus → cập nhật **Read Database**.
+4. Ai gọi API **đọc** data → Query Component đọc thẳng từ **Read Database**.
 
-1. **Client gửi Write request** → Command Handler xử lý → lưu vào Write Database
-2. **Command Component publish event** lên Event Bus (Kafka/RabbitMQ)
-3. **Read Component consume event** → cập nhật Read Database
-4. **Client gửi Read request** → Query Handler đọc từ Read Database → trả về
+## Hai database, làm sao đồng bộ? — Eventual Consistency
 
----
+Hai DB tách rời thì phải có cơ chế đồng bộ. Đó là vai trò của **Event Bus** ở giữa: mỗi khi write DB đổi, command side phát event; query side nghe event và cập nhật read DB.
 
-## Tại sao cần 2 database riêng?
+Đồng bộ này **không tức thì** — trễ vài nano/mili-giây đến vài giây. Cơ chế "rồi sẽ nhất quán, nhưng không ngay" gọi là **eventual consistency** (nhất quán cuối cùng).
 
-### Write Database: Tối ưu cho ghi
-
-- Có thể là NoSQL, document store (MongoDB, EventStore)
-- Tối ưu cho ACID transactions, data consistency
-- Thường lưu dưới dạng Events (Event Sourcing)
-
-### Read Database: Tối ưu cho đọc
-
-- Có thể là relational (PostgreSQL), cache (Redis), Elasticsearch
-- Schema được thiết kế cho từng use case query cụ thể
-- Không cần ACID, cần fast read
-
-**Ví dụ thực tế:**
-
-```
-Write side: MongoDB lưu Customer events dạng JSON documents
-Read side:  PostgreSQL với bảng customer_summary được JOIN sẵn
-            → UI đọc 1 query đơn giản, không cần JOIN runtime
+```text
+Write DB ──event──► Event Bus ──consume──► Read DB
+  T=0               T=0+ε                  T=0+ε+δ   (vài ms)
 ```
 
----
+> **Hệ quả thiết kế**: vì có eventual consistency, CQRS **chỉ triển khai tốt theo event-driven architecture** — chính Event Bus là lý do data đồng bộ kiểu "eventually". Về lý thuyết có thể làm CQRS **không** Event Bus (sync trực tiếp), nhưng không hiệu quả và kéo theo nhiều vấn đề; gần như không ai làm vậy.
 
-## Giải quyết Cross-Service Query với CQRS
+## Vì sao tách hai database lại đáng giá?
 
-Nhớ lại bài toán Profile Page từ Phase 1? 4 services, 4 databases, muốn hiển thị tổng hợp.
+### Mỗi bên một loại DB tối ưu riêng
 
-**Với API Composition:**
-```
-API Gateway → Customer Service → Account Service → Loan Service → Card Service
-             (4 network calls, latency cao, error handling phức tạp)
-```
+| | Write Database | Read Database |
+|---|---|---|
+| Tối ưu cho | Ghi, consistency, toàn vẹn giao dịch | Đọc nhanh |
+| Loại DB hợp lý | NoSQL / document store (MongoDB, EventStore) | RDBMS (PostgreSQL), cache (Redis), Elasticsearch |
+| Hình dạng dữ liệu | Sự kiện / JSON document thô | Bảng dựng sẵn theo từng màn hình UI |
 
-**Với CQRS:**
+Ví dụ kinh điển: write side lưu JSON/document; nhưng client không muốn đọc JSON thô → **trong lúc** đẩy sang read side, ta viết logic transform để lưu ở dạng quan hệ phẳng, gọn → đọc cực đơn giản.
 
-```
-                Write Side (4 services)
-Customer Service ──┐
-Accounts Service ──┤ Publish events
-Loans Service    ──┤──────────────► Event Bus
-Cards Service    ──┘
+### Scale hai bên độc lập
 
-                Read Side (1 component)
-Event Bus ──────────────► Query Component
-                          (consume all events)
-                               │
-                               ▼
-                          Read Database
-                          ┌──────────────────────────┐
-                          │ customer_summary table    │
-                          │ (tất cả data được pre-join│
-                          │  và optimize sẵn)         │
-                          └──────────────────────────┘
-                               │
-                               ▼
-                          Client (1 query, không cần gọi 4 services!)
+Facebook, LinkedIn, Twitter đọc nhiều hơn ghi gấp bội. Với CQRS, bạn **chỉ scale read side** theo lượng đọc, không động đến write side. Một DB chung cho cả ghi lẫn đọc thì không có lựa chọn này — và sẽ nghẽn.
+
+## CQRS giải cross-service queries "đẹp" hơn API Composition
+
+Nhớ bài toán Profile Page (Phase 1): 4 service, muốn hiển thị tổng hợp.
+
+**Với API Composition** — gọi runtime mỗi lần đọc:
+```text
+Gateway → Customer → Accounts → Loans → Cards   (4 network call MỖI request đọc)
+          → latency cộng dồn, traffic nội bộ tăng vô ích
 ```
 
-**Lợi thế:** Zero network calls tại runtime cho read operations. Data đã được pre-computed và lưu sẵn trong Read Database.
-
----
-
-## Eventual Consistency trong CQRS
-
-Sync giữa Write Database và Read Database **không phải ngay lập tức**. Có độ trễ (thường vài milliseconds đến vài seconds).
-
-```
-Write Database ──event──► Kafka ──consume──► Read Database
-    T=0                  T=0+ε             T=0+ε+δ
-```
-
-Đây gọi là **Eventual Consistency** — dữ liệu sẽ nhất quán, nhưng không phải ngay lập tức.
-
-**Khi nào Eventual Consistency là chấp nhận được?**
-- Dashboard analytics
-- Product listings
-- User profile views
-- Notification history
-
-**Khi nào KHÔNG chấp nhận được?**
-- "Bạn còn đủ tiền không?" trước khi thanh toán
-- Số ghế còn lại khi đặt vé
-- Số lượng hàng tồn kho cuối cùng trước khi order
-
-→ Những trường hợp này cần synchronous calls, không dùng CQRS.
-
----
-
-## CQRS kết hợp với Event Sourcing
-
-CQRS thường đi cùng Event Sourcing — đây là combo mạnh nhất:
-
-```
-Write Side:  Lưu TOÀN BỘ LỊCH SỬ THAY ĐỔI dưới dạng events (Event Sourcing)
-Read Side:   Lưu TRẠNG THÁI HIỆN TẠI được compute từ events (Projection)
+**Với CQRS** — dựng sẵn một read model:
+```text
+WRITE SIDE: Customer/Accounts/Loans/Cards mỗi service ghi DB riêng,
+            rồi PUBLISH event ("customer X đổi", "account Y đổi"...)
+                              │
+                         Event Bus
+                              │
+READ SIDE:  Query Component nghe TẤT CẢ event
+                              │
+                              ▼
+                     Read Database
+                     ┌─────────────────────────────┐
+                     │ customer_summary  (1 bảng     │
+                     │ gộp sẵn customer+account+     │
+                     │ loan+card cho đúng UI page)   │
+                     └─────────────────────────────┘
+                              │
+            UI gọi fetchCustomerSummary → đọc 1 bảng, KHÔNG gọi 4 service
 ```
 
-**Ví dụ Bank Account:**
-```
-Write Side (Event Store):
-  Event 1: AccountCreated {balance: 0}
-  Event 2: MoneyDeposited {amount: 2000}
-  Event 3: MoneyWithdrawn {amount: 120}
-  Event 4: MoneyDeposited {amount: 500}
+**Lợi thế cốt lõi**: **0 network call xuyên service tại runtime** cho thao tác đọc. Data đã được pre-compute và nằm sẵn trong read DB.
 
-Read Side (Projection):
-  current_balance: 2380  ← computed từ all events
-```
+> **Query Component deploy ở đâu?** Tùy bạn — một component độc lập, hoặc nhúng vào một trong các service (customer/accounts/...). CQRS không bắt buộc nơi deploy; nó chỉ bắt buộc **tách trách nhiệm** ghi và đọc.
 
-→ Sẽ học chi tiết ở bài tiếp theo.
+## Một read model cho mỗi nhu cầu — sức mạnh của projection
 
----
+Trong ví dụ trên ta dựng **một** bảng cho **một** màn hình. Nhưng app thật có hàng trăm màn hình cần data từ nhiều service. CQRS cho phép dựng **100 read model (projection) cho 100 màn hình** — mỗi cái chỉ chứa đúng data màn hình đó cần, đọc cực nhanh, và **không** ảnh hưởng write side.
 
-## Tóm tắt lợi ích CQRS
+Ví dụ e-commerce: sau khi đặt hàng, UI muốn hiển thị tiến trình "đặt hàng → thanh toán → giao vận → nhận hàng". Với CQRS + Event Sourcing (bài sau), ta dựng một projection lịch sử sự kiện cho đúng màn hình này.
+
+## Lợi ích và nhược điểm — quyết định có cơ sở
+
+CQRS không phải viên đạn bạc. Cân nhắc cả hai mặt:
 
 | Lợi ích | Giải thích |
 |---|---|
-| **Scalability** | Scale Write side và Read side độc lập |
-| **Optimized Data Model** | Mỗi side dùng database phù hợp nhất |
-| **Flexible Queries** | Tạo bao nhiêu projections tùy ý mà không ảnh hưởng Write side |
-| **Cross-service Queries** | Giải quyết hiệu quả hơn API Composition |
-| **Event Sourcing** | Audit trail đầy đủ, replayability |
-
-## Nhược điểm cần biết
+| **Khả năng scale** | Scale write và read độc lập — sống còn với hệ xử lý triệu/tỷ bản ghi |
+| **Mô hình dữ liệu tối ưu** | Write tối ưu consistency, read tối ưu tốc độ; mỗi bên một loại storage |
+| **Linh hoạt** | Tạo bao nhiêu projection tùy ý, không đụng write side |
+| **Cross-service query** | Đọc từ read model dựng sẵn, không gọi runtime |
+| **Hợp với Event Sourcing** | Kết hợp cho audit trail + replay (bài sau) |
 
 | Nhược điểm | Giải thích |
 |---|---|
-| **Tăng độ phức tạp** | Hai database, hai component, phải sync |
-| **Eventual Consistency** | Không phù hợp mọi use case |
-| **Learning curve** | Cần thời gian học framework (Axon) |
-| **Development overhead** | Viết nhiều code hơn |
+| **Tăng độ phức tạp** | Hai DB, hai component, phải duy trì đồng bộ → chỉ đáng cho hệ giao dịch lớn |
+| **Eventual consistency** | Data trễ vài ms–vài s; **không** dùng được khi cần đọc thấy ngay kết quả vừa ghi |
+| **Development overhead** | Phải tự viết logic tách command/query + đồng bộ DB |
+| **Learning curve** | Đường cong học dốc; nên dùng framework (Axon) thay vì tự code từ đầu |
 
-> **Khi nào dùng CQRS?** Enterprise applications, high-traffic (triệu+ transactions/ngày). Với small apps, CQRS là over-engineering.
+### Khi nào eventual consistency là cấm kỵ
 
-**Tiếp theo:** Event Sourcing Pattern →
+| Chấp nhận eventual (dùng CQRS tốt) | Cần thấy-ngay (KHÔNG dùng CQRS, dùng sync) |
+|---|---|
+| Dashboard analytics | "Còn đủ tiền không?" ngay trước khi trừ |
+| Danh sách sản phẩm | Số ghế trống khi đặt vé |
+| Trang profile | Số lượng tồn kho cuối trước khi chốt đơn |
+| Lịch sử thông báo | Xác nhận tức thì sau submit |
+
+## Tóm tắt bài 1
+
+- **CQRS** tách **command (ghi)** và **query (đọc)** thành hai component, hai database; đồng bộ qua **Event Bus** → **eventual consistency**.
+- Lợi ích: scale độc lập, mỗi bên một DB tối ưu, dựng nhiều projection tùy ý, giải cross-service query mà **0 network call runtime**.
+- Cái giá: phức tạp, eventual consistency, overhead, learning curve → chỉ đáng cho enterprise high-traffic; small app là over-engineering.
+- CQRS triển khai tốt nhất theo **event-driven**; mạnh hơn nữa khi ghép **Event Sourcing** (bài sau).
+
+**Bài kế tiếp** → [Bài 2: Event Sourcing — lưu lịch sử thay vì trạng thái](02-event-sourcing-pattern.md)

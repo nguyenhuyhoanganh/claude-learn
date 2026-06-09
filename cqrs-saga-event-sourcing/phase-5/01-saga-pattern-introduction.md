@@ -1,156 +1,93 @@
-# Bài 1: Saga Pattern — Giải quyết Distributed Transactions
+# Bài 1: Saga Pattern — giữ nhất quán cho giao dịch phân tán
 
-## Vấn đề cần giải quyết
+Một người đặt combo du lịch: thuê xe, đặt khách sạn, mua vé máy bay — qua ba microservice. Hai bước đầu thành công, bước vé máy bay **ném exception**. Giờ khách có xe và phòng nhưng không có vé — một mớ hỗn độn. `@Transactional` không cứu được vì nó chỉ quản một DB. Đây là bài toán **distributed transaction**, và **Saga** là lời giải. Đây là pattern quan trọng bậc nhất với mọi microservice developer.
 
-Nhớ lại Phase 1: **Distributed Transactions** là thách thức lớn nhất của microservices.
+## Bài toán: distributed transaction và vì sao @Transactional bất lực
 
-```
-Ví dụ: Cập nhật số điện thoại phải đồng bộ trên 4 services:
-Customer Service → Account Service → Card Service → Loan Service
+Công ty du lịch có 3 service: Car, Hotel, Flight. Một request đặt combo đi qua cả ba:
 
-Nếu Card Service fail sau khi Customer và Account đã update:
-  Customer DB: mobileNumber = "456" (updated)
-  Account DB:  mobileNumber = "456" (updated)
-  Card DB:     mobileNumber = "123" (NOT updated) ← inconsistent!
-  Loan DB:     mobileNumber = "123" (NOT updated) ← inconsistent!
-```
-
-`@Transactional` của Spring không thể span qua nhiều databases khác nhau.
-
----
-
-## Saga Pattern là gì?
-
-**Saga Pattern** là chuỗi các local transactions. Mỗi local transaction:
-- Thực hiện một bước trong business process
-- Publish một event (nếu thành công) để trigger bước tiếp theo
-- Thực hiện **compensation transaction** (nếu thất bại) để rollback các bước trước
-
-```
-Saga = [Tx1, Tx2, Tx3, ..., TxN]
-
-Nếu TxK thất bại:
-  Thực hiện: C(K-1), C(K-2), ..., C(1)  ← Compensation transactions
-  (rollback theo thứ tự ngược lại)
+```text
+   Người dùng đặt combo (1 request)
+        │
+        ▼  T1
+   Car Service   ── reserveCar  ──► Car DB     ✅ (đã commit)
+        │ forward
+        ▼  T2
+   Hotel Service ── reserveHotel ──► Hotel DB  ✅ (đã commit)
+        │ forward
+        ▼  T3
+   Flight Service ── reserveFlight ──► RuntimeException ❌
 ```
 
-**Compensation transaction ≠ Database rollback**
+> Một request, nhưng đi qua nhiều service, mỗi service tạo một **transaction riêng** commit vào DB riêng. Request kiểu này = **distributed transaction** (giao dịch phân tán qua nhiều container/node/region).
 
-Compensation là business operation để **undo** effect của transaction trước đó:
+Khi Flight lỗi: `@Transactional` trong Flight rollback DB của *chính nó*. Nhưng **Car DB và Hotel DB đã commit** ở các transaction khác — Flight **không có quyền** rollback chúng. Và ta **không thể** bắt Car/Hotel "giữ lock chờ" Flight xong — khóa row quá lâu sẽ giết hiệu năng. Nên service commit + nhả lock ngay sau khi xong việc của mình.
 
+Kết quả: khách có xe + phòng nhưng không vé → **data inconsistency**. Ta cần: **hoặc tất cả thành công, hoặc nếu lỗi thì hoàn tác mọi thứ đã làm**.
+
+## Saga Pattern — chia nhỏ và bù trừ
+
+> **Saga** = chia một giao dịch lớn thành **chuỗi transaction nhỏ, độc lập**, mỗi cái do một microservice quản. Khi lỗi, chạy các **compensation transaction** (giao dịch bù trừ) theo **thứ tự ngược** để hoàn tác.
+
+Hai từ khóa cần nhớ: **nhỏ (smaller)** và **độc lập (independent)**.
+
+```text
+   Business request lớn
+        │  chia thành...
+        ▼
+   T1 (service 1) → T2 (service 2) → T3 (service 3) → ... → Tn
+        │              │                │
+       C1             C2               C3   ← mỗi T có một C (compensation) đi kèm
 ```
-Tx:   "Tạo đơn hàng" → Compensation: "Hủy đơn hàng"
-Tx:   "Trừ tiền tài khoản" → Compensation: "Hoàn tiền tài khoản"
-Tx:   "Cập nhật tồn kho" → Compensation: "Hoàn tồn kho"
+
+| Khái niệm | Ý nghĩa |
+|---|---|
+| **Transaction (Tn)** | Việc một service làm trên DB của nó (vd `reserveCar`) |
+| **Compensation (Cn)** | Việc hoàn tác Tn (vd `cancelCar`) — đặt **cùng** service, trỏ **cùng** DB với Tn (local) |
+
+### Compensation chạy ngược, hoàn tác về "trạng thái có nghĩa"
+
+Khi lỗi ở `Tn+1`, nó kích hoạt `Cn`, rồi `Cn-1`, ... ngược lên `C1`:
+
+```text
+   T1 → T2 → T3 → T4 ✗ lỗi
+                  │ kích hoạt compensation NGƯỢC chiều
+   C1 ◄── C2 ◄── C3 ◄──┘
 ```
 
----
+> **"Rollback" ở đây KHÔNG phải database rollback** — mà là hoàn tác data về **trạng thái có nghĩa (meaningful state)**. Ví dụ: `reserveCar` đặt status = `BOOKED`; `cancelCar` đổi status = `CANCELLED` (không xóa row). Nhờ vậy bộ phận vận hành thấy `CANCELLED` thì không sắp xe cho khách → không ảnh hưởng nghiệp vụ.
 
-## Hai loại Saga
+Quan trọng: compensation **chỉ chạy khi có lỗi**. Nếu tất cả Tn thành công → không cần compensation. Mỗi service phải tự cung cấp **cả** logic transaction thường **lẫn** logic compensation.
 
-| | Choreography Saga | Orchestration Saga |
+## Hai flavor: Choreography vs Orchestration
+
+Saga có **hai** cách hiện thực:
+
+| | **Choreography** | **Orchestration** |
 |---|---|---|
-| Điều phối | Phân tán (mỗi service tự quyết) | Tập trung (Saga Manager) |
-| Giao tiếp | Events | Commands + Events |
-| Phức tạp | Thấp hơn | Cao hơn |
-| Dễ debug | Khó (flow phân tán) | Dễ (flow tập trung) |
-| Single point of failure | Không có | Saga Manager |
-| Phù hợp | Flow đơn giản, ít services | Flow phức tạp, nhiều services |
+| Mô hình | **Phi tập trung (decentralized)** — không ai chỉ huy | **Tập trung (centralized)** — một Saga Manager điều phối |
+| Mỗi service biết gì | Biết service **kế tiếp** (happy) + service **trước** (compensation) | Không biết gì — chỉ nghe lệnh từ orchestrator |
+| Điều khiển | Phân tán khắp các service | Một chỗ duy nhất (Saga Manager) |
+| Hợp với | Không cần framework đặc biệt | Thường dùng khi đã có **CQRS** (vd Axon) |
+| Ẩn dụ | "Múa tập thể" — ai cũng tự biết bước của mình | "Nhạc trưởng" chỉ huy dàn nhạc |
 
----
+```text
+CHOREOGRAPHY (phi tập trung):
+   svc1 ──► svc2 ──► svc3 ──► svc4    mỗi service tự gọi cái kế tiếp
 
-## Lợi ích của Saga Pattern
-
-### 1. Giải quyết Distributed Transactions
-Không cần Two-Phase Commit (2PC) — phức tạp và có performance issues. Saga dùng eventual consistency với compensation.
-
-### 2. Loose Coupling
-Mỗi service chỉ cần biết business của mình. Không cần biết internal của services khác.
-
-### 3. Fault Tolerance
-Nếu một step fail → compensation tự động rollback các steps trước.
-
-### 4. Scalability
-Không có distributed lock → services có thể scale độc lập.
-
----
-
-## Nhược điểm cần lưu ý
-
-### 1. Complexity
-- Cần thiết kế compensation cho mỗi transaction
-- Nhiều edge cases: partial success, duplicate events, timeout
-
-### 2. Eventual Consistency
-- Data không consistent ngay lập tức
-- Trong thời gian saga chạy, data ở trạng thái trung gian
-
-### 3. Không có Atomicity thực sự
-- Nếu compensation cũng fail → cần alerting + manual intervention
-
-### 4. Debugging khó hơn
-- Flow trải rộng qua nhiều services
-- Cần centralized logging và tracing
-
----
-
-## Khi nào dùng Saga?
-
-**Nên dùng khi:**
-- Business operation span qua 2+ microservices
-- Cần đảm bảo data consistency across services
-- Chấp nhận eventual consistency
-
-**Không nên dùng khi:**
-- Single service operation (dùng `@Transactional` là đủ)
-- Cần strong consistency tức thì (không thể dùng microservices architecture)
-
----
-
-## Saga trong thực tế
-
-### E-commerce Order Saga
-
-```
-1. CreateOrder            → OrderCreatedEvent
-2. ReserveInventory       → InventoryReservedEvent
-3. ProcessPayment         → PaymentProcessedEvent
-4. ShipOrder             → OrderShippedEvent ← END (happy path)
-
-Compensations:
-  PaymentFailed:     → CancelInventoryReservation → CancelOrder
-  ShipmentFailed:    → RefundPayment → CancelInventoryReservation → CancelOrder
+ORCHESTRATION (tập trung):
+            ┌── Saga Manager ──┐
+            ▼     ▼     ▼      ▼
+          svc1  svc2  svc3   svc4    manager ra lệnh từng bước
 ```
 
-### Bank Mobile Number Update Saga (ví dụ trong khóa học)
+> Không có "tốt/xấu" tuyệt đối. Choreography khi không dùng framework CQRS; Orchestration khi đã có CQRS (Axon). Cả hai cho **cùng kết quả**. Phase 5 này làm **Choreography** (không CQRS); Phase 6 làm **Orchestration** (với CQRS/Axon).
 
-```
-1. UpdateCustomerMobileNumber  → CustomerMobileNumberUpdatedEvent
-2. UpdateAccountMobileNumber   → AccountMobileNumberUpdatedEvent
-3. UpdateCardMobileNumber      → CardMobileNumberUpdatedEvent
-4. UpdateLoanMobileNumber      → LoanMobileNumberUpdatedEvent ← END
+## Tóm tắt bài 1
 
-Compensations (nếu step N fail):
-  → RollbackCard → RollbackAccount → RollbackCustomer
-```
+- **Distributed transaction**: một request qua nhiều service, mỗi cái commit DB riêng → `@Transactional` chỉ quản được một DB, không rollback xuyên service.
+- **Saga**: chia thành **transaction nhỏ độc lập** (Tn); khi lỗi, chạy **compensation (Cn)** theo **thứ tự ngược** để hoàn tác về **trạng thái có nghĩa** (không phải DB rollback).
+- Mỗi Tn có một Cn cục bộ cùng service/DB; compensation chỉ chạy khi lỗi.
+- Hai flavor: **Choreography** (phi tập trung, "múa tập thể") và **Orchestration** (tập trung, "nhạc trưởng" — hợp với CQRS).
 
----
-
-## Choreography vs Orchestration — Chọn cái nào?
-
-```
-Choreography phù hợp khi:
-  ✅ Ít services (2-3)
-  ✅ Đội quen với event-driven
-  ✅ Flow đơn giản, ít nhánh điều kiện
-  ✅ Cần loose coupling tuyệt đối
-
-Orchestration phù hợp khi:
-  ✅ Nhiều services (4+)
-  ✅ Flow phức tạp với điều kiện
-  ✅ Cần rõ ràng về business flow
-  ✅ Dễ debug và monitor
-  ✅ Đã dùng Axon Framework
-```
-
-**Tiếp theo:** Choreography Saga — Implementation →
+**Bài kế tiếp** → [Bài 2: Lợi ích, nhược điểm và thiết kế Choreography Saga](02-choreography-thiet-ke-va-tradeoffs.md)

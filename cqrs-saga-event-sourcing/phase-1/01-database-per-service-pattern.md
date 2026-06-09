@@ -1,110 +1,133 @@
-# Bài 1: Database-per-Service Pattern
+# Bài 1: Database-per-Service — pattern "thủ phạm" sinh ra cả khóa học
 
-## Tại sao cần học pattern này?
+Tại sao không ai dùng CQRS, Saga, Event Sourcing trong một ứng dụng monolith? Bạn đã bao giờ thấy một web app truyền thống cần đến Saga chưa? Gần như không bao giờ. Các pattern nâng cao này **chỉ** xuất hiện trong môi trường microservices. Lý do nằm ở một quyết định kiến trúc duy nhất — và nó là "thủ phạm" buộc developer microservices phải học toàn bộ những pattern còn lại trong khóa này.
 
-Trước khi đi vào các pattern phức tạp như CQRS, Saga, Event Sourcing — bạn cần hiểu **tại sao** các pattern đó ra đời. Câu trả lời nằm ở đây: **Database-per-Service Pattern**.
+Quyết định đó là **Database-per-Service**. Hiểu thật rõ nó, bạn sẽ hiểu vì sao cả khóa học này tồn tại.
 
-Đây là pattern là "thủ phạm" buộc các microservice developer phải học các event-driven patterns. Hiểu rõ nó, bạn sẽ hiểu toàn bộ vì sao khóa học này tồn tại.
+## Database-per-Service pattern là gì?
 
----
+> **Database-per-Service** = mỗi microservice **sở hữu database riêng của mình**, không service nào được truy cập trực tiếp vào database của service khác.
 
-## Database-per-Service là gì?
+Tên gọi đã tự giải thích. Hãy lấy một ứng dụng e-commerce với 3 microservice:
 
-Trong kiến trúc microservices, mỗi service sở hữu **database riêng của mình**. Không chia sẻ database với service khác.
-
-```
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│  Customer        │    │  Order           │    │  Product         │
-│  Service         │    │  Service         │    │  Service         │
-├──────────────────┤    ├──────────────────┤    ├──────────────────┤
-│  Customer DB     │    │  Order DB        │    │  Product DB      │
-│  (MySQL)         │    │  (PostgreSQL)    │    │  (MongoDB)       │
-└──────────────────┘    └──────────────────┘    └──────────────────┘
-```
-
-99% dự án microservices thực tế đều áp dụng pattern này. Nó không phải là lựa chọn — gần như là **bắt buộc** nếu bạn muốn tận dụng được lợi thế của microservices.
-
----
-
-## Lợi ích
-
-### 1. Loose Coupling (Kết nối lỏng)
-Mỗi team phát triển và deploy service độc lập mà không cần lo ảnh hưởng đến service khác. Đây là mục tiêu cốt lõi của microservices.
-
-### 2. Independent Scaling (Scale độc lập)
-Trong e-commerce: Order service xử lý lượng data khổng lồ, Product service vừa phải, Customer service ít hơn. Với database riêng, từng service scale database theo đúng nhu cầu của mình — không lãng phí tài nguyên.
-
-### 3. Faster Development (Phát triển nhanh hơn)
-Team A thay đổi schema của Customer DB không cần hỏi ý kiến Team B hay Team C. Không có điểm tập trung gây nghẽn trong quá trình phát triển.
-
-### 4. Resilience & Fault Tolerance (Chịu lỗi tốt)
-Customer DB bị down → Order service và Product service vẫn chạy bình thường. Không có single point of failure ở tầng database.
-
-### 5. Technology Freedom (Tự do chọn công nghệ)
-- Product service lưu nhiều ảnh → dùng MongoDB (NoSQL)
-- Order service cần ACID transactions → dùng PostgreSQL
-- Customer service read nhiều → dùng Redis cache
-
-Mỗi team chọn công nghệ phù hợp nhất với bài toán của mình.
-
-### 6. Security (Bảo mật)
-Muốn đọc data của Order service? Phải gọi API của Order service — không thể truy cập trực tiếp vào database. Authentication/Authorization luôn được enforce.
-
----
-
-## Thách thức — Lý do ra đời của CQRS, Saga, Event Sourcing
-
-Đây là phần quan trọng nhất. Database-per-Service mang lại nhiều lợi ích, nhưng đồng thời tạo ra **4 thách thức nghiêm trọng**:
-
-```
-Database-per-Service
-         │
-         ▼
-┌────────────────────────────────────────────┐
-│  1. Cross-Service Queries                  │
-│  2. Data Consistency                       │
-│  3. Complex Transactions                   │
-│  4. Data Duplication                       │
-└────────────────────────────────────────────┘
-         │
-         ▼
-  → Cần các Event-Driven Patterns!
+```text
+┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│ Customer Service │   │  Order Service   │   │ Product Service  │
+│  (business logic)│   │ (business logic) │   │ (business logic) │
+├──────────────────┤   ├──────────────────┤   ├──────────────────┤
+│  Customer DB     │   │   Order DB       │   │  Product DB      │
+│  (MySQL)         │   │ (PostgreSQL)     │   │  (MongoDB)       │
+└──────────────────┘   └──────────────────┘   └──────────────────┘
+        ▲                       ▲                       ▲
+        └── chỉ Customer        └── chỉ Order           └── chỉ Product
+            Service được chạm       Service được chạm       Service được chạm
 ```
 
-### Thách thức 1: Cross-Service Queries
-Trong monolith: JOIN 4 tables trong 1 database — đơn giản.
+Mỗi service có **business logic** (logic nghiệp vụ) riêng — do các team khác nhau phát triển độc lập, đúng tinh thần microservices. Và quan trọng nhất: phía sau mỗi service là một **database độc lập**.
 
-Trong microservices: Data của customer ở DB1, accounts ở DB2, loans ở DB3, cards ở DB4. Muốn hiển thị dashboard tổng hợp → không thể JOIN!
+> **Lưu ý về thực tế**: ~99% dự án microservices áp dụng pattern này. Có một số ít trường hợp dùng **shared database** (database dùng chung), nhưng kể cả khi đó, người ta cũng không dùng *một* database cho *tất cả* service. Ví dụ 10 service: có thể 3 service dùng chung một DB, 7 service còn lại mỗi cái một DB. Database-per-Service gần như là mặc định.
 
-**Giải pháp:** API Composition Pattern (ngắn hạn) hoặc CQRS Pattern (dài hạn, enterprise)
+## Sáu lợi ích — vì sao ai cũng chọn pattern này
 
-### Thách thức 2: Data Consistency
-Khi update data liên quan đến nhiều service, làm sao đảm bảo tất cả cùng nhất quán? Ví dụ: Đổi số điện thoại của customer — cần update ở 4 service khác nhau.
+### 1. Kết nối lỏng (Loose Coupling)
 
-### Thách thức 3: Complex Transactions
-Trong monolith: 1 database transaction bao gồm tất cả → rollback dễ dàng nếu lỗi.
+Mục tiêu cốt lõi của microservices là **loose coupling** — giảm phụ thuộc giữa các thành phần nghiệp vụ. Khi mỗi service có DB riêng, team được tự do **phát triển và deploy độc lập**, không phải lo ảnh hưởng tới các thành phần khác.
 
-Trong microservices: Transaction trải rộng qua nhiều database → **Distributed Transaction** — rollback cực kỳ phức tạp.
+### 2. Scale độc lập (Independent Scaling)
 
-**Giải pháp:** Saga Pattern (Choreography hoặc Orchestration)
+Câu hỏi: trong e-commerce, 3 service customer / product / order có cùng lượng dữ liệu không? Chắc chắn không.
 
-### Thách thức 4: Data Duplication
-Đôi khi cần lưu một phần data ở nhiều service để tránh gọi API chéo quá nhiều → dẫn đến data bị duplicate và khó đồng bộ.
+```text
+Order Service    → khối lượng GIAO DỊCH khổng lồ (đặt hàng là hành động thường xuyên nhất)
+Product Service  → lượng data trung bình
+Customer Service → lượng data ít nhất
+```
 
----
+Với DB riêng, Order Service có thể scale **chỉ database của mình** để đáp ứng tải, mà không động đến hai service kia. Nếu dùng chung một DB, quyết định "khi nào scale up / scale down" trở nên cực kỳ rối — vì phải cân nhắc nhu cầu của cả ba.
 
-## Tóm tắt
+### 3. Phát triển nhanh hơn (Faster Development)
+
+Mỗi service một DB → team đổi schema của Customer DB **không cần xin phép** team Order hay Product. Ngược lại, nếu dùng shared DB, bất kỳ thay đổi schema nào cũng buộc phải họp và đồng thuận với tất cả team dùng chung DB đó — một điểm nghẽn (bottleneck) lớn.
+
+### 4. Chịu lỗi & cách ly sự cố (Resilience & Fault Tolerance)
+
+Customer DB down → Order Service và Product Service vẫn chạy bình thường. Không có **single point of failure** (điểm hỏng làm sập cả hệ thống) ở tầng database.
+
+### 5. Tự do chọn công nghệ (Technology Freedom)
+
+Vì DB tách rời, mỗi team chọn loại DB phù hợp nhất với dữ liệu *và* loại thao tác của mình:
+
+| Service | Đặc tính dữ liệu / thao tác | Lựa chọn DB hợp lý |
+|---|---|---|
+| Product | Lưu nhiều ảnh, schema linh hoạt | NoSQL (MongoDB) |
+| Order | Cần ACID, transaction chặt | RDBMS (PostgreSQL, Oracle) |
+| Customer | Đọc nhiều hơn ghi | DB tối ưu read, hoặc thêm cache |
+
+Không chỉ chọn theo *kiểu* dữ liệu (SQL/NoSQL), mà còn theo *kiểu thao tác*: service đọc nhiều → chọn DB tối ưu read; service ghi nhiều → chọn DB tối ưu write.
+
+### 6. Ngăn truy cập trái phép (Security)
+
+Customer Service muốn đọc dữ liệu order? Nó **không thể** đọc trực tiếp từ Order DB — bắt buộc gọi API mà Order Service cung cấp. Nhờ đó luôn có một lớp **authentication / authorization** (xác thực / phân quyền) được áp dụng khi một service đọc dữ liệu của service khác. Shared DB thì ai có connection string là đọc thẳng được — không có rào chắn này.
+
+## Mặt trái — bốn thách thức nghiêm trọng
+
+Đến đây bạn có thể nghĩ: "pattern tuyệt vời, sao lại có ai muốn né nó?". Đừng vội. Database-per-Service mang lại nhiều lợi ích, nhưng **đồng thời** đẻ ra bốn thách thức nghiêm trọng — và chính bốn thách thức này là lý do tồn tại của mọi pattern còn lại trong khóa học.
+
+```text
+                 Database-per-Service
+                         │
+        ┌────────────────┼────────────────┬─────────────────┐
+        ▼                ▼                 ▼                 ▼
+┌───────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ 1. Cross-     │ │ 2. Data      │ │ 3. Complex   │ │ 4. Data      │
+│  Service      │ │  Consistency │ │  Transactions│ │  Duplication │
+│  Queries      │ │              │ │ (distributed)│ │              │
+└───────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+        │                │                 │                 │
+        ▼                ▼                 ▼                 ▼
+  API Composition    Saga Pattern    Saga Pattern    Event-Driven
+  / CQRS                                              Architecture
+```
+
+| # | Thách thức | Bản chất | Sẽ giải bằng |
+|---|---|---|---|
+| 1 | **Cross-Service Queries** (truy vấn xuyên service) | Không thể JOIN data nằm ở nhiều DB | API Composition / CQRS |
+| 2 | **Data Consistency** (nhất quán dữ liệu) | Ghi vào nhiều DB, làm sao đảm bảo "all-or-nothing" | Saga |
+| 3 | **Complex Transactions** (giao dịch phân tán) | Một transaction trải qua nhiều DB → rollback rất khó | Saga |
+| 4 | **Data Duplication** (trùng lặp dữ liệu) | Copy data sang nhiều service để tránh gọi API chéo → phải đồng bộ | Event-Driven |
+
+Bài này chỉ giới thiệu nhanh; các bài sau đào sâu từng cái.
+
+### Thách thức 1: Cross-Service Queries — bản xem trước
+
+Monolith: data customer, accounts, loans, cards nằm trong **một** DB → `JOIN` 4 bảng là xong. Microservices: 4 bảng đó nằm ở 4 DB tách rời, deploy ở 4 nơi → **không thể JOIN**. (Bài 2 đào sâu + giải pháp.)
+
+### Thách thức 2 & 3: Distributed Transactions — bản xem trước
+
+Khi một thao tác ghi vào nhiều service (ví dụ: tạo order → trừ tiền → cập nhật kho), bạn có một **distributed transaction** (giao dịch phân tán). Nếu bước giữa chừng lỗi, dữ liệu rơi vào trạng thái nửa vời. Quản lý rollback / commit / exception trong môi trường này cực kỳ phức tạp. (Bài 5 đào sâu.)
+
+### Thách thức 4: Data Duplication — bản xem trước
+
+Đôi khi để tránh gọi API chéo quá nhiều, ta cố tình copy một phần data sang nhiều service → data bị trùng lặp và khó giữ đồng bộ. (Bài 5 đào sâu.)
+
+## Monolith vs Microservices — bảng so sánh cốt lõi
 
 | Khía cạnh | Monolith | Microservices (Database-per-Service) |
 |---|---|---|
-| Database | 1 chung | Mỗi service 1 database |
-| JOIN query | Dễ | Không thể trực tiếp |
-| Transaction | ACID đơn giản | Distributed Transaction phức tạp |
-| Scale | Scale toàn bộ | Scale từng service |
-| Team independence | Thấp | Cao |
+| Số database | 1 database chung | Mỗi service một database |
+| JOIN nhiều entity | Dễ — một câu SQL | Không thể JOIN trực tiếp |
+| Transaction nhiều bước | ACID đơn giản (`@Transactional`) | Distributed transaction phức tạp |
+| Scale | Scale toàn bộ ứng dụng | Scale từng service độc lập |
+| Độc lập giữa team | Thấp (đụng schema chung) | Cao (mỗi team một DB) |
+| Tự do công nghệ DB | Một loại DB cho tất cả | Mỗi service chọn DB riêng |
+| Single point of failure | DB chung = điểm hỏng chí mạng | Một DB hỏng không kéo sập service khác |
 
----
+## Tóm tắt bài 1
 
-> **Điểm mấu chốt:** Database-per-Service là pattern không thể tránh khỏi trong microservices. Các thách thức nó tạo ra chính là lý do tồn tại của CQRS, Event Sourcing, Saga, Materialized View, và Transactional Outbox — toàn bộ nội dung của khóa học này.
+- **Database-per-Service**: mỗi microservice sở hữu DB riêng, không ai chạm DB của ai → đây là pattern gần như bắt buộc (99% dự án).
+- Sáu lợi ích: loose coupling, scale độc lập, dev nhanh, chịu lỗi, tự do công nghệ, bảo mật.
+- Cái giá: bốn thách thức — cross-service queries, data consistency, complex transactions, data duplication.
+- Bốn thách thức này **chính là lý do tồn tại** của API Composition, CQRS, Event Sourcing, Materialized View, Transactional Outbox và Saga — toàn bộ nội dung khóa học.
+- Đây là trade-off nền tảng nhất của microservices: đổi lấy scalability + independence, bạn nhận lại độ phức tạp của distributed systems.
 
-**Tiếp theo:** Cross-Service Queries và API Composition Pattern →
+**Bài kế tiếp** → [Bài 2: Cross-Service Queries và API Composition Pattern](02-cross-service-queries-va-api-composition.md)
