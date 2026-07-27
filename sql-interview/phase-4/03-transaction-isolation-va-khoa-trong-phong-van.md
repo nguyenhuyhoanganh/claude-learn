@@ -15,6 +15,42 @@ Bài này gói gọn phần kiến thức đó theo hướng phỏng vấn: các
 
 Trong bốn chữ, **Isolation là chữ duy nhất có nhiều mức**, và cũng là chữ chiếm gần hết thời lượng câu hỏi phỏng vấn.
 
+### Trước hết: "transaction" là gì và vì sao Isolation lại có nhiều mức
+
+**Transaction** (giao dịch) là một nhóm thao tác được coi như **một đơn vị không thể chia cắt**: hoặc tất cả thành công, hoặc tất cả bị huỷ như chưa từng xảy ra.
+
+```sql
+BEGIN;                                                    -- mở giao dịch
+UPDATE tai_khoan SET so_du = so_du - 100 WHERE id = 1;    -- trừ tiền A
+UPDATE tai_khoan SET so_du = so_du + 100 WHERE id = 2;    -- cộng tiền B
+COMMIT;                                                    -- chốt: cả hai cùng có hiệu lực
+```
+
+Nếu máy chủ sập ngay sau dòng thứ nhất, `COMMIT` không bao giờ chạy, và database **tự động huỷ** thao tác trừ tiền. Không có chuyện tiền biến mất giữa chừng. Đó là chữ **A**tomicity.
+
+Còn **Isolation** trả lời một câu hỏi khác: *trong lúc giao dịch của tôi đang chạy dở, giao dịch của người khác nhìn thấy gì?*
+
+```text
+        Giao dịch của bạn                    Giao dịch của người khác
+        ──────────────────                   ────────────────────────
+9:00:00 BEGIN
+9:00:01 UPDATE so_du = 200
+                                    9:00:02  SELECT so_du → thấy gì?
+9:00:03 ROLLBACK  (huỷ!)                      • 200 (giá trị chưa chốt)?
+                                              • 100 (giá trị cũ)?
+```
+
+Câu trả lời **tuỳ vào mức isolation** bạn chọn. Và đây là điểm mấu chốt giải thích vì sao có nhiều mức thay vì chỉ một mức an toàn nhất:
+
+```text
+Cô lập càng chặt  →  càng ít nhìn thấy trạng thái dở dang của nhau
+                  →  càng phải KHOÁ nhiều hoặc HUỶ-THỬ LẠI nhiều
+                  →  càng ít giao dịch chạy song song được
+                  →  hệ thống phục vụ được càng ít người cùng lúc
+```
+
+Nói cách khác, isolation là một **cái núm điều chỉnh giữa tính đúng đắn và thông lượng**. Không có mức nào "tốt nhất" cho mọi trường hợp — đó là lý do chuẩn SQL định nghĩa bốn mức và để bạn chọn. Việc chọn đúng mức cho đúng nghiệp vụ chính là thứ đang được kiểm tra khi phỏng vấn.
+
 ## Bốn hiện tượng đọc sai
 
 ```text

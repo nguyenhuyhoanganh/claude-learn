@@ -4,6 +4,35 @@ Có một câu hỏi phỏng vấn tưởng dễ mà loại rất nhiều ngư�
 
 Bài này trả lời câu đó và toàn bộ họ câu hỏi quanh nó: index thật ra là cấu trúc gì, vì sao thứ tự cột trong composite index quan trọng, và danh sách những cách viết query khiến index bị vô hiệu hoá.
 
+## Nền tảng: database đọc dữ liệu như thế nào
+
+Muốn hiểu index, phải hiểu trước cái mà index đang cố tránh. Bốn khái niệm nền:
+
+**Trang (page/block)** — Database **không đọc từng dòng**. Nó đọc theo khối cố định gọi là *trang*, mặc định 8KB ở PostgreSQL (16KB ở InnoDB). Cần đúng một dòng cũng phải đọc trọn trang chứa nó.
+
+```text
+Một trang 8KB ≈ chứa được khoảng 50-100 dòng nhỏ
+
+Bảng 10 triệu dòng  ≈  100,000 - 200,000 trang
+Muốn quét cả bảng   →  phải đọc từng ấy trang
+```
+
+**Heap (đống)** — Vùng chứa dữ liệu dòng thật của bảng trong PostgreSQL. Các dòng nằm ở đây **không theo thứ tự nào** — dòng mới được nhét vào bất kỳ chỗ trống nào. Đó là lý do tìm một dòng cụ thể mà không có index thì phải dò từ đầu.
+
+**I/O và bộ nhớ đệm (buffer pool)** — Đọc từ đĩa chậm hơn đọc từ RAM khoảng 1000 lần. Database giữ các trang hay dùng trong RAM (*buffer pool*). Trang cần mà đã có sẵn trong RAM gọi là *cache hit*; phải lấy từ đĩa gọi là *cache miss*.
+
+```text
+Đọc 1 trang từ RAM        ~ 0.0001 ms
+Đọc 1 trang từ SSD        ~ 0.1 ms       ← chậm hơn ~1,000 lần
+Đọc 1 trang từ HDD        ~ 10 ms        ← chậm hơn ~100,000 lần
+```
+
+**Sequential scan (quét tuần tự)** — Đọc lần lượt mọi trang của bảng từ đầu tới cuối. Với bảng 10 triệu dòng, đó là hàng trăm nghìn lần đọc trang, để rồi có thể chỉ giữ lại vài dòng.
+
+Toàn bộ mục đích của index gói gọn trong một câu: **giảm số trang phải đọc**. Không phải "làm database chạy nhanh hơn" một cách trừu tượng — mà là biến 200,000 lần đọc trang thành 4 lần.
+
+Điều này cũng giải thích luôn một chuyện nghe có vẻ nghịch lý và sẽ gặp lại ở cuối bài: với **bảng rất nhỏ** (nằm gọn trong một trang), quét tuần tự chỉ tốn **1 lần đọc**, trong khi đi qua index tốn 3-4 lần. Lúc đó database cố tình **không** dùng index — và nó đúng.
+
 ## B+Tree: cấu trúc đứng sau 95% index bạn gặp
 
 ```text

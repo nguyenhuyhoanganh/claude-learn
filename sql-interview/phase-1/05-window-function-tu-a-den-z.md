@@ -47,6 +47,31 @@ emp4 38tr ┘                        emp4 38tr | max_phong = 60tr | hang = 3
                                         quanh dòng hiện tại để tính
 ```
 
+Trước khi đi tiếp, gỡ ba từ dễ gây rối:
+
+**"Window" (cửa sổ) là gì?** Là **tập dòng mà hàm được phép nhìn thấy** khi tính cho dòng hiện tại. Hình dung bạn cầm một khung cửa sổ đặt lên bảng dữ liệu: chỉ những dòng lọt trong khung mới được tính. Khung đó trượt dọc theo bảng, mỗi dòng một lần.
+
+```text
+Đang tính cho dòng này ──┐
+                         ▼
+  dòng 1  ┐
+  dòng 2  ├── cửa sổ cho dòng 3 (những dòng hàm được nhìn)
+  dòng 3  ┘
+  dòng 4      ← không nằm trong cửa sổ, không được tính
+  dòng 5
+```
+
+**`PARTITION BY` là gì?** Là cách **chia bảng thành các nhóm độc lập**, mỗi nhóm tính riêng, không ảnh hưởng lẫn nhau. Chia theo `dept_id` nghĩa là thứ hạng của người phòng Sales không liên quan gì tới người phòng Engineering.
+
+> **Cảnh báo trùng tên rất hay gây nhầm**: `PARTITION BY` ở đây **hoàn toàn không liên quan** tới *table partitioning* (chia nhỏ bảng thành nhiều bảng con trên đĩa, xem [phase-3 bài 4](../phase-3/04-phan-trang-va-xu-ly-bang-lon.md)). Hai khái niệm khác nhau hẳn nhưng dùng chung một từ. `PARTITION BY` chỉ là cách nhóm dữ liệu **trong lúc tính toán**, không đụng gì tới cách lưu trữ.
+
+**`PARTITION BY` khác `GROUP BY` chỗ nào?** Cả hai đều "chia nhóm", nhưng làm hai việc khác nhau với nhóm đó:
+
+```text
+GROUP BY dept_id          →  4 dòng của phòng Engineering  NGHIỀN thành 1 dòng
+PARTITION BY dept_id      →  4 dòng vẫn là 4 dòng, mỗi dòng được GẮN THÊM thông tin
+```
+
 Bốn mảnh ghép, một công thức:
 
 | Thành phần | Vai trò | Bỏ được không |

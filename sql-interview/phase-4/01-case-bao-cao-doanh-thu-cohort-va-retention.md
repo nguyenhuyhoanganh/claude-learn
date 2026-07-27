@@ -89,6 +89,27 @@ Hai điểm đúng-sai then chốt:
 
 Đề bài: *"Khách đăng ký tháng nào thì tháng thứ 1, 2, 3 sau đó còn bao nhiêu phần trăm quay lại mua?"* Đây là bài toán phân tích được hỏi nhiều nhất ở vị trí data analyst.
 
+> **"Cohort" và "retention" nghĩa là gì?**
+>
+> **Cohort** (nhóm đồng hành) là một nhóm người dùng có **chung mốc bắt đầu**. Ví dụ "cohort tháng 4/2024" = tất cả khách có đơn hàng đầu tiên trong tháng 4/2024. Họ được xếp cùng nhóm vì bước vào hệ thống cùng thời điểm.
+>
+> **Retention** (tỉ lệ giữ chân) là phần trăm người của cohort đó **còn quay lại** sau N kỳ.
+>
+> Vì sao phải chia cohort thay vì nhìn tổng số khách hoạt động mỗi tháng? Vì con số tổng trộn lẫn khách cũ và khách mới, nên nó che mất câu hỏi thật sự quan trọng: *"khách mới có ở lại với chúng ta không, và tình hình đang tốt lên hay xấu đi?"*
+>
+> ```text
+> Cách nhìn TỔNG (che giấu vấn đề)      Cách nhìn COHORT (nhìn rõ)
+> ─────────────────────────────         ──────────────────────────────────
+> T4: 100 khách hoạt động                Cohort T4: tháng sau còn 40% ┐
+> T5: 105 khách hoạt động                Cohort T5: tháng sau còn 30% ├ đang XẤU ĐI
+> T6: 110 khách hoạt động                Cohort T6: tháng sau còn 20% ┘
+>   → trông như đang tăng trưởng          → thật ra đang mất khách nhanh dần,
+>                                           chỉ nhờ đổ tiền quảng cáo kéo khách mới
+>                                           vào bù mà tổng số vẫn tăng
+> ```
+>
+> Đây chính là lý do phân tích cohort được hỏi nhiều: nó là công cụ phát hiện vấn đề mà số liệu tổng luôn giấu đi.
+
 Ý tưởng chia làm ba bước:
 
 ```text

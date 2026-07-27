@@ -4,6 +4,38 @@ Câu hỏi *"HAVING khác WHERE chỗ nào?"* là câu người phỏng vấn d�
 
 Bài này đi từ câu hỏi đó, rồi mở rộng sang toàn bộ mảng aggregate: vì sao `COUNT(*)` và `COUNT(cột)` cho số khác nhau, vì sao `AVG` ra kết quả cao bất thường, và kỹ thuật conditional aggregation mà bạn sẽ dùng gần như hằng ngày khi làm báo cáo.
 
+## "Aggregate" nghĩa là gì
+
+Trước hết làm rõ từ sẽ dùng suốt bài. **Aggregate function** (hàm tổng hợp) là hàm **gộp nhiều dòng thành một giá trị duy nhất**.
+
+```text
+HÀM THƯỜNG                            HÀM AGGREGATE
+──────────────────────────            ──────────────────────────────
+UPPER('an')  →  'AN'                  COUNT(...)  →  gộp N dòng thành 1 số
+ROUND(3.7)   →  4                     SUM(...)    →  gộp N dòng thành 1 tổng
+
+1 giá trị vào → 1 giá trị ra          NHIỀU DÒNG vào → 1 GIÁ TRỊ ra
+```
+
+Sáu hàm aggregate bạn sẽ gặp 95% thời gian:
+
+| Hàm | Làm gì | Trên cột lương (60, 45, 45, 38 triệu) |
+|---|---|---|
+| `COUNT(*)` | Đếm số dòng | 4 |
+| `SUM(salary)` | Cộng dồn | 188,000,000 |
+| `AVG(salary)` | Trung bình | 47,000,000 |
+| `MAX(salary)` | Lớn nhất | 60,000,000 |
+| `MIN(salary)` | Nhỏ nhất | 38,000,000 |
+| `COUNT(DISTINCT salary)` | Đếm giá trị **khác nhau** | 3 (vì có hai người cùng 45tr) |
+
+Dùng aggregate mà **không** có `GROUP BY` thì cả bảng được coi là một nhóm duy nhất, và kết quả luôn đúng **một dòng**:
+
+```sql
+SELECT COUNT(*), AVG(salary) FROM employees;    -- luôn trả về đúng 1 dòng
+```
+
+Còn khi có `GROUP BY`, aggregate được tính **riêng cho từng nhóm**, và kết quả có bao nhiêu nhóm thì bấy nhiêu dòng. Đó là toàn bộ nội dung phần tiếp theo.
+
 ## GROUP BY: gom dòng thành nhóm rồi ép về một dòng
 
 `GROUP BY` làm đúng hai việc: chia các dòng thành nhóm theo giá trị bạn chỉ định, rồi **ép mỗi nhóm xuống còn đúng một dòng** kết quả.

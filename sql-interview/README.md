@@ -8,11 +8,15 @@ Mỗi bài đều có: giải thích **từng câu lệnh làm gì**, dữ liệ
 
 ## Cách dùng series
 
-1. Dựng schema mẫu ở [Bài 1 phase-1](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md) — **mọi query trong series đều chạy được trên schema này**.
-2. Đọc tuần tự phase-1 → phase-4. Mỗi bài kết thúc bằng link "Bài kế tiếp".
-3. Gõ lại query, đừng chỉ đọc. SQL là kỹ năng vận động, không phải kiến thức.
+1. **Mới học SQL?** Bắt đầu từ [Bài 0](phase-1/00-tu-dien-tu-khoa-sql-cho-nguoi-moi.md) — giải thích từng từ khoá SQL làm gì, kèm bẫy của người mới.
+2. Dựng schema mẫu ở [Bài 1 phase-1](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md) — **mọi query trong series đều chạy được trên schema này**.
+3. Đọc tuần tự phase-1 → phase-4. Mỗi bài kết thúc bằng link "Bài kế tiếp".
+4. Gặp thuật ngữ lạ → tra [Từ điển thuật ngữ](TU-DIEN-THUAT-NGU.md), đừng bỏ qua.
+5. Gõ lại query, đừng chỉ đọc. SQL là kỹ năng vận động, không phải kiến thức.
 
 Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có ghi chú riêng.
+
+> **[Từ điển thuật ngữ](TU-DIEN-THUAT-NGU.md)** — hơn 120 thuật ngữ dùng trong series (anti-join, fanout, SARGable, MVCC, cohort, idempotency...), mỗi từ kèm nghĩa tiếng Việt và lý do cần biết. Tra bất cứ lúc nào gặp từ chưa quen.
 
 ## Mục lục
 
@@ -20,7 +24,8 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 
 | Bài | Nội dung |
 |---|---|
-| [01](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md) | Vì sao ứng viên trượt vòng SQL; 4 tầng câu hỏi; thứ tự xử lý logic của SQL; schema mẫu |
+| [00](phase-1/00-tu-dien-tu-khoa-sql-cho-nguoi-moi.md) | **Cho người mới**: từng từ khoá SQL làm gì, toán tử, kiểu dữ liệu, cách đọc một câu SQL lạ, 10 lỗi fresher hay gặp |
+| [01](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md) | Vì sao ứng viên trượt vòng SQL; 4 tầng câu hỏi; query optimizer; thứ tự xử lý logic của SQL; schema mẫu |
 | [02](phase-1/02-join-inner-vs-left-va-bai-toan-khach-chua-mua.md) | JOIN toàn tập: INNER/LEFT/RIGHT/FULL/CROSS; bài toán "khách chưa từng đặt hàng" và 3 cách giải |
 | [03](phase-1/03-join-nang-cao-fanout-on-vs-where-va-thuat-toan-join.md) | Bẫy ON vs WHERE, nhân dòng (fanout) làm sai doanh thu, self join, thuật toán join |
 | [04](phase-1/04-group-by-having-va-nghe-thuat-aggregate.md) | GROUP BY, HAVING vs WHERE, COUNT(*) vs COUNT(col), conditional aggregation, ROLLUP |
@@ -55,4 +60,5 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 
 ## Bắt đầu
 
-→ [Phase 1 - Bài 1: Vì sao 8/10 ứng viên trượt vòng SQL](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md)
+- Mới học SQL → [Bài 0: Từ điển từ khoá SQL cho người mới](phase-1/00-tu-dien-tu-khoa-sql-cho-nguoi-moi.md)
+- Đã viết SQL thành thạo → [Bài 1: Vì sao 8/10 ứng viên trượt vòng SQL](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md)

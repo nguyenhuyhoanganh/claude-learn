@@ -64,6 +64,54 @@ Mô hình này **một mình nó** giải thích được hàng loạt câu hỏ
 
 > Lưu ý: đây là thứ tự **logic**, không phải thứ tự thực thi vật lý. Query optimizer được phép sắp xếp lại (đẩy filter xuống sớm, đổi thứ tự join...) miễn là **kết quả không đổi**. Khi phỏng vấn, nói được cả hai vế này là điểm cộng lớn.
 
+#### "Query optimizer" là gì và vì sao có hai thứ tự
+
+Đây là khái niệm nền, gặp lại suốt series nên cần hiểu ngay từ đầu.
+
+**Query optimizer** (bộ tối ưu truy vấn, còn gọi là *planner*) là một thành phần bên trong database. Nhiệm vụ của nó: nhận câu SQL bạn viết, rồi **tự quyết định cách thực hiện nhanh nhất**.
+
+```text
+Bạn viết:                Optimizer nghĩ:                       Rồi mới chạy:
+┌──────────────┐        ┌─────────────────────────────┐      ┌──────────────┐
+│ SELECT ...   │        │ "Bảng orders có 5 triệu dòng.│      │ Index Scan   │
+│ FROM orders  │  ───▶  │  Có index trên customer_id.  │ ──▶ │ trên index   │
+│ JOIN ...     │        │  Nên đọc orders trước hay    │      │ idx_cust,    │
+│ WHERE ...    │        │  customers trước? Dùng index │      │ rồi Hash Join│
+└──────────────┘        │  hay quét cả bảng?"          │      └──────────────┘
+   Ý ĐỊNH của bạn        └─────────────────────────────┘        CÁCH LÀM thật
+```
+
+Vì SQL là ngôn ngữ **khai báo** — bạn mô tả *cái gì* muốn lấy, không ra lệnh *làm thế nào* — nên database có toàn quyền chọn cách. Từ đó sinh ra hai thứ tự khác nhau:
+
+| | Thứ tự **logic** | Thứ tự **vật lý** |
+|---|---|---|
+| Là gì | Quy tắc ngữ nghĩa của SQL | Các bước database thật sự làm |
+| Ai quyết định | Chuẩn SQL, cố định | Optimizer, thay đổi theo dữ liệu |
+| Dùng để | Hiểu **vì sao ra kết quả này** | Hiểu **vì sao chạy chậm** |
+| Xem ở đâu | Học thuộc bảng trên | `EXPLAIN` ([phase-3 bài 2](../phase-3/02-doc-hieu-execution-plan.md)) |
+
+Một ví dụ cụ thể cho thấy chúng khác nhau ra sao:
+
+```sql
+SELECT c.full_name
+FROM customers c
+JOIN orders o ON o.customer_id = c.customer_id
+WHERE c.city = 'Ha Noi';
+```
+
+```text
+Thứ tự LOGIC nói:     ghép TOÀN BỘ customers với orders trước,
+                      xong rồi mới lọc city = 'Ha Noi'.
+
+Thứ tự VẬT LÝ làm:    lọc customers còn lại khách Hà Nội TRƯỚC (chỉ 2 dòng),
+                      rồi mới ghép với orders.
+                      → gọi là "đẩy bộ lọc xuống" (predicate pushdown)
+
+Kết quả cuối: GIỐNG HỆT NHAU. Chỉ khác ở chỗ cách thứ hai nhanh hơn nhiều.
+```
+
+Optimizer chỉ được phép sắp xếp lại khi việc đó **không làm đổi kết quả**. Nắm nguyên tắc này giải thích được một câu hỏi phỏng vấn hay gặp: *"vì sao `INNER JOIN` thường nhanh hơn `LEFT JOIN`?"* — vì với `INNER JOIN`, optimizer tự do đổi thứ tự hai bảng; còn `LEFT JOIN` bắt buộc phải bảo toàn trọn vẹn bảng trái nên không gian tối ưu hẹp hơn.
+
 ## Ba dấu hiệu khiến người phỏng vấn loại bạn ngay
 
 **1. Trả lời bằng cú pháp thay vì bằng dữ liệu.** Hỏi "LEFT JOIN là gì", trả lời "là lấy hết bảng bên trái" — đúng nhưng nhạt. Trả lời tốt: "giữ toàn bộ dòng bảng trái; dòng nào không tìm được cặp ở bảng phải thì mọi cột bảng phải nhận `NULL`. Chính cái `NULL` đó cho ta viết được anti-join."
@@ -134,6 +182,52 @@ CREATE TABLE payments (
     amount     NUMERIC(14, 2) NOT NULL,
     paid_at    TIMESTAMPTZ    NOT NULL
 );
+```
+
+### Giải nghĩa từng từ khoá trong đoạn tạo bảng ở trên
+
+Nếu bạn mới học, đoạn `CREATE TABLE` vừa rồi có vài từ chưa gặp. Giải thích đầy đủ:
+
+| Từ khoá | Nghĩa | Vì sao dùng ở đây |
+|---|---|---|
+| `SERIAL` | Số nguyên **tự tăng**: mỗi lần chèn, database tự cấp số kế tiếp | Không phải tự nghĩ ra id cho từng dòng |
+| `PRIMARY KEY` | Khoá chính — định danh duy nhất một dòng | Ngầm định luôn là `NOT NULL` + `UNIQUE` |
+| `REFERENCES bang(cot)` | Khoá ngoại — giá trị phải tồn tại ở bảng kia | Chặn việc tạo đơn cho khách không có thật |
+| `NOT NULL` | Bắt buộc phải có giá trị | Tên khách thì không thể để trống |
+| `UNIQUE` | Không được trùng | Mỗi email chỉ thuộc về một khách |
+| `TEXT` | Chuỗi ký tự độ dài tuỳ ý | Trong PostgreSQL, `TEXT` không chậm hơn `VARCHAR(n)` |
+| `NUMERIC(12, 2)` | Số thập phân **chính xác**: tối đa 12 chữ số, 2 số sau dấu phẩy | Dùng cho **tiền**. Không dùng `FLOAT`/`REAL` vì chúng có sai số |
+| `TIMESTAMPTZ` | Ngày + giờ, **có kèm múi giờ** | Tránh lệch giờ khi hệ thống chạy ở nhiều nơi |
+| `DEFAULT now()` | Nếu `INSERT` không truyền cột này thì tự điền thời điểm hiện tại | Đỡ phải truyền tay `created_at` |
+| `DROP TABLE IF EXISTS` | Xoá bảng nếu nó đang tồn tại | Cho phép chạy lại script nhiều lần mà không báo lỗi |
+| `CASCADE` | Xoá luôn những thứ phụ thuộc vào bảng đó | Cần vì các bảng đang tham chiếu lẫn nhau qua khoá ngoại |
+
+Hai điểm thiết kế **có chủ đích** trong schema này, sẽ dùng để dạy các bài sau:
+
+```text
+employees.dept_id  KHÔNG có NOT NULL  → cho phép nhân viên chưa được xếp phòng ban
+                                          → tạo ra giá trị NULL để dạy bẫy NOT IN
+
+employees.manager_id REFERENCES employees(emp_id)
+                   → bảng TỰ THAM CHIẾU chính nó
+                   → mỗi nhân viên trỏ tới nhân viên khác là sếp của mình
+                   → đây là cách biểu diễn CÂY TỔ CHỨC bằng bảng phẳng
+```
+
+Cách bảng tự tham chiếu hoạt động, cụ thể với dữ liệu mẫu bên dưới:
+
+```text
+emp_id │ full_name  │ manager_id
+───────┼────────────┼───────────
+   1   │ Nguyen An  │   NULL      ← không có sếp = người đứng đầu (gốc của cây)
+   2   │ Tran Binh  │     1       ← sếp là emp_id = 1, tức Nguyen An
+   6   │ Vo Phuong  │     5       ← sếp là emp_id = 5, tức Hoang Em
+
+Ghép lại thành cây:      Nguyen An (1)
+                          ├── Tran Binh (2)
+                          ├── Hoang Em (5)
+                          │     └── Vo Phuong (6)
+                          └── ...
 ```
 
 Dữ liệu mẫu — cố tình nhỏ để bạn **nhẩm tay kiểm chứng được kết quả**, và cố tình cài sẵn các case gây bẫy (khách không đơn, nhân viên không phòng ban, lương trùng nhau, đơn bị huỷ):

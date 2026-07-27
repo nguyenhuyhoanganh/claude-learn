@@ -43,6 +43,20 @@ FROM customers AS c;
 
 Nhược điểm nghiêm trọng: **nó chạy một lần cho mỗi dòng của bảng ngoài**. Với 2 subquery và 1 triệu khách, về mặt logic là 2 triệu lần thực thi — chính là vấn đề N+1 mà bạn hay nghe ở tầng ORM, nhưng nằm ngay trong SQL. Optimizer hiện đại đôi khi viết lại được thành join, đôi khi không.
 
+> **"Vấn đề N+1" là gì?** Tên gọi đến từ phép đếm số lần truy vấn: **1** lần lấy danh sách chính, cộng **N** lần lấy chi tiết cho từng phần tử trong danh sách đó.
+>
+> ```text
+> 1 query : lấy 1000 khách hàng
+> +
+> N query : với mỗi khách, chạy thêm 1 query đếm số đơn   → 1000 query nữa
+> ─────────
+> = 1001 query, trong khi lẽ ra chỉ cần 1
+> ```
+>
+> Vì sao chậm dù mỗi query đều nhanh? Vì chi phí không nằm ở việc thực thi mà ở **số lần lặp lại**: mỗi lần đều phải phân tích câu lệnh, lập kế hoạch, tra bảng. Ở tầng ứng dụng còn cộng thêm một vòng đi-về mạng cho mỗi query — 1000 × 1ms = 1 giây thuần độ trễ.
+>
+> Tên gọi này bắt nguồn từ các thư viện **ORM** (*Object-Relational Mapping* — thư viện ánh xạ bảng database thành lớp đối tượng trong code, như Django ORM, SQLAlchemy, Hibernate), nơi nó là hành vi **mặc định** chứ không phải lỗi hiếm gặp. Nhưng như ví dụ trên cho thấy, N+1 xảy ra được ngay bên trong một câu SQL duy nhất.
+
 Hai luật cứng của scalar subquery:
 
 ```sql

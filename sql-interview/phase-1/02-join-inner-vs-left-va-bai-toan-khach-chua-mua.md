@@ -33,6 +33,124 @@ Bước 3 (chỉ LEFT JOIN) — Bù dòng mồ côi
 
 Cái `NULL` sinh ra ở bước 3 chính là **chìa khoá** của toàn bộ bài này. Nó không phải dữ liệu thật — nó là dấu hiệu "dòng này không tìm được cặp". Và ta sẽ dùng chính dấu hiệu đó để làm bộ lọc.
 
+### "Bù NULL" nghĩa là gì — xem từng bước trên dữ liệu thật
+
+Cụm "bù NULL" (tiếng Anh gọi là *NULL padding*) nghe trừu tượng, nên hãy xem chính xác database tạo ra cái gì. Dùng dữ liệu mẫu thật, và cố tình rút gọn còn vài cột cho dễ nhìn.
+
+**Dữ liệu đầu vào — hai bảng riêng biệt:**
+
+```text
+BẢNG TRÁI: customers                 BẢNG PHẢI: orders
+┌─────────────┬───────────┐          ┌──────────┬─────────────┬───────────┐
+│ customer_id │ full_name │          │ order_id │ customer_id │  status   │
+├─────────────┼───────────┤          ├──────────┼─────────────┼───────────┤
+│      1      │ Khach A   │          │    1     │      1      │ paid      │
+│      2      │ Khach B   │          │    2     │      1      │ paid      │
+│      3      │ Khach C   │          │    3     │      2      │ cancelled │
+│      4      │ Khach D   │          │    4     │      2      │ shipped   │
+│      5      │ Khach E   │          │    5     │      3      │ pending   │
+└─────────────┴───────────┘          └──────────┴─────────────┴───────────┘
+    5 dòng                                       5 dòng
+```
+
+**Bước 1 + 2 — ghép và lọc theo `ON o.customer_id = c.customer_id`:**
+
+Database duyệt từng khách, tìm xem có đơn nào mang `customer_id` khớp không:
+
+```text
+Khach A (id=1) → tìm thấy order 1, order 2   → sinh 2 dòng
+Khach B (id=2) → tìm thấy order 3, order 4   → sinh 2 dòng
+Khach C (id=3) → tìm thấy order 5            → sinh 1 dòng
+Khach D (id=4) → KHÔNG tìm thấy đơn nào      → sinh 0 dòng   ← "mồ côi"
+Khach E (id=5) → KHÔNG tìm thấy đơn nào      → sinh 0 dòng   ← "mồ côi"
+```
+
+Kết quả trung gian sau bước 2 — **đây cũng chính là kết quả cuối cùng của `INNER JOIN`**:
+
+```text
+┌─────────────┬───────────┬──────────┬─────────────┬───────────┐
+│ c.customer_id│c.full_name│o.order_id│o.customer_id│ o.status  │
+├─────────────┼───────────┼──────────┼─────────────┼───────────┤
+│      1      │ Khach A   │    1     │      1      │ paid      │
+│      1      │ Khach A   │    2     │      1      │ paid      │
+│      2      │ Khach B   │    3     │      2      │ cancelled │
+│      2      │ Khach B   │    4     │      2      │ shipped   │
+│      3      │ Khach C   │    5     │      3      │ pending   │
+└─────────────┴───────────┴──────────┴─────────────┴───────────┘
+   Khach D và Khach E KHÔNG có mặt ở đây.
+```
+
+**Bước 3 — chỉ `LEFT JOIN` mới làm bước này:**
+
+Database quay lại rà bảng trái và tự hỏi từng dòng: *"Khách này đã xuất hiện ở kết quả bước 2 chưa?"*
+
+- Khach A, B, C: đã xuất hiện → không làm gì thêm.
+- Khach D, E: chưa xuất hiện lần nào → **phải thêm vào**, vì `LEFT JOIN` cam kết giữ trọn bảng trái.
+
+Nhưng ở đây có một vấn đề kỹ thuật: bảng kết quả có 5 cột, trong đó 3 cột (`o.order_id`, `o.customer_id`, `o.status`) đến từ bảng `orders`. Khach D không có đơn nào, vậy **điền gì vào 3 ô đó**?
+
+```text
+Không thể để trống — bảng kết quả phải vuông, mọi dòng phải đủ 5 ô.
+Không thể điền 0    — số 0 là một giá trị có nghĩa, sẽ bị hiểu nhầm là dữ liệu thật.
+Không thể điền ''   — chuỗi rỗng cũng là một giá trị.
+
+→ SQL điền NULL, nghĩa là "KHÔNG CÓ GÌ Ở ĐÂY".
+  Chính hành động điền đó gọi là BÙ NULL (NULL padding).
+```
+
+Kết quả cuối cùng của `LEFT JOIN`:
+
+```text
+┌─────────────┬───────────┬──────────┬─────────────┬───────────┐
+│ c.customer_id│c.full_name│o.order_id│o.customer_id│ o.status  │
+├─────────────┼───────────┼──────────┼─────────────┼───────────┤
+│      1      │ Khach A   │    1     │      1      │ paid      │
+│      1      │ Khach A   │    2     │      1      │ paid      │
+│      2      │ Khach B   │    3     │      2      │ cancelled │
+│      2      │ Khach B   │    4     │      2      │ shipped   │
+│      3      │ Khach C   │    5     │      3      │ pending   │
+│      4      │ Khach D   │  [NULL]  │   [NULL]    │  [NULL]   │ ← dòng BÙ
+│      5      │ Khach E   │  [NULL]  │   [NULL]    │  [NULL]   │ ← dòng BÙ
+└─────────────┴───────────┴──────────┴─────────────┴───────────┘
+              ▲───── cột bảng TRÁI ─────▲──── cột bảng PHẢI đều NULL ────▲
+                 vẫn có dữ liệu thật
+```
+
+Ba điều cần rút ra từ hình này — và đây là phần người phỏng vấn muốn nghe:
+
+1. **`NULL` ở hai dòng cuối không có trong bảng `orders`.** Bảng `orders` không hề chứa dòng nào rỗng như vậy. Chúng do **phép `LEFT JOIN` tự tạo ra** ngay tại thời điểm ghép, và chỉ tồn tại trong kết quả của câu lệnh này.
+
+2. **Chỉ cột của bảng phải bị bù NULL.** Cột bảng trái (`customer_id`, `full_name`) vẫn giữ nguyên dữ liệu thật. Đó là ý nghĩa của "bảng trái là nhân vật chính".
+
+3. **`NULL` ở đây mang một thông tin cụ thể**: "dòng bảng trái này không tìm được bất kỳ cặp nào ở bảng phải". Nó không phải dữ liệu thiếu, mà là **kết quả của một phép suy luận**. Và vì nó mang thông tin, ta dùng được nó làm bộ lọc.
+
+Đó chính là lý do câu lệnh dưới đây hoạt động:
+
+```sql
+WHERE o.order_id IS NULL      -- "chỉ giữ những dòng được BÙ ra ở bước 3"
+```
+
+```text
+Đọc thành lời:
+  "order_id là khoá chính của bảng orders, nên trong dữ liệu thật nó KHÔNG BAO GIỜ rỗng.
+   Vậy nếu tôi nhìn thấy một dòng có order_id rỗng, chỉ có MỘT khả năng duy nhất:
+   dòng đó do LEFT JOIN bù ra. Mà bù ra nghĩa là khách này không có đơn nào."
+```
+
+**Vì sao `INNER JOIN` không có bước 3?** Vì cam kết của nó khác hẳn: nó chỉ hứa trả về những cặp **thật sự khớp nhau**. Khach D không khớp với đơn nào, nên theo đúng cam kết đó, Khach D không thuộc về kết quả. Không có dòng nào cần bù, và cũng không có `NULL` nào được sinh ra.
+
+Tóm lại sự khác biệt giữa hai loại join nằm ở đúng một câu hỏi:
+
+```text
+                      "Dòng bảng trái không tìm được cặp thì sao?"
+                                    │
+              ┌─────────────────────┴─────────────────────┐
+              ▼                                           ▼
+        INNER JOIN                                   LEFT JOIN
+   "Vứt nó đi. Tôi chỉ quan tâm            "Giữ lại. Bảng trái là nhân vật chính.
+    những cặp khớp nhau."                   Phần bảng phải thì điền NULL."
+```
+
 > Lưu ý cho tầng performance: database **không thật sự** tạo ra tích Descartes rồi mới lọc (12 dòng với bảng nhỏ thì được, chứ 1 triệu × 1 triệu thì bất khả thi). Nó dùng hash join, merge join hoặc nested loop có index. Nhưng **kết quả luôn giống hệt** mô hình trên. Nói được cả hai vế này khi phỏng vấn là điểm cộng — xem chi tiết ở [Bài 3](03-join-nang-cao-fanout-on-vs-where-va-thuat-toan-join.md).
 
 ## Năm loại JOIN, một hình vẽ
@@ -201,6 +319,32 @@ WHERE chỉ giữ dòng có giá trị TRUE. UNKNOWN bị loại như FALSE.
 ```
 
 Đây là câu người phỏng vấn dùng để phân biệt ứng viên đã từng bị dữ liệu thật cắn với ứng viên chỉ học lý thuyết. Câu trả lời hoàn chỉnh gồm ba phần: (1) nó trả về rỗng, (2) vì logic ba trị như trên, (3) khắc phục bằng `NOT EXISTS`, hoặc thêm `WHERE o.customer_id IS NOT NULL` vào subquery.
+
+### Hai thuật ngữ cần biết: anti-join và semi-join
+
+Bài toán vừa giải có một cái tên chính thức, và người phỏng vấn thường dùng chính cái tên đó:
+
+```text
+SEMI-JOIN  —  "lấy dòng bảng trái CÓ ít nhất một cặp bên phải"
+              Ví dụ: khách ĐÃ TỪNG đặt hàng
+              Viết bằng: EXISTS  /  IN
+
+ANTI-JOIN  —  "lấy dòng bảng trái KHÔNG có cặp nào bên phải"
+              Ví dụ: khách CHƯA TỪNG đặt hàng
+              Viết bằng: NOT EXISTS  /  LEFT JOIN ... IS NULL
+```
+
+Điểm khiến chúng khác hẳn `INNER JOIN` thông thường: **cả hai đều không nhân dòng và không lấy dữ liệu từ bảng phải**. Chúng chỉ dùng bảng phải để trả lời một câu hỏi đúng/sai — "có hay không có cặp" — rồi vứt bỏ.
+
+```text
+INNER JOIN customers–orders   →  5 dòng (Khach A xuất hiện 2 lần vì có 2 đơn)
+SEMI-JOIN  customers–orders   →  3 dòng (mỗi khách CÓ đơn xuất hiện đúng 1 lần)
+ANTI-JOIN  customers–orders   →  2 dòng (Khach D, E)
+                                  ▲
+                       số dòng không bao giờ vượt quá số dòng bảng trái
+```
+
+Đó là lý do `EXISTS` không cần `DISTINCT` còn `JOIN` thì cần — một khác biệt sẽ quay lại nhiều lần trong series.
 
 ### So sánh ba cách
 

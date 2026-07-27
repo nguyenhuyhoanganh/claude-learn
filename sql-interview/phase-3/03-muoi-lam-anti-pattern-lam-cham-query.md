@@ -290,6 +290,38 @@ with db.transaction():
 
 **Hậu quả trên PostgreSQL**: khoá bị giữ, các transaction khác xếp hàng; nghiêm trọng hơn, transaction dài **chặn `VACUUM`** dọn dẹp dòng chết, gây phình bảng (table bloat) toàn hệ thống. Một transaction để quên có thể làm chậm cả database.
 
+> **Chuỗi nguyên nhân này cần giải thích rõ, vì nó không hiển nhiên.**
+>
+> PostgreSQL dùng **MVCC**: khi bạn `UPDATE` một dòng, nó **không sửa tại chỗ** mà tạo ra một phiên bản mới, và giữ lại phiên bản cũ. Lý do: các transaction đang chạy từ trước vẫn cần nhìn thấy dữ liệu như lúc chúng bắt đầu.
+>
+> ```text
+> UPDATE customers SET city='Da Nang' WHERE customer_id=1;
+>
+>   Phiên bản cũ:  (id=1, city='Ha Noi')   ← vẫn nằm trên đĩa, chờ được dọn
+>   Phiên bản mới: (id=1, city='Da Nang')  ← transaction mới nhìn thấy cái này
+> ```
+>
+> Phiên bản cũ gọi là **dead tuple** (dòng chết). Tiến trình **`VACUUM`** có nhiệm vụ dọn chúng để lấy lại chỗ trống.
+>
+> Nhưng `VACUUM` chỉ được phép dọn một dòng chết khi chắc chắn **không transaction nào còn có thể cần nhìn thấy nó**. Một transaction mở từ 30 phút trước vẫn giữ ảnh chụp dữ liệu của 30 phút trước, nên `VACUUM` phải chừa lại **mọi** dòng chết sinh ra trong 30 phút đó — kể cả ở các bảng hoàn toàn không liên quan.
+>
+> ```text
+> Transaction để quên (mở lúc 9:00, chưa COMMIT)
+>            │
+>            ▼
+> VACUUM không dọn được dòng chết nào từ 9:00 trở đi
+>            │
+>            ▼
+> Bảng phình to (bloat): dữ liệu thật 2GB nhưng chiếm 20GB trên đĩa
+>            │
+>            ▼
+> Mọi query phải đọc nhiều trang hơn → CẢ HỆ THỐNG chậm dần
+> ```
+>
+> Đây là lý do một transaction bị bỏ quên ở trạng thái `idle in transaction` là sự cố nghiêm trọng, chứ không chỉ là chuyện "giữ khoá hơi lâu".
+>
+> Còn **WAL** (*Write-Ahead Log* — nhật ký ghi trước) là tệp ghi lại mọi thay đổi **trước khi** chúng được áp vào dữ liệu thật, để khôi phục được khi mất điện và để replica biết cần sao chép gì. `UPDATE` 30 triệu dòng sinh ra lượng WAL khổng lồ, có thể làm đầy đĩa và khiến replica tụt lại hàng phút.
+
 ```python
 # Tốt: gọi API ngoài transaction, chỉ khoá đúng lúc ghi
 don = db.query("SELECT * FROM orders WHERE status='pending'")

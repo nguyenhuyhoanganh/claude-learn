@@ -154,6 +154,24 @@ UPDATE orders SET status = 'archived' WHERE ordered_at < '2020-01-01';
 -- 30 triệu dòng → khoá lâu, WAL phình to, replica trễ, rollback mất hàng giờ nếu lỗi
 ```
 
+> **Ba từ trong phần này cần làm rõ trước:**
+>
+> **Khoá (lock)** — Khi một transaction đang sửa một dòng, database "giữ" dòng đó lại để transaction khác không sửa đồng thời gây hỏng dữ liệu. Transaction khác muốn đụng vào phải **xếp hàng chờ**. Sửa 30 triệu dòng nghĩa là giữ 30 triệu dòng suốt thời gian chạy — mọi người dùng đụng phải chúng đều bị treo.
+>
+> **Replica (bản sao)** — Máy chủ database thứ hai giữ bản sao dữ liệu của máy chính, thường dùng để chia tải đọc (báo cáo chạy trên replica cho khỏi ảnh hưởng hệ thống chính) và để dự phòng khi máy chính hỏng.
+>
+> **Replication lag (độ trễ sao chép)** — Replica luôn chậm hơn máy chính một chút vì phải nhận và áp dụng lại các thay đổi. Bình thường độ trễ dưới một giây. Nhưng khi máy chính sinh ra khối lượng thay đổi khổng lồ trong thời gian ngắn, replica không theo kịp và độ trễ vọt lên hàng phút.
+>
+> ```text
+> Máy chính: UPDATE 30 triệu dòng  ──▶ sinh hàng chục GB WAL
+>                                        │
+>                                        ▼ replica phải áp dụng lại từng thay đổi
+> Replica:   tụt lại 5 phút  ──▶ báo cáo đọc từ replica cho ra số liệu CŨ 5 PHÚT
+>                            ──▶ người dùng vừa đặt hàng xong, xem lại thấy "chưa có đơn nào"
+> ```
+>
+> Đây là lý do "chia lô rồi nghỉ giữa các lô" không phải chuyện cầu toàn — nó trực tiếp bảo vệ trải nghiệm người dùng.
+
 Bốn hậu quả cụ thể — nên nêu đủ khi phỏng vấn:
 
 ```text

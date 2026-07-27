@@ -83,6 +83,28 @@ Quy tắc thực dụng: **mặc định dùng CTE**. Chuyển sang temp table k
 
 ## Bẫy quan trọng: CTE có phải hàng rào tối ưu hoá không
 
+Phần này dùng ba thuật ngữ cần làm rõ trước:
+
+**Materialize (vật chất hoá)** — Database tính xong toàn bộ CTE, **lưu kết quả vào một vùng nhớ tạm**, rồi các bước sau đọc từ vùng nhớ đó.
+
+**Inline (nhúng thẳng)** — Database **không** tính riêng CTE. Nó chép định nghĩa CTE vào thẳng câu lệnh chính, như thể bạn viết subquery, rồi tối ưu cả khối như một.
+
+```text
+MATERIALIZE                            INLINE
+──────────────────────────────         ──────────────────────────────
+① chạy CTE → ra 50 triệu dòng          ① gộp CTE vào câu lệnh chính
+② lưu 50 triệu dòng vào bộ nhớ tạm     ② nhìn thấy WHERE order_id = 12345
+③ câu ngoài đọc lại, lọc còn 1 dòng    ③ đẩy điều kiện đó XUỐNG trong CTE
+                                        ④ dùng index, lấy đúng 1 dòng
+   → làm việc thừa khủng khiếp             → nhanh hơn hàng nghìn lần
+```
+
+**Optimization fence (hàng rào tối ưu hoá)** — Một ranh giới mà optimizer **không được phép** đẩy điều kiện qua. Khi CTE bị materialize, nó trở thành một hàng rào như vậy: điều kiện `WHERE` ở câu ngoài phải đứng chờ bên ngoài, không chui vào trong CTE được.
+
+Vì sao optimizer lại muốn "đẩy điều kiện xuống"? Vì lọc càng sớm thì càng ít dữ liệu phải xử lý ở các bước sau — kỹ thuật này gọi là *predicate pushdown*, và nó là một trong những phép tối ưu hiệu quả nhất.
+
+Giờ tới phần chính:
+
 Đây là phần tách ứng viên biết dùng CTE khỏi ứng viên hiểu CTE.
 
 ```text

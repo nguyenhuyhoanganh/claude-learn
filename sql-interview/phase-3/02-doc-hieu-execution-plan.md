@@ -38,6 +38,10 @@ GROUP BY c.customer_id, c.full_name;
 
 ## Cách đọc một plan
 
+> **"Node" là gì?** Mỗi dòng bắt đầu bằng `->` trong plan là một **node** — tức một *bước xử lý* mà database sẽ làm: quét một bảng, ghép hai kết quả, sắp xếp, gom nhóm. Mỗi node nhận dữ liệu từ các node con bên dưới, xử lý, rồi đẩy kết quả lên node cha. Toàn bộ plan là một cái cây gồm những bước như vậy, và dòng trên cùng (không có `->`) là bước cuối cùng trả kết quả về cho bạn.
+>
+> **Mức thụt lề = quan hệ cha con.** Node thụt sâu hơn là con của node ngay phía trên nó ở mức thụt nông hơn.
+
 Plan là một **cây**, và quy tắc đọc là: **từ trong ra ngoài, từ dưới lên trên**. Node thụt lề sâu nhất chạy trước; kết quả của nó chảy lên node cha.
 
 ```text

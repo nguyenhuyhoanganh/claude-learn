@@ -167,6 +167,23 @@ Thời điểm  Request A                    Request B
 
 Khoảng trống giữa "kiểm tra" và "hành động" là nơi bug sinh ra. Không có mức isolation nào ở tầng mặc định đóng được khoảng trống này — phải để database xử lý nguyên tử.
 
+> **"Race condition" và "nguyên tử" nghĩa là gì?**
+>
+> **Race condition** (đua tranh) là tình huống mà **kết quả phụ thuộc vào việc hai tiến trình chạy nhanh chậm ra sao**. Tên gọi đến từ hình ảnh hai người cùng chạy đua tới một đích: ai tới trước thay đổi hoàn toàn kết quả. Đặc điểm khó chịu nhất của loại bug này: nó **không tái hiện được** khi bạn thử tay, vì lúc đó chỉ có một mình bạn chạy. Nó chỉ xuất hiện khi có tải thật, và thường là vào giờ cao điểm.
+>
+> **Nguyên tử** (*atomic*) nghĩa là thao tác **không thể bị chen ngang giữa chừng**. Nó hoặc chưa xảy ra, hoặc đã xong hoàn toàn — không có trạng thái nửa vời cho tiến trình khác nhìn thấy.
+>
+> ```text
+> KHÔNG nguyên tử (2 bước rời)        NGUYÊN TỬ (1 bước)
+> ─────────────────────────────       ──────────────────────────────
+> ① SELECT xem đã có chưa             ① INSERT ... ON CONFLICT ...
+>    ← KHE HỞ ở đây: tiến trình
+>      khác chen vào được                 Không có khe hở nào để chen.
+> ② INSERT                                Database tự đảm bảo.
+> ```
+>
+> Nguyên tắc chung rút ra được, áp dụng cho mọi bài toán đồng thời: **đừng tách "kiểm tra" và "hành động" thành hai câu lệnh**. Hãy gộp chúng thành một câu lệnh duy nhất và để database lo phần còn lại.
+
 ### Cách đúng: `ON CONFLICT` (PostgreSQL)
 
 ```sql

@@ -37,6 +37,54 @@ WHERE o.status = 'paid';                     -- điều kiện đặt ở WHERE
 
 Từ 5 khách còn đúng **1 khách**. Khách D, E bị bù NULL ở bước 2, sang bước 3 gặp `WHERE o.status = 'paid'` → `NULL = 'paid'` cho `UNKNOWN` → bị loại. Khách B, C có đơn nhưng không đơn nào `paid` → cũng bị loại. Chữ `LEFT` bạn viết ra trở nên **vô nghĩa**.
 
+#### Xem từng dòng bị loại ở đâu
+
+Để thấy rõ, hãy tách làm hai ảnh chụp: kết quả **ngay sau khi `LEFT JOIN` xong** (đã bù NULL), rồi mới đến lúc `WHERE` ra tay.
+
+**Ảnh 1 — sau bước 2 (JOIN + bù NULL), trước khi `WHERE` chạy:**
+
+```text
+┌─────┬───────────┬──────────┬───────────┐
+│ id  │ full_name │ order_id │  status   │
+├─────┼───────────┼──────────┼───────────┤
+│  1  │ Khach A   │    1     │ paid      │
+│  1  │ Khach A   │    2     │ paid      │
+│  2  │ Khach B   │    3     │ cancelled │
+│  2  │ Khach B   │    4     │ shipped   │
+│  3  │ Khach C   │    5     │ pending   │
+│  4  │ Khach D   │  [NULL]  │  [NULL]   │  ← dòng do LEFT JOIN bù ra
+│  5  │ Khach E   │  [NULL]  │  [NULL]   │  ← dòng do LEFT JOIN bù ra
+└─────┴───────────┴──────────┴───────────┘
+   7 dòng — đủ cả 5 khách. Tới đây LEFT JOIN vẫn đang làm đúng việc của nó.
+```
+
+**Ảnh 2 — `WHERE o.status = 'paid'` xét từng dòng của bảng trên:**
+
+```text
+ dòng              biểu thức được tính        kết quả    số phận
+─────────────────  ─────────────────────────  ─────────  ──────────
+ A / order 1       'paid'      = 'paid'        TRUE       GIỮ
+ A / order 2       'paid'      = 'paid'        TRUE       GIỮ
+ B / order 3       'cancelled' = 'paid'        FALSE      loại
+ B / order 4       'shipped'   = 'paid'        FALSE      loại
+ C / order 5       'pending'   = 'paid'        FALSE      loại
+ D / [NULL]         NULL       = 'paid'        UNKNOWN    loại  ◀── điểm mấu chốt
+ E / [NULL]         NULL       = 'paid'        UNKNOWN    loại  ◀──
+```
+
+Hai dòng cuối là nơi mọi chuyện đổ vỡ. Ô `status` của Khach D **không chứa chuỗi nào cả** — nó chứa `NULL`, tức "không có gì ở đây". Mà so sánh "không có gì" với `'paid'` thì SQL không thể kết luận đúng hay sai, nên trả về `UNKNOWN`.
+
+Và đây là luật cứng của `WHERE`:
+
+```text
+WHERE chỉ giữ lại dòng có kết quả TRUE.
+FALSE bị loại. UNKNOWN cũng bị loại — y hệt FALSE.
+```
+
+Nên hai dòng vừa được `LEFT JOIN` cất công bù ra ở bước 2 thì bị `WHERE` xoá sạch ở bước 3. Công sức của chữ `LEFT` bị vô hiệu hoá ngay câu tiếp theo.
+
+**Kết luận về mặt cơ chế**: bất kỳ điều kiện nào ở `WHERE` áp lên cột của bảng phải cũng sẽ giết chết các dòng bù NULL — vì mọi so sánh với `NULL` đều cho `UNKNOWN`. Điều này đúng với `=`, `<>`, `>`, `LIKE`, `IN`, không có ngoại lệ. Hệ quả là `LEFT JOIN` bị **giáng cấp thành `INNER JOIN`**, và optimizer thậm chí còn nhận ra điều đó rồi tự viết lại thành `INNER JOIN` cho nhanh hơn — bạn sẽ thấy `Hash Join` chứ không phải `Hash Left Join` trong `EXPLAIN`.
+
 ### Đặt ở ON — LEFT JOIN giữ đúng bản chất
 
 ```sql
@@ -130,7 +178,40 @@ Khách A: đơn 1 có 2 sản phẩm nên `1,850,000` bị cộng hai lần → 
 
 ### Ba cách sửa đúng
 
+Trước khi xem cách sửa, cần nắm một khái niệm giải thích **vì sao** fanout xảy ra.
+
+#### "Grain" — mức chi tiết của một bảng
+
+**Grain** (mức chi tiết) trả lời câu hỏi: *"một dòng của bảng này đại diện cho cái gì?"*
+
+```text
+Bảng orders       →  grain = MỘT ĐƠN HÀNG
+                     order 1 = một đơn duy nhất, có total_amount = 1,850,000
+
+Bảng order_items  →  grain = MỘT DÒNG SẢN PHẨM TRONG MỘT ĐƠN
+                     order 1 có 2 dòng: bàn phím và chuột
+```
+
+Hai bảng này ở **hai mức chi tiết khác nhau**. Quan hệ giữa chúng là **1-N** (một đơn có nhiều dòng sản phẩm). Và đây là quy luật:
+
+```text
+Khi JOIN hai bảng khác grain, kết quả luôn nhận grain MỊN HƠN.
+
+orders (grain: đơn)  JOIN  order_items (grain: dòng sản phẩm)
+                              ↓
+                  kết quả có grain = DÒNG SẢN PHẨM
+
+→ Mọi cột thuộc về mức "đơn hàng" (như total_amount) bị LẶP LẠI
+  đúng bằng số dòng sản phẩm của đơn đó.
+```
+
+Nên `SUM(o.total_amount)` sai không phải vì `SUM` hỏng, mà vì bạn đang cộng một giá trị **thuộc mức đơn hàng** trên một bảng **có mức dòng sản phẩm**. Nói được câu này khi phỏng vấn là câu trả lời ở tầng tư duy, không phải tầng mẹo.
+
+Từ đó suy ra nguyên tắc sửa lỗi: **đưa hai bảng về cùng grain trước khi join**. Đó chính là điều cách 1 làm.
+
 **Cách 1 — Gom trước, join sau (tốt nhất, rõ ràng nhất)**
+
+> **Cú pháp `WITH ... AS (...)` là gì?** Đây là **CTE** (Common Table Expression — biểu thức bảng dùng chung): một cách đặt tên cho kết quả trung gian, dùng lại ngay trong câu lệnh đó. Hiểu đơn giản: nó tạo ra một "bảng tạm" chỉ tồn tại trong lúc câu lệnh chạy, giúp bạn tách query thành từng bước có tên thay vì lồng subquery vào nhau. Ở đây `item_stats` là bảng tạm chứa thống kê đã gom về **một dòng cho mỗi đơn**. CTE được dạy đầy đủ ở [phase-2 bài 2](../phase-2/02-cte-va-recursive-cte.md).
 
 ```sql
 WITH item_stats AS (                       -- gom về đúng 1 dòng / order
@@ -293,7 +374,13 @@ JOIN price_history AS ph
 
 ## Database thật sự join thế nào: ba thuật toán
 
-Câu hỏi *"database thực hiện JOIN ra sao?"* thuộc tầng senior. Có ba thuật toán chính:
+Câu hỏi *"database thực hiện JOIN ra sao?"* thuộc tầng senior. Có ba thuật toán chính.
+
+> **"Hash table" là gì?** Nó xuất hiện trong tên `hash join` nên cần hiểu trước. Hash table (bảng băm) là cấu trúc tra cứu cực nhanh: đưa vào một giá trị khoá, nó tính ra ngay vị trí lưu, không phải dò tuần tự. Giống như thay vì lật từng trang danh bạ để tìm số, bạn có công thức tính thẳng ra trang cần lật. Chi phí tra cứu gần như không đổi dù bảng có bao nhiêu phần tử — ký hiệu là `O(1)`.
+>
+> Điểm yếu quyết định: hash chỉ trả lời được câu hỏi **"có đúng bằng giá trị này không?"**. Nó không sắp xếp gì cả, nên **không** dùng được cho `>`, `<`, `BETWEEN`. Đó chính là lý do hash join chỉ hoạt động với điều kiện `=`, còn non-equi join phải dùng thuật toán khác.
+
+Ba thuật toán:
 
 ```text
 1. NESTED LOOP JOIN
