@@ -36,18 +36,28 @@ Ví dụ code chủ yếu dùng **Java/Spring Boot** vì đây là stack mà mô
   Sửa tận gốc bằng kiến trúc       →  phase-5 (scaling)
 ```
 
-| Phase | Chủ đề | Bạn học được gì |
-|---|---|---|
-| **phase-1** | Nền tảng: đường đi của một request | Hiểu chính xác `max-connections`, `accept-count`, `max-threads` là gì; latency/throughput; định luật Little; vì sao hệ thống "đang ổn" bỗng sập trong 30 giây |
-| **phase-2** | Case cạn kiệt thread pool & connection pool | 7 case kinh điển làm treo toàn bộ service, từ downstream chậm đến pool lồng pool gây deadlock |
-| **phase-3** | Case khoá database (lock) | Row lock, table lock, deadlock, hot row, transaction dài, optimistic vs pessimistic |
-| **phase-4** | Case sập dây chuyền (cascading failure) | Retry storm, cache stampede, thiếu timeout, circuit breaker, bulkhead, load shedding |
-| **phase-5** | Case scaling kiến trúc | Scale dọc/ngang, tách service theo nút thắt, async hoá bằng queue, read replica, idempotency |
+| Phase | Số bài | Chủ đề | Bạn học được gì |
+|---|---|---|---|
+| **phase-1** | 6 | Nền tảng: đường đi của một request | Hiểu chính xác `max-connections`, `accept-count`, `threads.max` là gì; latency/throughput/p99; định luật Little; lý thuyết hàng đợi; cách đọc thread dump |
+| **phase-2** | 8 | Case cạn kiệt thread pool & connection pool | Downstream chậm giam thread, HikariCP timeout, thiếu timeout, pool lồng pool gây deadlock, bulkhead, lock trong JVM, hàng đợi vô hạn, virtual thread |
+| **phase-3** | 9 | Case khoá database | Row/table lock, transaction dài, deadlock, hot row, optimistic vs pessimistic, double booking, gap lock, N+1, thiếu index |
+| **phase-4** | 8 | Case sập dây chuyền | Retry storm, cache stampede, circuit breaker, load shedding, hot key, health check death spiral, metastable failure, phụ thuộc bên thứ ba |
+| **phase-5** | 7 | Case scaling kiến trúc | Scale dọc/ngang, stateless, tách service, async hoá bằng queue, read replica, sharding, idempotency |
+| **phase-6** | 10 | Case lạ mà thật (runtime & hạ tầng) | GC pause, CPU throttling, cạn port/fd, DNS, logging chặn thread, head-of-line blocking, cold start, đồng bộ hoá vô tình, đồng hồ lệch, **playbook tổng kết** |
+
+**Tổng: 48 bài, 49 case.**
+
+## Tài liệu đi kèm
+
+- **[Từ điển thuật ngữ](00-thuat-ngu.md)** — định nghĩa tiếng Việt cho **mọi** thuật ngữ tiếng Anh xuất hiện trong khoá, kèm chỉ dẫn tới bài học sâu. Gặp từ lạ thì tra ở đây.
+- **[Playbook chẩn đoán](phase-6-runtime-ha-tang/10-tong-ket-playbook.md)** — bảng tra triệu chứng → nguyên nhân, quy trình xử lý sự cố 15 phút, và một file cấu hình production hoàn chỉnh **chú thích từng dòng**.
 
 ## Cách đọc hiệu quả
 
 - **Đọc tuần tự phase-1 trước.** Từ phase-2 trở đi mọi case đều dùng lại từ vựng của phase-1. Bỏ qua phase-1 sẽ thấy các bài sau như đọc tiếng nước ngoài.
 - **Mỗi bài đều tự đứng được.** Đọc xong một bài là có một mảnh kiến thức trọn vẹn, dùng được ngay.
+- **Mọi thuật ngữ tiếng Anh đều được định nghĩa ngay lần đầu xuất hiện**, và tra lại được ở từ điển. Không cần biết trước gì cả.
+- **Mọi đoạn cấu hình đều có chú thích từng tham số** — đọc chú thích để hiểu *vì sao*, đừng copy nguyên xi.
 - **Các con số trong bài là số mặc định thật** của Tomcat 10 / Spring Boot 3, HikariCP, PostgreSQL 16, MySQL 8. Hãy tự kiểm chứng trên hệ thống của bạn — mỗi phiên bản có thể lệch chút ít.
 
 ## Câu chuyện mở đầu — case gốc của cả khoá

@@ -217,15 +217,24 @@ public WebClient webClient() {
 feign:
   client:
     config:
+      # `default` áp dụng cho MỌI Feign client không được cấu hình riêng.
       default:
-        connect-timeout: 500
-        read-timeout: 2000
-      inventoryService:            # ghi đè cho từng service
-        connect-timeout: 300
-        read-timeout: 1000
+        connect-timeout: 500       # ms — thời gian bắt tay TCP tới đích
+        read-timeout: 2000         # ms — thời gian chờ GIỮA HAI GÓI dữ liệu về
+      # Tên ở đây phải khớp với giá trị `name` trong @FeignClient(name = "...")
+      inventoryService:
+        connect-timeout: 300       # inventory ở gần, bắt tay phải nhanh
+        read-timeout: 1000         # p99 của nó ~400ms → timeout 1s là hợp lý
   httpclient:
+    # Bật Apache HttpClient thay cho HttpURLConnection mặc định của Feign.
+    # Cần thiết để có connection pool (tái sử dụng kết nối, tránh cạn port).
     enabled: true
+    # Tổng số kết nối trong pool, dùng chung cho mọi đích.
     max-connections: 200
+    # Số kết nối tối đa tới MỖI host đích.
+    # MẶC ĐỊNH CỦA APACHE LÀ 5 — nút thắt ẩn kinh điển: dù có 200 thread,
+    # chỉ 5 request cùng lúc được gửi tới mỗi service, 195 cái xếp hàng
+    # mà KHÔNG có log nào báo.
     max-connections-per-route: 50
 ```
 
@@ -269,12 +278,23 @@ SET GLOBAL wait_timeout = 600;
 spring:
   data:
     redis:
-      timeout: 500ms                # mặc định 60 GIÂY — quá dài cho Redis
+      # Thời gian chờ MỘT LỆNH Redis trả về kết quả.
+      # Mặc định của Lettuce là 60 GIÂY. Redis bình thường trả lời trong 1 ms;
+      # quá 500 ms nghĩa là có gì đó rất sai (ai đó chạy KEYS *, hoặc lệnh SAVE
+      # đang chặn) — chờ thêm cũng vô ích, chỉ tổ giam thread.
+      timeout: 500ms
+
+      # Thời gian bắt tay TCP tới Redis.
       connect-timeout: 300ms
+
       lettuce:
         pool:
+          # Số kết nối tối đa trong pool tới Redis.
           max-active: 50
-          max-wait: 200ms           # mặc định -1 = chờ vô hạn!
+          # Chờ mượn kết nối từ pool bao lâu.
+          # MẶC ĐỊNH LÀ -1 = CHỜ VÔ HẠN — phải đổi, nếu không một Redis chậm
+          # sẽ giam toàn bộ thread của ứng dụng.
+          max-wait: 200ms
 ```
 
 Redis bình thường trả lời trong 1 ms. Nếu quá 500 ms nghĩa là có gì đó rất sai (ai đó chạy `KEYS *`, hoặc `SAVE` đang chặn) — chờ thêm cũng vô ích.

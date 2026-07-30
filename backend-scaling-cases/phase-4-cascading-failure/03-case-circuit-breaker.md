@@ -61,18 +61,49 @@ resilience4j:
   circuitbreaker:
     instances:
       paymentService:
+        # Cách đếm: COUNT_BASED = N lời gọi gần nhất.
+        # TIME_BASED = mọi lời gọi trong N giây gần nhất (dùng khi traffic thưa).
         sliding-window-type: COUNT_BASED
+
+        # Cỡ cửa sổ quan sát.
         sliding-window-size: 100
+
+        # Số mẫu tối thiểu trước khi được phép ra quyết định mở mạch.
+        # Đặt khoảng 20-30% của sliding-window-size.
         minimum-number-of-calls: 20
+
+        # Tỉ lệ lỗi (%) để mở mạch. Chọn theo mức quan trọng của downstream:
+        # dịch vụ phụ 30% (hy sinh sớm) · thường 50% · sống còn 70% (cố tới cùng).
         failure-rate-threshold: 50
+
+        # Lời gọi lâu hơn ngưỡng này bị ĐẾM LÀ LỖI dù trả về thành công.
+        # Đặt bằng p99 bình thường của downstream × 2.
         slow-call-duration-threshold: 2s
+
+        # Tỉ lệ lời gọi "chậm" để mở mạch.
         slow-call-rate-threshold: 50
+
+        # Mạch giữ trạng thái OPEN bao lâu trước khi cho thử lại.
         wait-duration-in-open-state: 30s
+
+        # Ở trạng thái HALF_OPEN, cho bao nhiêu lời gọi đi thăm dò
+        # trước khi quyết định đóng mạch lại hay mở tiếp.
         permitted-number-of-calls-in-half-open-state: 5
+
+        # Tự chuyển OPEN → HALF_OPEN khi hết thời gian, không cần chờ
+        # có request tới mới chuyển. Cần một thread nền, nhưng phản ứng nhanh hơn.
         automatic-transition-from-open-to-half-open-enabled: true
+
+        # record-exceptions: DANH SÁCH TRẮNG — chỉ những exception này
+        # được tính vào tỉ lệ lỗi. Nếu khai báo, mọi exception khác bị bỏ qua.
         record-exceptions:
           - java.io.IOException
           - java.util.concurrent.TimeoutException
+
+        # ignore-exceptions: DANH SÁCH ĐEN — những exception KHÔNG bao giờ
+        # được tính là lỗi. Lỗi nghiệp vụ (nhập sai mã giảm giá, không tìm thấy)
+        # là lỗi của NGƯỜI GỌI, không có nghĩa là service đang hỏng.
+        # Đếm chúng sẽ mở mạch oan đúng lúc service vẫn khoẻ.
         ignore-exceptions:
           - com.shop.BusinessValidationException
 ```

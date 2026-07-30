@@ -260,22 +260,58 @@ Việc số 7 nằm cuối danh sách là có chủ ý. Nó chỉ đúng khi b�
 ```yaml
 spring:
   jpa:
+    # Không giữ connection database suốt cả request HTTP (xem phần trên).
     open-in-view: false
     properties:
       hibernate:
+        # Gộp tối đa 50 câu INSERT/UPDATE thành một lần gửi xuống database,
+        # thay vì gửi từng câu một (giảm mạnh số round-trip mạng).
         jdbc.batch_size: 50
+        # Sắp xếp các câu lệnh theo bảng trước khi gửi.
+        # Nếu các câu xen kẽ giữa nhiều bảng thì Hibernate KHÔNG gộp được,
+        # nên hai dòng này là điều kiện để batch_size ở trên thực sự có tác dụng.
         order_inserts: true
         order_updates: true
 
   datasource:
     hikari:
-      maximum-pool-size: 15          # theo công thức, chia cho số instance
-      minimum-idle: 15               # = maximum: tránh tạo connection lúc cao điểm
-      connection-timeout: 3000       # 3s: fail nhanh, đừng để user chờ 30s
+      # Số connection tối đa tới database.
+      # Công thức: (số core của DB × 2) + số ổ đĩa, rồi CHIA cho số instance app.
+      # Pool LỚN không nhanh hơn — database không xử lý song song nhiều thế;
+      # nó chỉ làm latency mỗi query xấu đi.
+      maximum-pool-size: 15
+
+      # Số connection tối thiểu luôn giữ sẵn.
+      # Đặt BẰNG maximum-pool-size để pool cố định — không phải mở connection mới
+      # (tốn 20-50 ms mỗi cái) đúng lúc traffic tăng đột ngột.
+      minimum-idle: 15
+
+      # Chờ mượn connection từ pool bao lâu trước khi ném exception.
+      # Mặc định là 30 giây — quá dài, người dùng đã bỏ đi từ lâu.
+      connection-timeout: 3000
+
+      # Thời gian tối đa để kiểm tra một connection còn sống trước khi đưa ra dùng.
       validation-timeout: 1000
-      idle-timeout: 600000           # 10 phút
-      max-lifetime: 1200000          # 20 phút — PHẢI nhỏ hơn timeout của DB/LB
+
+      # Connection nhàn rỗi quá lâu thì đóng bớt.
+      # Chỉ có tác dụng khi minimum-idle < maximum-pool-size.
+      idle-timeout: 600000
+
+      # Tuổi thọ tối đa của một connection, sau đó bị thay mới.
+      # PHẢI NHỎ HƠN mọi timeout nằm giữa app và database:
+      #   wait_timeout của MySQL, idle timeout của load balancer
+      #   (AWS NLB chỉ 350 giây!), timeout của firewall.
+      # Nếu lớn hơn, pool sẽ đưa cho bạn connection đã bị bên kia đóng lặng lẽ
+      # → lỗi "Connection reset" ngẫu nhiên, rất khó chẩn đoán.
+      max-lifetime: 1200000
+
+      # Nếu một connection bị giữ quá 20 giây mà chưa trả về pool,
+      # HikariCP in CẢNH BÁO KÈM STACK TRACE chỉ đúng dòng code đang giữ nó.
+      # Đây là công cụ tìm rò rỉ connection tốt nhất — nên bật ở staging và production.
       leak-detection-threshold: 20000
+
+      # Tên pool hiển thị trong log và metric. Đặt tên có ý nghĩa
+      # để phân biệt khi có nhiều pool (api / batch / report).
       pool-name: main-pool
 ```
 
@@ -328,12 +364,30 @@ Khi bạn có 50 pod, mỗi pod pool 10 = 500 connection, PostgreSQL không ch�
 
 ```ini
 [databases]
+# Định nghĩa một "database ảo" tên `shop` mà ứng dụng sẽ kết nối tới.
+# PgBouncer nhận kết nối ở đây rồi chuyển tiếp tới PostgreSQL thật.
 shop = host=postgres port=5432 dbname=shop
 
 [pgbouncer]
-pool_mode = transaction        # chế độ quan trọng nhất
-max_client_conn = 1000         # app kết nối vào bao nhiêu cũng được
-default_pool_size = 20         # nhưng chỉ 20 connection thật tới DB
+# pool_mode: connection thật được "gán" cho client trong bao lâu.
+#   session     = cả phiên kết nối  → gần như không tiết kiệm gì
+#   transaction = chỉ trong một transaction → tiết kiệm nhiều nhất, dùng phổ biến
+#   statement   = chỉ một câu lệnh → tiết kiệm tối đa nhưng không dùng được transaction
+pool_mode = transaction
+
+# Số kết nối tối đa mà các ỨNG DỤNG được phép mở tới PgBouncer.
+# Đây là con số "ảo" — rất lớn cũng không sao vì kết nối tới PgBouncer rất rẻ.
+max_client_conn = 1000
+
+# Số kết nối THẬT tối đa mà PgBouncer mở tới PostgreSQL cho mỗi database.
+# Đây mới là con số quan trọng — nó bảo vệ PostgreSQL khỏi quá tải.
+default_pool_size = 20
+
+# Số kết nối dự phòng thêm khi pool chính đã đầy (mặc định 0).
+reserve_pool_size = 5
+
+# Sau bao nhiêu giây chờ thì mới được dùng tới reserve pool.
+reserve_pool_timeout = 3
 ```
 
 Ba chế độ pool, khác nhau rất lớn:

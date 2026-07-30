@@ -5,13 +5,36 @@ Mở file `application.yml` của một dự án Spring Boot bất kỳ, 95% kh�
 ```yaml
 server:
   tomcat:
-    max-connections: 8192       # nhận tối đa 8192 kết nối cùng lúc
-    accept-count: 100           # hàng chờ của hệ điều hành
+    # Số kết nối TCP Tomcat đồng ý GIỮ đồng thời.
+    # "Giữ" khác "xử lý" — kết nối đang mở mà chưa có dữ liệu thì không tốn thread nào.
+    max-connections: 8192
+
+    # Sức chứa hàng đợi của HỆ ĐIỀU HÀNH (accept queue), chứa các kết nối
+    # đã bắt tay TCP xong nhưng Tomcat chưa kịp nhận.
+    # Hàng này đầy thì kernel TỪ CHỐI THẲNG kết nối mới.
+    accept-count: 100
+
     threads:
-      max: 200                  # 200 luồng xử lý thật sự
-      min-spare: 10             # luôn giữ sẵn 10 luồng
-    connection-timeout: 20000ms # 20 giây
+      # Số luồng xử lý TỐI ĐA — đây là giới hạn thật sự về số request
+      # được chạy SONG SONG. Con số quan trọng nhất trong cả nhóm này.
+      max: 200
+
+      # Số luồng LUÔN giữ sẵn kể cả lúc không có traffic.
+      # Tạo thêm luồng mới tốn thời gian, nên giữ sẵn giúp burst đầu tiên đỡ chậm.
+      min-spare: 10
+
+    # Chờ client gửi dòng request ĐẦU TIÊN bao lâu sau khi kết nối đã mở.
+    # Đây là tuyến phòng thủ trước tấn công Slowloris (gửi dữ liệu nhỏ giọt
+    # để chiếm hết kết nối).
+    connection-timeout: 20000ms
+
+    # Giữ kết nối mở bao lâu SAU KHI đã trả response, chờ request tiếp theo
+    # trên cùng kết nối đó (tiết kiệm chi phí bắt tay TCP).
     keep-alive-timeout: 20000ms
+
+    # Một kết nối được tái sử dụng tối đa bao nhiêu lần rồi bị đóng.
+    # Đặt -1 = không giới hạn, nhưng khi đó kết nối "dính" mãi vào một instance
+    # và traffic không tự chuyển sang instance mới khi bạn scale ra.
     max-keep-alive-requests: 100
 ```
 

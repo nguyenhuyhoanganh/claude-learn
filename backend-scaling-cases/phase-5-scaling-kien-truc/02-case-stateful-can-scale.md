@@ -59,10 +59,22 @@ public Cart getCart(HttpSession session) {
 ```yaml
 spring:
   session:
+    # Nơi lưu session. `redis` = Spring Session thay thế HttpSession mặc định
+    # bằng bản lưu trong Redis, trong suốt với code nghiệp vụ.
     store-type: redis
+
+    # Session hết hạn sau bao lâu không hoạt động.
     timeout: 30m
+
     redis:
+      # Tiền tố cho mọi khoá session trong Redis.
+      # Cần thiết khi nhiều ứng dụng dùng chung một Redis — tránh đụng khoá.
       namespace: myapp:session
+
+      # Khi nào ghi thay đổi xuống Redis:
+      #   on_save   = chỉ ghi một lần vào cuối request (ít round-trip, mặc định)
+      #   immediate = ghi ngay mỗi lần setAttribute (nhiều round-trip hơn,
+      #               nhưng an toàn hơn nếu request có thể bị ngắt giữa chừng)
       flush-mode: on_save
 ```
 

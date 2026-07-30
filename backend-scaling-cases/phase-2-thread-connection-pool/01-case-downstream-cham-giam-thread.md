@@ -223,13 +223,34 @@ resilience4j:
   circuitbreaker:
     instances:
       paymentService:
+        # COUNT_BASED = quyết định dựa trên N lời gọi GẦN NHẤT.
+        # (Dùng TIME_BASED nếu traffic thưa — xem phase-4 case 3.)
         sliding-window-type: COUNT_BASED
-        sliding-window-size: 20            # xét 20 lời gọi gần nhất
-        minimum-number-of-calls: 10        # cần ít nhất 10 mẫu mới quyết định
-        failure-rate-threshold: 50         # >50% lỗi → mở mạch
-        slow-call-duration-threshold: 1s   # coi >1s là "lỗi chậm"
-        slow-call-rate-threshold: 50       # >50% chậm → cũng mở mạch
+
+        # Cỡ cửa sổ: xét 20 lời gọi gần nhất để tính tỉ lệ lỗi.
+        sliding-window-size: 20
+
+        # Cần ít nhất 10 mẫu mới được phép mở mạch.
+        # Chống việc "2 lỗi trên 2 lời gọi = 100% lỗi" → mở mạch oan.
+        minimum-number-of-calls: 10
+
+        # Tỉ lệ lỗi (%) vượt ngưỡng này thì MỞ MẠCH.
+        failure-rate-threshold: 50
+
+        # Lời gọi lâu hơn 1 giây được ĐẾM LÀ LỖI, dù nó trả về 200 OK.
+        # Đây là tham số quan trọng nhất: service CHẬM giam thread,
+        # nguy hiểm hơn service CHẾT (chết thì trả lỗi ngay, thread được thả).
+        slow-call-duration-threshold: 1s
+
+        # Trên 50% lời gọi bị coi là "chậm" thì cũng mở mạch.
+        slow-call-rate-threshold: 50
+
+        # Mạch mở bao lâu trước khi thử lại (chuyển sang HALF_OPEN).
+        # Quá ngắn thì không cho downstream thời gian hồi phục.
         wait-duration-in-open-state: 30s
+
+        # Ở trạng thái HALF_OPEN, cho bao nhiêu lời gọi đi "thăm dò".
+        # Ít thôi — để không dội toàn bộ tải vào service vừa mới sống lại.
         permitted-number-of-calls-in-half-open-state: 3
 ```
 
@@ -257,8 +278,15 @@ resilience4j:
   bulkhead:
     instances:
       paymentService:
-        max-concurrent-calls: 20     # tối đa 20 request đồng thời tới payment
-        max-wait-duration: 0         # đủ 20 rồi thì từ chối NGAY, không xếp hàng
+        # Số lời gọi ĐỒNG THỜI tối đa tới payment-service.
+        # Dù payment treo hoàn toàn, chỉ 20 thread bị giam;
+        # 180 thread còn lại vẫn phục vụ các endpoint khác.
+        max-concurrent-calls: 20
+
+        # Hết chỗ thì chờ bao lâu để xin một suất.
+        # ĐẶT 0 — nếu cho chờ, thread vẫn bị giam trong lúc chờ
+        # và bulkhead mất sạch tác dụng. Từ chối ngay là đúng.
+        max-wait-duration: 0
 ```
 
 ```java
@@ -341,33 +369,49 @@ Bẫy cuối cùng đáng nói thêm: nếu `/health` của bạn kiểm tra c�
 server:
   tomcat:
     threads:
-      max: 150
-    connection-timeout: 5s
+      max: 150                    # số luồng xử lý song song (xem phase-1 bài 4 để tính)
+    connection-timeout: 5s         # chờ client gửi request đầu tiên; chống Slowloris
 
 resilience4j:
   circuitbreaker:
+    # `configs.default` là một BỘ THAM SỐ DÙNG CHUNG.
+    # Các instance bên dưới kế thừa nó qua `base-config: default`,
+    # nên không phải lặp lại cấu hình cho từng downstream.
     configs:
       default:
-        sliding-window-size: 20
-        minimum-number-of-calls: 10
-        failure-rate-threshold: 50
-        slow-call-duration-threshold: 1s
-        slow-call-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 20                   # xét 20 lời gọi gần nhất
+        minimum-number-of-calls: 10               # cần ≥10 mẫu mới được mở mạch
+        failure-rate-threshold: 50                # >50% lỗi → mở mạch
+        slow-call-duration-threshold: 1s          # >1s được tính là "lỗi chậm"
+        slow-call-rate-threshold: 50              # >50% chậm → cũng mở mạch
+        wait-duration-in-open-state: 30s          # mở mạch 30s rồi mới thử lại
+        permitted-number-of-calls-in-half-open-state: 3   # số lời gọi thăm dò
+        # Đưa trạng thái cầu dao vào /actuator/health để nhìn thấy được.
+        # Lưu ý: nếu readiness probe dùng chung endpoint đó, cầu dao mở sẽ
+        # khiến pod bị rút khỏi load balancer — thường KHÔNG phải điều bạn muốn.
         register-health-indicator: true
     instances:
+      # Mỗi downstream một cầu dao RIÊNG — nếu dùng chung, email hỏng
+      # sẽ chặn luôn cả thanh toán.
       paymentService: { base-config: default }
       inventoryService: { base-config: default }
 
   bulkhead:
     instances:
+      # Chia hạn ngạch thread theo mức quan trọng nghiệp vụ.
+      # inventory được nhiều hơn payment vì thiếu nó thì không bán được hàng.
       paymentService:   { max-concurrent-calls: 20, max-wait-duration: 0 }
       inventoryService: { max-concurrent-calls: 30, max-wait-duration: 0 }
 
   timelimiter:
     instances:
-      paymentService:   { timeout-duration: 2s, cancel-running-future: true }
+      paymentService:
+        # Giới hạn TỔNG thời gian một lời gọi. Cần thiết vì read timeout
+        # chỉ đo khoảng cách GIỮA HAI GÓI TIN — server trả nhỏ giọt
+        # sẽ không bao giờ chạm read timeout nhưng vẫn giam thread mãi.
+        timeout-duration: 2s
+        # Huỷ thật tác vụ đang chạy khi hết giờ, không chỉ trả lỗi cho người gọi.
+        cancel-running-future: true
 ```
 
 ```java

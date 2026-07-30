@@ -210,27 +210,43 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: order-service
+  # Số pod tối thiểu — luôn giữ ít nhất 3 để chịu được việc mất 1 pod.
   minReplicas: 3
+  # Số pod tối đa. Nếu database là nút thắt, giới hạn con số này theo
+  # max_connections: maxReplicas × maximum-pool-size phải < max_connections.
   maxReplicas: 30
+
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
+          # Utilization = tính theo % của `requests.cpu`, không phải % của limit.
           type: Utilization
-          averageUtilization: 60        # 60%, không phải 90% (phase-1 bài 5)
+          # Ngưỡng 60%: khi CPU trung bình vượt 60% thì thêm pod.
+          # Không đặt 90% — vì lý thuyết hàng đợi cho biết ở 90% tải
+          # latency đã gấp 10 lần, và pod mới cần 60-180 giây mới sẵn sàng.
+          averageUtilization: 60
+
+  # `behavior` điều khiển TỐC ĐỘ scale — phần hay bị bỏ qua nhất.
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 30     # phản ứng nhanh khi tải tăng
+      # Nhìn lại 30 giây gần nhất để quyết định tăng.
+      # Ngắn = phản ứng nhanh khi tải tăng (thiếu pod thì mất dịch vụ).
+      stabilizationWindowSeconds: 30
       policies:
         - type: Percent
-          value: 100                     # tối đa gấp đôi mỗi 30 giây
-          periodSeconds: 30
+          value: 100                     # được phép GẤP ĐÔI số pod...
+          periodSeconds: 30              # ...mỗi 30 giây
     scaleDown:
-      stabilizationWindowSeconds: 300    # giảm CHẬM để tránh dao động
+      # Nhìn lại 300 giây trước khi quyết định giảm.
+      # Dài = giảm CHẬM, tránh dao động lên xuống liên tục (flapping).
+      # Bất đối xứng có chủ ý: tăng thiếu thì mất dịch vụ,
+      # giảm chậm chỉ tốn thêm chút tiền.
+      stabilizationWindowSeconds: 300
       policies:
         - type: Percent
-          value: 20
+          value: 20                      # mỗi lần chỉ bớt tối đa 20% số pod
           periodSeconds: 60
 ```
 
