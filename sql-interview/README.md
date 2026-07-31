@@ -2,7 +2,9 @@
 
 > "8/10 ứng viên data bị loại ngay tại vòng SQL. Không phải vì họ kém, mà vì trượt đúng vài câu hỏi kinh điển."
 
-Series này bắt đầu từ ba câu hỏi kinh điển nhất (JOIN, GROUP BY/HAVING, window function), rồi đi tiếp tới những thứ mà người phỏng vấn **thật sự** dùng để phân loại ứng viên: subquery, CTE, đọc execution plan, tối ưu query, và các case thực chiến bạn sẽ gặp mỗi ngày khi đi làm.
+Series này bắt đầu từ ba câu hỏi kinh điển nhất (JOIN, GROUP BY/HAVING, window function), rồi đi tiếp tới những thứ mà người phỏng vấn **thật sự** dùng để phân loại ứng viên: subquery, CTE, đọc execution plan, tối ưu query, thiết kế kiểu dữ liệu, an toàn dữ liệu, database trong hệ thống thật (replica, sharding, hàng đợi), và các case thực chiến bạn sẽ gặp mỗi ngày khi đi làm.
+
+Phần cuối series (phase 9) dạy thứ ít tài liệu nào nói: **cách trả lời**. Vì đa số câu hỏi phỏng vấn là một cái thang bốn bậc, và đáp án đúng ở bậc một vẫn khiến bạn trượt.
 
 Mỗi bài đều có: giải thích **từng câu lệnh làm gì**, dữ liệu mẫu chạy được, ASCII diagram, bảng so sánh, bẫy thường gặp, câu hỏi phỏng vấn kèm đáp án mẫu, và use case production.
 
@@ -16,7 +18,7 @@ Mỗi bài đều có: giải thích **từng câu lệnh làm gì**, dữ liệ
 
 Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có ghi chú riêng.
 
-> **[Từ điển thuật ngữ](TU-DIEN-THUAT-NGU.md)** — hơn 120 thuật ngữ dùng trong series (anti-join, fanout, SARGable, MVCC, cohort, idempotency...), mỗi từ kèm nghĩa tiếng Việt và lý do cần biết. Tra bất cứ lúc nào gặp từ chưa quen.
+> **[Từ điển thuật ngữ](TU-DIEN-THUAT-NGU.md)** — hơn 200 thuật ngữ dùng trong series (anti-join, fanout, SARGable, MVCC, cohort, idempotency, page split, partition pruning, shard key, LSN, crypto-shredding...), mỗi từ kèm nghĩa tiếng Việt và lý do cần biết. Tra bất cứ lúc nào gặp từ chưa quen.
 
 ## Mục lục
 
@@ -58,7 +60,54 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 | [04](phase-4/04-bo-cau-hoi-phong-van-sql-kem-dap-an.md) | 60+ câu hỏi phỏng vấn theo cấp độ intern → senior, kèm đáp án mẫu |
 | [05](phase-4/05-checklist-on-tap-truoc-buoi-phong-van.md) | Checklist ôn 30 phút, cách trình bày lời giải, sai lầm khi trả lời |
 
+### Phase 5 — Kiểu dữ liệu và thiết kế bảng: nơi bug sống ba năm mới nổ
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-5/01-tien-trong-database-float-hay-decimal.md) | Tiền: vì sao `FLOAT` giết hệ thống, `NUMERIC` vs số nguyên minor unit, làm tròn, ép kiểu ở tầng app, di trú cột |
+| [02](phase-5/02-so-nguyen-va-cai-tran-tran-so.md) | Tràn số: trần `SMALLINT`/`INT`/`BIGINT`, giám sát % trần, di trú `BIGINT` không downtime, trần 2⁵³ của JavaScript |
+| [03](phase-5/03-chuoi-varchar-text-va-do-dai-khoa-index.md) | `VARCHAR` vs `TEXT` vs `CHAR`, trần khoá index 767/3072 byte, collation, chuẩn hoá chuỗi bằng generated column |
+| [04](phase-5/04-thoi-gian-utc-mui-gio-va-gom-nhom-theo-ngay.md) | `TIMESTAMPTZ` thật sự lưu gì, bẫy gom nhóm ngày trên UTC, lịch hẹn tương lai, DST, `now()` vs `clock_timestamp()` |
+| [05](phase-5/05-khoa-chinh-auto-increment-uuid-v4-hay-v7.md) | Auto increment vs UUID v4 vs v7, page split, ngưỡng lật là RAM, ID hai lớp, surrogate vs natural key |
+| [06](phase-5/06-rang-buoc-constraint-luat-nam-trong-du-lieu.md) | `NOT NULL`/`CHECK`/`UNIQUE`/`FK`/`EXCLUDE`, partial unique index, `NOT VALID` → `VALIDATE`, dịch lỗi cho người dùng |
+
+### Phase 6 — Lệnh nguy hiểm và an toàn dữ liệu
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-6/01-delete-truncate-drop-lenh-nao-khong-co-duong-quay-lai.md) | `DELETE` vs `TRUNCATE` vs `DROP`, DML/DDL, thủ phạm thật là autocommit, xoá bảng lớn an toàn, PITR |
+| [02](phase-6/02-quen-where-thieu-on-va-quy-trinh-chay-lenh-tren-production.md) | Quên `WHERE`, thiếu `ON`, quy trình ba lớp, hai chỗ mẹo "SELECT trước" nói dối |
+| [03](phase-6/03-soft-delete-hay-xoa-that.md) | Bốn tờ hoá đơn của soft delete, partial unique index, Nghị định 13 vs Luật Kế toán, ẩn danh hoá và crypto-shredding |
+| [04](phase-6/04-sql-injection-va-luu-mat-khau-dung-cach.md) | Injection và prepared statement, ba chỗ nó không cứu được, quyền tối thiểu, muối + Argon2id, nâng cấp hash cũ |
+
+### Phase 7 — Database trong hệ thống thật
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-7/01-sql-vs-nosql-chon-dung-loai-database.md) | Bốn họ NoSQL, nơi đặt độ phức tạp, CAP/PACELC, Postgres hôm nay thay được gì, một nguồn sự thật |
+| [02](phase-7/02-read-replica-va-do-tre-sao-chep.md) | Sáu chặng WAL, độ trễ là phân phối có đuôi dài, read-after-write, ghim LSN, `synchronous_commit` |
+| [03](phase-7/03-partitioning-chia-bang-lon.md) | Partition pruning, `RANGE`/`LIST`/`HASH`, mất `UNIQUE` toàn cục, `DROP PARTITION`, khi nào KHÔNG nên partition |
+| [04](phase-7/04-sharding-chia-mot-database-thanh-nhieu-may.md) | Bậc thang trước khi shard, chọn shard key, virtual shard, colocation, bốn cái giá, cách di trú của Figma |
+| [05](phase-7/05-van-de-n-cong-1-query-va-orm.md) | N+1 và lazy loading, phát hiện tự động trong CI, năm cách chữa, căn bệnh ngược lại là overfetching |
+| [06](phase-7/06-connection-pool-job-queue-va-transaction-dai.md) | Kết nối là tài nguyên đắt, `idle in transaction`, hàng đợi bằng `SKIP LOCKED`, idempotency, DLQ, outbox |
+
+### Phase 8 — Case thực chiến bổ sung
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-8/01-flash-sale-va-chong-ban-qua-hang.md) | Oversell ở quy mô 50k request, ghi nguyên tử vs khoá bi quan vs lạc quan, bộ đếm Redis, reservation, sharded counter |
+| [02](phase-8/02-market-basket-va-gia-von-hang-ban-fifo.md) | Cặp sản phẩm mua chung bằng self join, support/confidence/lift, và COGS FIFO bằng khớp khoảng |
+| [03](phase-8/03-dung-ai-viet-sql-ma-khong-bi-no-lua.md) | Bẫy fanout AI hay mắc, ba prompt chuẩn, checklist tám điểm kiểm chứng, tối ưu query bằng AI |
+
+### Phase 9 — Nghệ thuật trả lời phỏng vấn
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-9/01-mo-hinh-4-tang-cua-cau-hoi-phong-van.md) | Định nghĩa → con số → đánh đổi → quy trình; hỏi ngược khi thiếu dữ kiện; cách nói "em chưa đo" |
+| [02](phase-9/02-muoi-hai-cau-hoi-ngan-va-dap-an-30-giay.md) | 12 câu hỏi ngắn nhất kèm bản mẫu 30 giây và bảng tra con số neo |
+
 ## Bắt đầu
 
 - Mới học SQL → [Bài 0: Từ điển từ khoá SQL cho người mới](phase-1/00-tu-dien-tu-khoa-sql-cho-nguoi-moi.md)
 - Đã viết SQL thành thạo → [Bài 1: Vì sao 8/10 ứng viên trượt vòng SQL](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md)
+- Sắp đi phỏng vấn trong tuần này → [Phase 9 bài 2: 12 câu hỏi ngắn và đáp án 30 giây](phase-9/02-muoi-hai-cau-hoi-ngan-va-dap-an-30-giay.md)

@@ -292,10 +292,140 @@ Các mục xếp theo chủ đề, không theo bảng chữ cái — vì học t
 
 **Data quality check (kiểm tra chất lượng dữ liệu)** — Bộ query chạy định kỳ để phát hiện trùng lặp, khoá ngoại mồ côi, sai lệch số học giữa bảng tổng và bảng chi tiết.
 
+**Support / Confidence / Lift** — Ba chỉ số của luật kết hợp. *Support* = tần suất cặp xuất hiện. *Confidence(A→B)* = trong số đơn có A, bao nhiêu % có B (**không đối xứng**). *Lift* = mua A làm xác suất mua B tăng bao nhiêu lần so với ngẫu nhiên; **lift > 1** mới là liên quan thật. Đếm thô luôn đưa sản phẩm phổ biến lên đầu, lift thì không.
+
+**COGS** (*Cost of Goods Sold*, giá vốn hàng bán) — Số tiền thực sự bỏ ra để mua đúng những món vừa bán. Tính theo **FIFO** (nhập trước xuất trước), **bình quân gia quyền**, hoặc LIFO (VAS 02 và IFRS **không cho phép** LIFO).
+
+**Khớp khoảng (interval matching)** — Mẫu giải bài toán FIFO/phân bổ: dùng window function tạo khoảng luỹ tiến hai bên, join theo điều kiện giao nhau `a.dau < b.het AND a.het > b.dau`, số lượng khớp là `LEAST(het) − GREATEST(dau)`.
+
+## 10. Kiểu dữ liệu và thiết kế bảng
+
+**IEEE 754 / floating point (dấu phẩy động)** — Chuẩn lưu số thực bằng nhị phân mà mọi CPU dùng. Vì `0.1` không biểu diễn hết được trong nhị phân, `FLOAT` chỉ hứa **gần đúng** — cấm dùng cho tiền.
+
+**`NUMERIC(p, s)` / `DECIMAL`** — Số thập phân **chính xác tuyệt đối**, lưu từng chữ số. `p` là tổng chữ số, `s` là số chữ số sau dấu phẩy. Chậm hơn `FLOAT` 2–5 lần vì chạy bằng phần mềm, không phải lệnh CPU.
+
+**Minor unit (đơn vị nhỏ nhất)** — Cách lưu tiền bằng số nguyên theo đơn vị nhỏ nhất (cent, đồng). Bắt buộc lưu kèm mã tiền tệ vì mỗi loại có `scale` riêng (VND: 0, USD: 2, KWD: 3).
+
+**Integer overflow (tràn số nguyên)** — Giá trị vượt trần của kiểu. Trần cần thuộc: `SMALLINT` 32.767, `INT` 2.147.483.647, `BIGINT` 9,2 triệu tỷ. Postgres/MySQL-strict **báo lỗi**; MySQL non-strict **cắt im lặng** — kịch bản nguy hiểm nhất.
+
+**`Number.MAX_SAFE_INTEGER`** — Trần 2⁵³−1 của JavaScript. ID `BIGINT` trả qua JSON bị làm tròn **im lặng** — phải serialize thành chuỗi.
+
+**Collation (bảng đối chiếu)** — Bộ luật so sánh và sắp xếp chuỗi; quyết định `'a' = 'A'` đúng hay sai. **Gắn liền với index** — đổi collation hoặc nâng cấp glibc mà không `REINDEX` làm index sai âm thầm.
+
+**Index key prefix limit** — Trần độ dài khoá index của InnoDB: 767 byte (row format cũ) hoặc 3.072 byte (`DYNAMIC`). Tính theo **con số khai báo × byte/ký tự** — lý do Laravel từng hạ mặc định xuống 191 (767 ÷ 4).
+
+**Generated column (cột sinh)** — Cột giá trị được database tự tính từ cột khác. `STORED` lưu xuống đĩa, `VIRTUAL` tính lúc đọc. Dùng để ép chuẩn hoá dữ liệu ngay tại database.
+
+**`TIMESTAMPTZ`** — Cái tên nói dối: nó **không lưu múi giờ**. Nó quy đổi đầu vào về UTC, lưu 8 byte UTC, vứt bỏ múi giờ gốc, rồi quy đổi ngược theo `TimeZone` của phiên khi đọc.
+
+**Wall time (giờ treo tường)** — Con số hiện trên đồng hồ ở một nơi ("9 giờ sáng thứ Hai"). Là một *ý định*, không phải thời điểm — lưu giờ địa phương + **tên vùng IANA**, không lưu UTC, không lưu offset.
+
+**DST** (*Daylight Saving Time*, giờ mùa hè) — Ở nước có DST, mỗi năm có một ngày 23 giờ và một ngày 25 giờ; có giờ **không tồn tại** và giờ **tồn tại hai lần**. Gây cron bỏ lượt/chạy hai lần và lệch lương theo ca.
+
+**`now()` vs `clock_timestamp()`** — `now()` trả giờ **bắt đầu transaction** và đứng yên suốt transaction; `clock_timestamp()` trả giờ thật. Dùng nhầm là lý do đo thời lượng batch ra 0.
+
+**Page split (tách trang)** — Khi chèn vào một trang B+Tree đã đầy, trang bị tách đôi thành hai trang chỉ đầy ~50%. Nguyên nhân UUID v4 làm index phình 1,5–2 lần.
+
+**UUID v7 / ULID / Snowflake** — Họ ID có **thứ tự thời gian**: timestamp ở đầu nên ghi vào trang cuối như auto increment, mà vẫn sinh được ở nhiều máy. Cái giá: **lộ thời điểm tạo** và gây hot shard.
+
+**Surrogate key vs Natural key** — *Surrogate* là ID vô nghĩa do hệ thống sinh; *Natural* là dữ liệu nghiệp vụ có sẵn tính duy nhất (email, SKU). Dùng surrogate làm PK vì natural key **thay đổi được**, nhưng vẫn phải đặt `UNIQUE` cho natural key.
+
+**Partial index (index một phần)** — Index chỉ đánh trên tập dòng thoả điều kiện: `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL`. Lời giải cho soft delete và cho "chỉ một dòng mặc định".
+
+**`EXCLUDE` constraint** — Ràng buộc chỉ PostgreSQL có, chặn hai bản ghi **chồng lấn** nhau: `EXCLUDE USING gist (room_id WITH =, khoang WITH &&)`. Giải sạch bài toán đặt phòng mà không có race condition.
+
+**`NOT VALID` → `VALIDATE`** — Cách thêm ràng buộc vào bảng lớn mà không khoá lâu: thêm ở chế độ `NOT VALID` (chỉ áp cho dòng mới), dọn dữ liệu cũ theo lô, rồi `VALIDATE CONSTRAINT` với khoá nhẹ.
+
+**`DEFERRABLE`** — Hoãn kiểm tra ràng buộc tới lúc `COMMIT`. Dùng cho tham chiếu vòng và hoán đổi giá trị trong cột `UNIQUE`.
+
+## 11. An toàn dữ liệu và vận hành
+
+**DML / DDL** — *Data Manipulation Language* (`INSERT`/`UPDATE`/`DELETE`, đụng vào **dòng**) và *Data Definition Language* (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`, đụng vào **cấu trúc**). `TRUNCATE` mang họ DDL dù nghe như lệnh xoá dữ liệu.
+
+**Autocommit** — Chế độ mặc định của gần như mọi client: mỗi lệnh được bọc trong transaction riêng và commit ngay. **Thủ phạm thật của mọi tai nạn xoá dữ liệu** — không phải lệnh xoá.
+
+**PITR** (*Point-In-Time Recovery*) — Khôi phục database về đúng một thời điểm trong quá khứ, cần base backup + WAL archive liên tục. Đường về duy nhất sau khi đã commit.
+
+**Bloat** — Phần đĩa bị chiếm bởi dòng chết mà `VACUUM` chưa thu hồi. `DELETE` không trả lại đĩa; muốn thu hồi thật cần `VACUUM FULL` (khoá bảng) hoặc `pg_repack` (không downtime).
+
+**Transaction ID wraparound** — Postgres đánh số transaction bằng 32 bit; nếu autovacuum không kịp, database **tự dừng ghi** để tự bảo vệ. Giám sát `age(datfrozenxid)`, cảnh báo ở 1 tỷ.
+
+**Prepared statement (câu lệnh tham số hoá)** — Cách chặn SQL injection **duy nhất** đáng tin: cấu trúc câu lệnh được phân tích và chốt **trước**, giá trị gửi **sau** theo đường riêng và không bao giờ được phân tích cú pháp nữa.
+
+**Second-order injection** — Payload được lưu vào database một cách an toàn rồi **nổ ở một query khác** ghép chuỗi. Bài học: dữ liệu đọc từ chính database cũng là dữ liệu không tin cậy.
+
+**Allowlist (danh sách trắng)** — Cách duy nhất xử lý phần không tham số hoá được (`ORDER BY`, tên cột): so với tập giá trị hợp lệ đã định nghĩa sẵn. Escape thủ công là con đường thua cuộc.
+
+**Salt (muối) / Pepper (tiêu)** — *Salt*: chuỗi ngẫu nhiên **riêng từng người**, lưu công khai cạnh hash, làm mỗi mật khẩu thành một bài toán riêng để rainbow table vô dụng. *Pepper*: khoá bí mật **chung**, lưu ngoài database, để kẻ chỉ lấy được database vẫn bó tay.
+
+**Argon2id / bcrypt / scrypt** — Hàm băm **cố tình chậm** cho mật khẩu. SHA-256 sai vì nó nhanh — một GPU chơi game thử 10 tỷ chuỗi/giây. Chỉnh chi phí tới ~0,2 giây mỗi lần kiểm, đo lại sau 1–2 năm.
+
+**Crypto-shredding** — Mã hoá dữ liệu cá nhân bằng khoá riêng từng người; xoá khoá thì dữ liệu trong **mọi backup cũ** vĩnh viễn không giải mã được. Câu trả lời cho vấn đề khó nhất của quyền được lãng quên.
+
+**Row Level Security (RLS)** — Chính sách ở tầng database quyết định mỗi vai trò nhìn thấy dòng nào. Dùng để ép điều kiện "chưa xoá" hoặc cách ly tenant mà không tin vào trí nhớ lập trình viên.
+
+## 12. Kiến trúc và quy mô
+
+**Replication lag (độ trễ sao chép)** — Khoảng thời gian bản sao còn cũ hơn máy chính. **Không phải hằng số** mà là một phân phối có đuôi rất dài, và đuôi xuất hiện đúng giờ cao điểm.
+
+**Read-after-write consistency** — Đảm bảo người dùng luôn đọc được thứ **chính họ vừa ghi**. Chỉ lệnh đọc này mới nguy hiểm; người khác đọc trễ 200 ms thì không sao.
+
+**Monotonic read (đọc đơn điệu)** — Đảm bảo người dùng không bao giờ thấy thời gian đi lùi. Bị vi phạm khi nhiều replica sau load balancer mà không ghim phiên.
+
+**LSN** (*Log Sequence Number*) — Vị trí trong dòng WAL, như số trang của cuốn nhật ký. Ghim theo LSN là cách **chính xác** để đảm bảo read-after-write, thay vì đoán một khoảng thời gian.
+
+**`synchronous_commit`** — Núm điều chỉnh `COMMIT` chờ tới đâu: `off` → `local` → `remote_write` → `on` → `remote_apply`. Bật `remote_apply` cho riêng giao dịch tiền là cách thực dụng.
+
+**Partition pruning (tỉa phân vùng)** — Bước optimizer **loại bỏ** các mảnh không cần nhìn tới. Đây là **toàn bộ giá trị** của partitioning — mất pruning thì partition chỉ còn là gánh nặng.
+
+**Shard key (khoá phân mảnh)** — Cột quyết định mỗi hàng đi về máy nào. Bốn tiêu chí: phân bố đều, có trong hầu hết query, gom được dữ liệu liên quan, **bất biến**. Chọn nhầm gần như phải làm lại toàn bộ cuộc di cư.
+
+**Hot shard (mảnh nóng)** — Một shard gánh phần áp đảo lưu lượng, xoá sạch lợi ích của sharding trong khi vẫn trả đủ chi phí phức tạp.
+
+**Colocation** — Cho các bảng hay đi chung dùng **chung một shard key**, để JOIN và transaction vẫn gọn trong một máy. Mất colocation là mất gần như mọi thứ.
+
+**Virtual shard (mảnh ảo)** — Chia sẵn thành N mảnh **logic** (thường 1024) rồi ánh xạ nhóm mảnh vào từng máy vật lý. Mở rộng chỉ là chuyển một phần mảnh logic, thay vì tính lại `hash % N` và chuyển ~94% dữ liệu.
+
+**Consistent hashing** — Đặt shard và khoá lên một vòng tròn băm để thêm/bớt shard chỉ phải chuyển ~1/N dữ liệu.
+
+**Saga** — Thay thế cho transaction xuyên shard: chia thành các bước cục bộ, mỗi bước có **hành động bù trừ**. Không có atomicity thật, chỉ có nhất quán sau cùng có bù trừ.
+
+**Scatter-gather** — Khi query không có shard key, proxy phải hỏi **mọi** shard rồi gộp kết quả. Đắt gấp N lần.
+
+**CAP / PACELC** — CAP không phải "chọn 2 trong 3": P là bắt buộc, lựa chọn thật là **khi mạng đứt thì chọn C hay A**. PACELC bổ sung: bình thường (Else) thì chọn Latency hay Consistency — đánh đổi xảy ra mỗi giây.
+
+**Eventual consistency (nhất quán sau cùng)** — Nếu ngừng ghi, sau một lúc mọi bản sao sẽ giống nhau. "Một lúc" có thể là 5 ms hoặc 5 giây — và người dùng sống ở *ngay bây giờ*.
+
+**CDC** (*Change Data Capture*) — Đọc WAL của database rồi phát thay đổi sang hệ thống khác (Debezium → Kafka). Cách đúng để đồng bộ nhiều kho, thay cho ghi kép ở tầng ứng dụng.
+
+**N+1 query** — 1 truy vấn cho danh sách + N truy vấn cho từng phần tử, do **lazy loading** của ORM. Vấn đề không phải database mà là **chuyến đi khứ hồi qua mạng** — nên nó không lộ trên localhost.
+
+**Eager loading** — Nạp trước quan hệ trong cùng truy vấn. `select_related` (Django), `includes` (Rails), `with` (Laravel), `JOIN FETCH` (Hibernate).
+
+**Overfetching** — Căn bệnh **ngược lại** của N+1: eager load mọi thứ, đổi 101 query nhanh lấy một query khổng lồ. Quy tắc: viết truy vấn theo **màn hình**, không theo model.
+
+**DataLoader** — Gom các yêu cầu lẻ trong cùng một nhịp event loop thành một truy vấn theo lô. Phải **tạo mới mỗi request**, nếu không cache rò dữ liệu giữa người dùng.
+
+**Connection pool** — Bể kết nối dùng chung. Mỗi kết nối Postgres là một **tiến trình OS** tốn 5–10 MB; tăng `max_connections` thường làm thông lượng **tụt**. Kích thước tối ưu ~2–4× số nhân CPU.
+
+**`FOR UPDATE SKIP LOCKED`** — Bỏ qua dòng đang bị phiên khác khoá thay vì xếp hàng chờ. Chìa khoá để làm hàng đợi bằng PostgreSQL — không có nó thì N worker biến thành 1 worker.
+
+**Dead letter queue (hàng đợi người chết)** — Nơi chứa job thất bại sau N lần thử, kèm tên job, lỗi, và dữ liệu gốc. Tuyệt đối không được im lặng vứt job đi.
+
+**Exponential backoff + jitter** — Thử lại với khoảng cách tăng theo hàm mũ, cộng nhiễu ngẫu nhiên để N worker không cùng thử lại một lúc và đè chết dịch vụ vừa hồi phục.
+
+**Outbox pattern** — Ghi bản ghi nghiệp vụ và message vào **cùng một transaction**, rồi một tiến trình riêng đọc bảng outbox đẩy đi. Giải bài toán ghi kép mà không cần transaction phân tán.
+
+**Livelock** — Ai cũng bận rộn mà không ai tiến được. Xảy ra với khoá lạc quan khi tranh chấp cực cao: hầu hết lần ghi thất bại rồi tất cả cùng thử lại.
+
+**Reservation (giữ chỗ)** — Không trừ kho ngay mà giữ chỗ có **thời hạn**; tồn kho khả dụng = tồn kho vật lý trừ số đang giữ chưa hết hạn. Giải bài toán khách bấm mua rồi bỏ đi.
+
+**Sharded counter (bộ đếm chia mảnh)** — Tách một dòng đếm thành N dòng để giảm tranh chấp N lần. Đánh đổi: đọc tổng phải cộng N dòng, và có thể báo hết hàng khi thực ra vẫn còn.
+
 ## Cách dùng từ điển này
 
 - Gặp từ lạ trong bài nào, quay về đây tra rồi đọc tiếp — đừng bỏ qua.
-- Trước buổi phỏng vấn, đọc lướt mục 3, 5, 6, 7 — đó là bốn mục có mật độ câu hỏi cao nhất.
+- Trước buổi phỏng vấn, đọc lướt mục 3, 5, 6, 7 — đó là bốn mục có mật độ câu hỏi cao nhất. Nếu ứng tuyển vị trí backend/nền tảng, đọc thêm mục 10, 11, 12.
 - Khi trả lời phỏng vấn, dùng **cả thuật ngữ tiếng Anh lẫn giải thích tiếng Việt**: *"Đây là anti-join, tức là lấy những dòng không tìm được cặp bên bảng kia"*. Nói được cả hai cho thấy bạn hiểu chứ không phải học thuộc.
 
 **Quay lại** → [Mục lục series](README.md)

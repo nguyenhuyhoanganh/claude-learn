@@ -214,4 +214,6 @@ Ba điều đáng mang theo hơn cả cú pháp:
 2. **Luôn nghĩ tới NULL và tới quy mô dữ liệu.** Hai thứ này chiếm phần lớn khoảng cách giữa "query chạy được" và "query đúng".
 3. **Đo trước, sửa sau.** Với mọi câu hỏi về performance, `EXPLAIN ANALYZE` là câu trả lời đầu tiên.
 
+**Bài kế tiếp** → [Phase 5, Bài 1: Tiền trong database — `FLOAT` hay `DECIMAL`?](../phase-5/01-tien-trong-database-float-hay-decimal.md)
+
 **Quay lại** → [Mục lục series](../README.md)
