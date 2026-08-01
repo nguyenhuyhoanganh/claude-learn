@@ -111,3 +111,7 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 - Mới học SQL → [Bài 0: Từ điển từ khoá SQL cho người mới](phase-1/00-tu-dien-tu-khoa-sql-cho-nguoi-moi.md)
 - Đã viết SQL thành thạo → [Bài 1: Vì sao 8/10 ứng viên trượt vòng SQL](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md)
 - Sắp đi phỏng vấn trong tuần này → [Phase 9 bài 2: 12 câu hỏi ngắn và đáp án 30 giây](phase-9/02-muoi-hai-cau-hoi-ngan-va-dap-an-30-giay.md)
+
+## Khoá liên quan
+
+> **[Phá đảo vòng phỏng vấn Backend & System Design](../backend-interview/README.md)** — phần backend nằm ngoài phạm vi SQL: API và idempotency, đồng bộ/bất đồng bộ, REST vs GraphQL vs gRPC, xác thực và phân quyền (Session/JWT/OAuth/OIDC), load balancer, API gateway, caching, job queue, Big O, thiết kế hệ thống, và các câu hỏi ngôn ngữ (OOP, con trỏ, Git). Hai khoá bổ sung cho nhau, không lặp lại.
