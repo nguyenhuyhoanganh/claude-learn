@@ -422,6 +422,40 @@ Các mục xếp theo chủ đề, không theo bảng chữ cái — vì học t
 
 **Sharded counter (bộ đếm chia mảnh)** — Tách một dòng đếm thành N dòng để giảm tranh chấp N lần. Đánh đổi: đọc tổng phải cộng N dòng, và có thể báo hết hàng khi thực ra vẫn còn.
 
+**Trạng thái HOLD (đang giữ)** — Trạng thái **thứ ba** giữa "trống" và "đã bán", kèm hai cột *ai đang giữ* và *giữ tới mấy giờ*. Cần thiết vì người dùng phải có thời gian nhập thẻ và chờ OTP.
+
+**Bẫy cron job** — Dùng tác vụ định kỳ để giải phóng tài nguyên hết hạn là **sai**: cron chạy mỗi phút thì tài nguyên bị **treo oan tới một phút**, cron chết thì treo mãi mãi. Đúng: **hết hạn là một ĐIỀU KIỆN ngay tại khoảnh khắc bạn hỏi** (`OR het_han < now()` trong `WHERE`), không phải một công việc chạy nền. Nguyên tắc chung: **đừng để tính đúng đắn phụ thuộc vào job chạy nền**.
+
+**Một cái đồng hồ, một sự thật** — Luôn dùng `now()` của **database** để tính hết hạn. Đồng hồ máy người dùng chỉnh lùi được (giữ chỗ vô hạn); đồng hồ từng server thì mỗi con lệch một kiểu, cùng một dòng dữ liệu mà hai server cho hai câu trả lời.
+
+**"Transaction là cái bọc, không phải hàng rào"** — Hiểu lầm phổ biến nhất về đồng thời: transaction bảo vệ **sự trọn vẹn của một chuỗi việc**, nhưng **không** bảo vệ **quyền độc chiếm một dòng dữ liệu**. Hai transaction song song vẫn cùng đọc thấy "còn trống". Hàng rào là **khoá**.
+
+**Vé ma** — Hậu quả của việc quên kiểm **số dòng bị ảnh hưởng** sau khoá lạc quan: database trả về `0 rows affected` mà không báo lỗi, code tưởng thành công nên **vẫn trừ tiền, vẫn gửi mail, vẫn in vé** cho một chỗ không phải của khách.
+
+## 13. Mô hình quan hệ và sơ đồ
+
+**Primary Key (khoá chính)** — Cột định danh **duy nhất** một hàng: **không trùng** + **không để trống**. Nó là **địa chỉ** để bảng khác tìm tới.
+
+**Foreign Key (khoá ngoại)** — Cột **trỏ sang** khoá chính của bảng khác — sợi chỉ khâu hai bảng. Nó không chỉ nối mà còn **ép dữ liệu nhất quán**, chặn bản ghi mồ côi.
+
+**Normalization (chuẩn hoá)** — Tách dữ liệu ra sao cho **mỗi sự thật chỉ nằm ở một chỗ**. Tên chép ở 40 dòng thì hôm đổi tên phải sửa 40 chỗ, và chỗ nào quên là dữ liệu mâu thuẫn.
+
+**One-to-Many (một-nhiều)** — Quan hệ phổ biến nhất. **Khoá ngoại luôn nằm ở phía "nhiều"** — tìm được cột FK là tìm ra đầu "nhiều".
+
+**Many-to-Many (nhiều-nhiều)** — **Không sống trực tiếp được** trong database quan hệ, vì đặt khoá ngoại ở bên nào cũng sai (một ô không nhét nổi nhiều giá trị). Luôn tách bằng **bảng trung gian**.
+
+**Junction Table (bảng trung gian)** — Bảng thứ ba đứng giữa, mỗi dòng ghi **đúng một cặp**, biến nhiều-nhiều thành **hai quan hệ một-nhiều nối tiếp**. Dấu hiệu trên sơ đồ: **hai đầu chân chim cùng trỏ vào nó**. Nó được phép mang dữ liệu riêng (điểm số, `quantity`, `unit_price`).
+
+**ERD** (*Entity-Relationship Diagram*) — **Sơ đồ quan hệ thực thể**. Không phải hình trang trí — **mỗi cạnh trên đó chính là một mệnh đề `ON`** trong câu `JOIN`.
+
+**Crow's foot (chân chim)** — Ký hiệu ba nhánh xoè ra đánh dấu đầu **"nhiều"**; gạch đứng đánh dấu đầu **"một"**. Cách đọc: đặt ngón tay ở gạch đứng nói *"một..."*, trượt sang chân chim nói *"...có nhiều"*.
+
+**Composite key (khoá ghép)** — Khoá chính gồm nhiều cột, thường dùng cho bảng trung gian: `PRIMARY KEY (ma_sv, ma_mon)` đảm bảo một sinh viên chỉ có đúng một dòng cho một môn.
+
+**Searched CASE vs Simple CASE** — Dạng đầy đủ (`CASE WHEN dieu_kien THEN ...`) so được mọi phép và **bắt được `NULL`**; dạng rút gọn (`CASE cot WHEN gia_tri THEN ...`) ngắn hơn nhưng chỉ so bằng và **không bắt được `NULL`** vì `NULL = x` cho ra `UNKNOWN`.
+
+**Quy tắc "cái sàng"** — Bẫy lớn nhất của `CASE WHEN`: đặt điều kiện **rộng nhất** lên đầu thì nó **hứng sạch**, các nhánh dưới không còn gì để lọc — và **câu lệnh không sai cú pháp** nên không có cảnh báo nào. Luật: **khắt khe nhất lên trên, nới rộng dần xuống dưới**.
+
 ## Cách dùng từ điển này
 
 - Gặp từ lạ trong bài nào, quay về đây tra rồi đọc tiếp — đừng bỏ qua.

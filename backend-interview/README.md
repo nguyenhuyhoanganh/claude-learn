@@ -51,6 +51,7 @@ Khoá này đi từ nền tảng (web hoạt động thế nào) tới xác th�
 | [03](phase-3/03-caching-tang-nhanh-nhat-va-nguy-hiem-nhat.md) | Bảy tầng cache, bốn chiến lược, **xoá chứ đừng cập nhật**, stampede/penetration/avalanche, cache HTTP và bẫy `private` |
 | [04](phase-3/04-job-queue-va-worker.md) | Bốn tính chất **T–A–S–V**, hàng đợi bằng `SKIP LOCKED`, idempotency, backoff + jitter, DLQ, Outbox, Saga, backpressure |
 | [05](phase-3/05-thiet-ke-rest-api-chiu-tai.md) | Bốn trụ cột, bốn thuật toán rate limit, **`OFFSET` không nhảy nó đếm**, cursor pagination, phiên bản hoá và khai tử |
+| [06](phase-3/06-websocket-va-ket-noi-thoi-gian-thuc.md) | Ba bức tường **GIỮ–CHIA–PHÁT**: file descriptor và C10K, event loop, Ping/Pong dọn xác kết nối, sticky session + backplane Redis, pre-encode/backpressure/batching, bão reconnect, WebSocket vs SSE |
 
 ### Phase 4 — Tư duy kỹ thuật
 

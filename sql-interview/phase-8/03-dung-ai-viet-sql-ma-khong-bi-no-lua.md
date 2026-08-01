@@ -365,4 +365,4 @@ Ba thứ. Một: dán **schema** — DDL các bảng liên quan, và quan trọn
 - Tối ưu bằng AI: gửi **schema + index + `EXPLAIN ANALYZE`**, và luôn hỏi **cái giá của index đề xuất**.
 - AI là chế độ lái tự động; **cơ trưởng vẫn là người hiểu SQL** — và người chịu trách nhiệm cho con số cuối cùng.
 
-**Bài kế tiếp** → [Phase 9, Bài 1: Mô hình bốn tầng của câu hỏi phỏng vấn](../phase-9/01-mo-hinh-4-tang-cua-cau-hoi-phong-van.md)
+**Bài kế tiếp** → [Bài 4: Case đặt chỗ — trạng thái giữ và bẫy cron job](04-case-dat-cho-trang-thai-giu-va-bay-cron-job.md)

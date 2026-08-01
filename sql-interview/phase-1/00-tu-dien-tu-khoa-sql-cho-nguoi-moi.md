@@ -536,4 +536,4 @@ Gợi ý ánh xạ: câu 1-3 dùng `SELECT`/`WHERE`; câu 4 dùng `JOIN`; câu 5
 - Trước mọi `UPDATE`/`DELETE`: viết `SELECT` thử với đúng mệnh đề `WHERE` đó, rồi mới đổi.
 - Đọc câu SQL lạ theo thứ tự `FROM → JOIN → WHERE → GROUP BY → SELECT`, không đọc từ trên xuống.
 
-**Bài kế tiếp** → [Bài 1: Vì sao 8/10 ứng viên trượt vòng SQL](01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md)
+**Bài kế tiếp** → [Bài 0b: Mô hình quan hệ — khoá chính, khoá ngoại và sơ đồ ERD](00b-mo-hinh-quan-he-khoa-chinh-khoa-ngoai-va-erd.md)

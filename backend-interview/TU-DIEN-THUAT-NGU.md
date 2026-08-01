@@ -188,6 +188,22 @@ Tra bất cứ lúc nào gặp từ chưa quen. Mỗi từ kèm **nghĩa tiếng
 
 **Bulkhead** — **Chia khoang** như tàu thuỷ. Pool/hàng đợi riêng cho từng loại việc để một khoang ngập không làm chìm cả tàu.
 
+**File Descriptor (FD)** — **Mô tả tệp**. Con số hệ điều hành cấp cho mỗi socket/file đang mở. Linux mặc định cho mỗi tiến trình **1024** — hết là lỗi `EMFILE: too many open files`, và server chết trong khi **CPU chỉ 4%**.
+
+**`EMFILE`** — Lỗi hết file descriptor. Dấu hiệu: không request nào lỗi 500, chỉ đơn giản là **không ai kết nối vào được nữa**.
+
+**`epoll` / `kqueue`** — Cơ chế kernel cho phép **một luồng** theo dõi hàng vạn socket cùng lúc: thay vì hỏi từng socket, nó hỏi kernel một câu *"ai vừa nói?"*.
+
+**Backplane** — **Cầu nối** giữa các máy chủ WebSocket. Máy A không gửi thẳng cho client của máy B (hai máy là hai hòn đảo) — nó **publish** lên Redis, mọi máy **subscribe** rồi đẩy xuống client của mình.
+
+**Pre-encode / Pre-framed** — **Mã hoá trước**. Chuẩn bị sẵn gói byte **một lần** rồi bắn cho cả trăm nghìn client, thay vì gọi `JSON.stringify` cho từng người.
+
+**`bufferedAmount`** — Số byte đang chờ gửi tới một client. Vượt ngưỡng nghĩa là client **nhận không kịp** — phải ngắt hoặc bỏ tin, vì **vài client 3G có thể làm hết RAM server**.
+
+**Batching / Coalescing** — **Gộp tin**. Dồn 50 tin/giây thành 10 khung/giây — mắt người chỉ thấy 10–60 khung/giây, mà cắt được 80% số lần gọi hệ thống.
+
+**Reconnect storm** — **Bão kết nối lại**. Deploy xong, 100.000 client cùng nối lại một giây và quật sập chính server vừa lên. Chữa: client **backoff mũ + jitter**, server **rolling deploy** + mã đóng `1012`.
+
 **Connection pool** — Mỗi kết nối Postgres là một **tiến trình OS** (5–10 MB). Tăng `max_connections` thường làm thông lượng **tụt**; tối ưu ~2–4× số nhân CPU.
 
 ## 7. Phân trang và giới hạn

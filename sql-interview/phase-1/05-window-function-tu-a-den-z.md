@@ -451,4 +451,4 @@ Window function thường thắng vì chỉ cần một lần quét + một lầ
 - Frame mặc định là `RANGE ... CURRENT ROW` — nguồn của bẫy `LAST_VALUE` và bẫy luỹ kế khi có giá trị trùng.
 - `LAG`/`LEAD` là công cụ chính cho mọi báo cáo tăng trưởng; nhớ `NULLIF` khi chia.
 
-**Bài kế tiếp** → [Phase 2 - Bài 1: Subquery toàn tập](../phase-2/01-subquery-toan-tap.md)
+**Bài kế tiếp** → [Bài 6: `CASE WHEN` và nghệ thuật dán nhãn dữ liệu](06-case-when-va-nghe-thuat-dan-nhan-du-lieu.md)

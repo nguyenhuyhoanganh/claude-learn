@@ -457,4 +457,4 @@ Năm lớp theo chi phí tăng dần: **hạn mức riêng** cho endpoint đắt
 - Luôn có **trần cứng cho `limit`**, và `total` là **tuỳ chọn** chứ không mặc định.
 - Đánh **phiên bản từ ngày đầu**; nguy hiểm nhất là **đổi ý nghĩa trường** vì nó sai im lặng; và **đo trước khi tắt** `/v1`.
 
-**Bài kế tiếp** → [Phase 4, Bài 1: Big O — thước đo của một lập trình viên giỏi](../phase-4/01-big-o-thuoc-do-cua-lap-trinh-vien-gioi.md)
+**Bài kế tiếp** → [Bài 6: WebSocket và kết nối thời gian thực](06-websocket-va-ket-noi-thoi-gian-thuc.md)

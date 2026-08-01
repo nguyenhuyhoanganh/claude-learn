@@ -27,11 +27,13 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 | Bài | Nội dung |
 |---|---|
 | [00](phase-1/00-tu-dien-tu-khoa-sql-cho-nguoi-moi.md) | **Cho người mới**: từng từ khoá SQL làm gì, toán tử, kiểu dữ liệu, cách đọc một câu SQL lạ, 10 lỗi fresher hay gặp |
+| [00b](phase-1/00b-mo-hinh-quan-he-khoa-chinh-khoa-ngoai-va-erd.md) | **Nền móng**: khoá chính, khoá ngoại, vì sao phải tách bảng, quan hệ 1-nhiều và nhiều-nhiều, bảng trung gian, đọc sơ đồ ERD bằng ký hiệu chân chim |
 | [01](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md) | Vì sao ứng viên trượt vòng SQL; 4 tầng câu hỏi; query optimizer; thứ tự xử lý logic của SQL; schema mẫu |
 | [02](phase-1/02-join-inner-vs-left-va-bai-toan-khach-chua-mua.md) | JOIN toàn tập: INNER/LEFT/RIGHT/FULL/CROSS; bài toán "khách chưa từng đặt hàng" và 3 cách giải |
 | [03](phase-1/03-join-nang-cao-fanout-on-vs-where-va-thuat-toan-join.md) | Bẫy ON vs WHERE, nhân dòng (fanout) làm sai doanh thu, self join, thuật toán join |
 | [04](phase-1/04-group-by-having-va-nghe-thuat-aggregate.md) | GROUP BY, HAVING vs WHERE, COUNT(*) vs COUNT(col), conditional aggregation, ROLLUP |
 | [05](phase-1/05-window-function-tu-a-den-z.md) | Window function: RANK/DENSE_RANK/ROW_NUMBER, top N mỗi nhóm, frame, LAG/LEAD, running total |
+| [06](phase-1/06-case-when-va-nghe-thuat-dan-nhan-du-lieu.md) | `CASE WHEN`: bẫy sai thứ tự điều kiện, quên `ELSE` nguy hiểm hơn quên `END`, dùng trong `ORDER BY`/`UPDATE`/pivot, ngưỡng nằm cứng vs bảng quy chế |
 
 ### Phase 2 — Subquery, CTE và tư duy tập hợp
 
@@ -98,6 +100,7 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 | [01](phase-8/01-flash-sale-va-chong-ban-qua-hang.md) | Oversell ở quy mô 50k request, ghi nguyên tử vs khoá bi quan vs lạc quan, bộ đếm Redis, reservation, sharded counter |
 | [02](phase-8/02-market-basket-va-gia-von-hang-ban-fifo.md) | Cặp sản phẩm mua chung bằng self join, support/confidence/lift, và COGS FIFO bằng khớp khoảng |
 | [03](phase-8/03-dung-ai-viet-sql-ma-khong-bi-no-lua.md) | Bẫy fanout AI hay mắc, ba prompt chuẩn, checklist tám điểm kiểm chứng, tối ưu query bằng AI |
+| [04](phase-8/04-case-dat-cho-trang-thai-giu-va-bay-cron-job.md) | Đặt vé xem phim: vì sao transaction **không** chống được tranh chấp, vé ma khi quên kiểm `rowcount`, trạng thái HOLD, **bẫy cron job**, đồng hồ database, deadlock nhiều ghế |
 
 ### Phase 9 — Nghệ thuật trả lời phỏng vấn
 
