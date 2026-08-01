@@ -14,6 +14,22 @@ Sự khác biệt cốt lõi giữa Excel và database gói gọn trong một c�
 
 Người nghỉ việc thì mang cái đầu đi. Database thì ở lại, và nó không quên. Không bao giờ.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Constraint** | con-strên | **Ràng buộc** — luật database tự thi hành, không ai lách được |
+| **`NOT NULL`** | | Bắt buộc phải có giá trị, không được để trống |
+| **`CHECK`** | chéc | Ràng buộc **điều kiện** — giá trị phải thoả biểu thức |
+| **`UNIQUE`** | iu-nịc | **Không được trùng** |
+| **`FOREIGN KEY`** | pho-rin ki | **Khoá ngoại** — phải tồn tại ở bảng kia |
+| **`EXCLUDE`** | éch-clut | Ràng buộc chặn hai bản ghi **chồng lấn** nhau (chỉ PostgreSQL) |
+| **Invariant** | in-vê-ri-ần | **Bất biến** — quy tắc luôn phải đúng, không có ngoại lệ |
+| **Partial index** | pa-sồ | **Index một phần** — chỉ đánh trên tập dòng thoả điều kiện |
+| **`NOT VALID`** | | Chế độ thêm ràng buộc **chỉ áp cho dữ liệu mới**, chưa quét dữ liệu cũ |
+| **`DEFERRABLE`** | đi-phơ-ra-bồ | **Hoãn được** — kiểm tra tới lúc `COMMIT` thay vì ngay lập tức |
+| **Cascade** | cát-kêit | **Dây chuyền** — xoá cha thì xoá luôn con |
+
 ## Năm loại ràng buộc và việc chúng chặn
 
 | Ràng buộc | Chặn điều gì | Chi phí |
@@ -308,6 +324,97 @@ except (errors.CheckViolation, errors.UniqueViolation,
 ```
 
 Đây là mẫu thiết kế quan trọng: **để database là nguồn chân lý duy nhất về tính hợp lệ**, còn ứng dụng chỉ dịch lỗi. Không có chuyện hai nơi cùng giữ luật rồi lệch nhau.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Tồn kho có 47 sản phẩm đang **âm**. Không ai biết từ bao giờ, và code đã kiểm `if ton_kho > 0` ở mọi chỗ.
+
+**Chẩn đoán:** đếm thiệt hại trước, rồi tìm đường vào.
+
+```sql
+-- ① Bao nhiêu dòng đang sai, sai từ khi nào?
+SELECT count(*), min(updated_at), max(updated_at)
+FROM products WHERE ton_kho < 0;
+
+-- ② Có ràng buộc nào không?
+SELECT conname, pg_get_constraintdef(oid)
+FROM pg_constraint WHERE conrelid = 'products'::regclass;
+-- Chỉ có primary key → KHÔNG CÓ CHECK NÀO
+```
+
+**Ba đường vào mà code không chặn được:**
+
+```text
+   ① Race condition giữa lúc kiểm và lúc ghi (xem phase-8 bài 1)
+   ② Script import của đối tác — nó không đi qua code của bạn
+   ③ Lệnh chạy tay lúc 3 giờ sáng để "sửa nhanh"
+```
+
+**Cách xử lý — 4 bước, không được đảo thứ tự:**
+
+```sql
+-- ① DỌN DỮ LIỆU CŨ TRƯỚC (nếu không, bước ③ sẽ thất bại)
+UPDATE products SET ton_kho = 0 WHERE ton_kho < 0;
+
+-- ② Thêm ràng buộc ở chế độ NOT VALID — chặn NGAY dòng mới, chưa quét dòng cũ
+ALTER TABLE products
+  ADD CONSTRAINT ck_ton_kho_khong_am CHECK (ton_kho >= 0) NOT VALID;
+
+-- ③ Validate — chỉ khoá nhẹ, không chặn đọc-ghi
+ALTER TABLE products VALIDATE CONSTRAINT ck_ton_kho_khong_am;
+
+-- ④ Sửa luôn chỗ gốc: ghi nguyên tử thay vì đọc-kiểm-ghi
+UPDATE products SET ton_kho = ton_kho - 1
+WHERE product_id = $1 AND ton_kho >= 1 RETURNING ton_kho;
+```
+
+> Từ giây bước ② chạy xong, **không một câu lệnh nào trên đời làm tồn kho âm được nữa** — kể cả script đối tác, kể cả lệnh chạy tay.
+
+> **Tình huống 2:** Khách xoá tài khoản, tháng sau đăng ký lại bằng email cũ và bị báo **"Email đã tồn tại"**. Nhưng bộ phận hỗ trợ tìm cả buổi không thấy tài khoản nào mang email đó.
+
+**Chẩn đoán:**
+
+```sql
+-- Tìm bằng câu lệnh KHÔNG lọc deleted_at
+SELECT user_id, email, deleted_at FROM users WHERE email = 'an@gmail.com';
+--  42 | an@gmail.com | 2026-06-15 10:22:00+07     ◄── ĐÂY, dòng đã xoá mềm
+```
+
+**Nguyên nhân:** `UNIQUE (email)` **không biết đọc** điều kiện lọc của ứng dụng. Nó nhìn thấy cả dòng đã xoá mềm, và nó chặn.
+
+**Và đây là cái bẫy:** cách chữa ai cũng nghĩ ra đầu tiên lại **thủng ngay**.
+
+```sql
+-- ❌ Nghe hợp lý nhưng SAI
+ALTER TABLE users ADD CONSTRAINT uq_email UNIQUE (email, deleted_at);
+```
+
+```sql
+-- Chứng minh nó thủng:
+INSERT INTO users (email, deleted_at) VALUES ('x@y.com', NULL);
+INSERT INTO users (email, deleted_at) VALUES ('x@y.com', NULL);   -- ✅ LỌT!
+-- Vì NULL <> NULL → ràng buộc coi hai dòng là KHÁC NHAU
+-- → giờ có HAI tài khoản sống chung một email
+```
+
+**Cách đúng — partial unique index:**
+
+```sql
+ALTER TABLE users DROP CONSTRAINT IF EXISTS uq_email;
+
+CREATE UNIQUE INDEX users_email_alive_uk
+    ON users (email) WHERE deleted_at IS NULL;   -- ◄── CHỈ ràng buộc dòng còn sống
+```
+
+```sql
+-- Kiểm chứng: hai dòng đã xoá cùng email → OK; hai dòng sống cùng email → CHẶN
+INSERT INTO users (email, deleted_at) VALUES ('x@y.com', now());   -- ✅
+INSERT INTO users (email, deleted_at) VALUES ('x@y.com', now());   -- ✅ (đều đã xoá)
+INSERT INTO users (email, deleted_at) VALUES ('x@y.com', NULL);    -- ✅
+INSERT INTO users (email, deleted_at) VALUES ('x@y.com', NULL);    -- ❌ CHẶN ĐÚNG
+```
+
+> MySQL không có partial index — thay bằng cột sinh: `email_alive = IF(deleted_at IS NULL, email, NULL)` rồi `UNIQUE (email_alive)`.
 
 ## Bẫy thường gặp
 

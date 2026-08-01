@@ -8,6 +8,23 @@ Vấn đề không nằm ở mật khẩu. Kẻ tấn công đã trộm được
 
 Tấm vé đó là trái tim của xác thực và phân quyền. Hiểu nó, bạn hiểu tại sao web hoạt động — và tại sao nó bị hack.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Authentication** (AuthN) | ô-then-ti-kê-shân | **Xác thực** — *"bạn là ai?"* → lỗi **401** |
+| **Authorization** (AuthZ) | ô-tho-rai-zê-shân | **Phân quyền** — *"bạn được làm gì?"* → lỗi **403** |
+| **IDOR** | ai-đo | **Tham chiếu đối tượng không an toàn** — đổi ID trên URL là xem được dữ liệu người khác |
+| **RBAC** | a-bác | Phân quyền theo **vai trò** (admin, nhân viên, khách) |
+| **ABAC** | ây-bác | Phân quyền theo **thuộc tính và ngữ cảnh** (giờ, IP, hạn mức) |
+| **ReBAC** | ri-bác | Phân quyền theo **quan hệ trong đồ thị** (Drive, Notion, Figma) |
+| **Multi-tenant** | mun-ti-te-nần | **Nhiều khách hàng** dùng chung một hệ thống |
+| **Tenant isolation** | | **Cách ly khách hàng** — công ty A không được thấy dữ liệu công ty B |
+| **RLS** (*Row Level Security*) | | **Bảo mật cấp dòng** — database tự lọc, code không cần nhớ |
+| **MFA** | em-ép-ây | **Xác thực nhiều yếu tố** — bằng chứng từ nhiều **loại** khác nhau |
+| **Passkey / WebAuthn** | pát-ki | Cơ chế duy nhất chống lừa đảo **về mặt nguyên lý** — chữ ký gắn với tên miền |
+| **SIM swap** | | Kẻ tấn công chiếm số điện thoại để nhận mã OTP thay bạn |
+
 ## Hai câu hỏi, đừng bao giờ trộn lẫn
 
 ```text

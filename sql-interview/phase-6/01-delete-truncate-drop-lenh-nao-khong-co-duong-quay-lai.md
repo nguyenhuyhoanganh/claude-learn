@@ -18,6 +18,21 @@ Cái phao anh vẫn tin tưởng bấy lâu **chưa từng được thổi phồ
 
 Câu hỏi phỏng vấn *"`DELETE`, `TRUNCATE`, `DROP` khác gì nhau?"* ai cũng thuộc đáp án. Nhưng đêm thứ Sáu đó chứng minh: **thuộc đáp án không cứu được dữ liệu**. Bài này đi từ dòng họ của ba lệnh, tới thứ thật sự giết người — chế độ autocommit.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **DML** (*Data Manipulation Language*) | đi-em-eo | Nhóm lệnh **thao tác dữ liệu** — đụng vào từng **dòng** |
+| **DDL** (*Data Definition Language*) | đi-đi-eo | Nhóm lệnh **thao tác cấu trúc** — đụng vào cả **bảng** |
+| **Autocommit** | ô-tô-com-mít | **Tự chốt** — mỗi lệnh được commit ngay sau khi chạy xong |
+| **Rollback** | rôn-béc | **Tua ngược** — huỷ mọi thay đổi trong transaction |
+| **Implicit commit** | im-pli-sịt | **Commit ngầm** — hệ tự chốt trước và sau lệnh DDL, bạn không gõ |
+| **Dead tuple** | đét tu-pồ | **Dòng chết** — dòng đã xoá nhưng vẫn chiếm đĩa cho tới khi `VACUUM` dọn |
+| **Bloat** | blôt | **Phình** — đĩa bị chiếm bởi dòng chết chưa thu hồi |
+| **`VACUUM`** | vắc-kìum | Lệnh dọn dòng chết của PostgreSQL |
+| **PITR** (*Point-In-Time Recovery*) | | **Khôi phục về một thời điểm** trong quá khứ |
+| **WAL archive** | | Kho lưu nhật ký ghi, điều kiện bắt buộc để làm PITR |
+
 ## Tra dòng họ: DML và DDL
 
 SQL chia lệnh thành các nhóm, và nhóm quyết định hành vi:
@@ -273,6 +288,89 @@ Lệnh đã COMMIT rồi → database không giúp được nữa. Chỉ còn ba
 ```
 
 Và một sự thật đắng: **backup chưa từng được restore thử thì không phải backup**. Nó là một file. Lịch kiểm tra khôi phục hàng quý là thứ phân biệt team có backup thật với team có "cảm giác an toàn".
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Bạn vừa chạy `DELETE` nhầm trên production. Terminal báo `DELETE 2000000`. **Bạn có bao nhiêu giây để cứu?**
+
+**Bước 0 — kiểm tra thứ quyết định tất cả: transaction còn mở không?**
+
+```sql
+-- Chạy NGAY, trong CÙNG phiên vừa gõ lệnh xoá
+SELECT txid_current_if_assigned() IS NOT NULL AS con_transaction_dang_mo;
+```
+
+```text
+   TRUE  → CÒN CỨU ĐƯỢC. Gõ ROLLBACK; NGAY LẬP TỨC.
+   FALSE → autocommit đã chốt xong. Database hết cách.
+           → chuyển sang quy trình khôi phục bên dưới.
+```
+
+**Nếu đã commit — ba cửa, kiểm theo thứ tự nhanh nhất:**
+
+```sql
+-- ① REPLICA CÓ CẤU HÌNH TRỄ? (nhanh nhất, vài phút)
+--    Chạy TRÊN REPLICA:
+SELECT pg_is_wal_replay_paused(), pg_last_xact_replay_timestamp();
+--    Nếu replica còn trễ và chưa replay lệnh xoá:
+SELECT pg_wal_replay_pause();          -- DỪNG NGAY, đừng để nó replay tiếp
+--    rồi trích dữ liệu ra: pg_dump -t orders
+```
+
+```bash
+# ② PITR — khôi phục ra database TẠM, không đè lên production
+#    (cần base backup + WAL archive)
+pg_basebackup -D /tmp/khoi_phuc -R
+# postgresql.conf của bản khôi phục:
+#   recovery_target_time = '2026-08-01 23:46:00+07'   ← TRƯỚC lệnh xoá 1 phút
+#   recovery_target_action = 'promote'
+# Chạy lên, lấy đúng bảng cần, rồi chép ngược sang production
+```
+
+```text
+   ③ CDC STREAM — nếu bạn đang đẩy thay đổi sang Kafka/S3,
+      dữ liệu vẫn còn nguyên ở đó.
+```
+
+> **Bài học cay nhất:** ba cửa trên đều **phải chuẩn bị TRƯỚC**. Đêm cần dùng mới đi dựng thì đã muộn.
+
+> **Tình huống 2:** Cần xoá 95% của bảng 100 triệu dòng. Chạy `DELETE` thử thì sau 40 phút vẫn chưa xong, và replica bắt đầu trễ 5 phút.
+
+**Chẩn đoán:** `DELETE` ghi nhật ký **từng dòng**, phình WAL, giữ khoá, và **không trả lại đĩa**.
+
+```sql
+-- Đo trước khi quyết
+SELECT count(*) FILTER (WHERE ordered_at < '2024-01-01') AS se_xoa,
+       count(*)                                          AS tong,
+       pg_size_pretty(pg_total_relation_size('orders'))   AS kich_thuoc;
+-- 95.000.000 / 100.000.000 / 42 GB   → xoá 95% thì ĐỪNG DÙNG DELETE
+```
+
+**Cách xử lý — đảo ngược bài toán: tạo bảng mới chứa phần GIỮ LẠI:**
+
+```sql
+-- ① Tạo bảng mới, chỉ chép 5% cần giữ (vài phút thay vì vài giờ)
+CREATE TABLE orders_new (LIKE orders INCLUDING ALL);
+INSERT INTO orders_new SELECT * FROM orders WHERE ordered_at >= '2024-01-01';
+
+-- ② Hoán đổi tên trong một transaction NGẮN (vài chục mili giây)
+BEGIN;
+ALTER TABLE orders     RENAME TO orders_old;
+ALTER TABLE orders_new RENAME TO orders;
+COMMIT;
+
+-- ③ Giữ bảng cũ vài ngày làm dây an toàn, rồi mới:
+DROP TABLE orders_old;
+```
+
+```text
+   SO SÁNH:
+      DELETE 95 triệu dòng  → hàng giờ, WAL khổng lồ, replica trễ, bloat 40 GB
+      Tạo bảng mới + đổi tên → vài phút, WAL vừa phải, TRẢ ĐĨA NGAY
+
+   Nếu bảng đã PHÂN VÙNG theo thời gian thì còn rẻ hơn nữa:
+      DROP TABLE orders_2023_07;    -- vài mili giây
+```
 
 ## Bẫy thường gặp
 

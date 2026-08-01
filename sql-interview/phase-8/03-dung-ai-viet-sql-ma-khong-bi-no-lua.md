@@ -6,6 +6,21 @@ Vấn đề là **con số đó sai — sai gấp hơn hai lần**. Và nếu b�
 
 Đây không phải bài viết chê AI. AI viết SQL rất tốt và bạn nên dùng nó mỗi ngày. Đây là bài về câu hỏi thật sự quan trọng: **bạn có biết khi nào nó viết đúng và khi nào nó viết sai không?**
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Fanout** | phen-ao | **Nhân dòng** — JOIN một-nhiều làm dòng bên trái bị lặp, mọi `SUM` sai theo |
+| **Cardinality** | ca-đi-na-li-ti | **Lực lượng quan hệ** — một dòng bên này ứng với mấy dòng bên kia |
+| **Schema** | ski-ma | **Lược đồ** — cấu trúc bảng, cột, kiểu dữ liệu, quan hệ |
+| **DDL** | | Câu lệnh tạo bảng — thứ bạn dán cho AI để nó khỏi đoán |
+| **Dialect** | đai-a-lếch | **Phương ngữ** — khác biệt cú pháp giữa Postgres, MySQL, SQL Server, Oracle |
+| **Assumption** | a-sấm-shân | **Giả định** — thứ AI tự đặt ra mà không nói, và là nguồn lỗi số một |
+| **Hallucination** | ha-lu-si-nê-shân | **Bịa** — AI tạo ra tên bảng, cột, hoặc hàm không tồn tại |
+| **Execution plan** | | **Kế hoạch thực thi** — cách database định chạy câu lệnh |
+| **Covering index** | | Index **chứa đủ mọi cột** query cần, khỏi phải mở bảng gốc |
+| **Persisted query** | | Câu lệnh đã được duyệt và lưu sẵn, chỉ gửi mã băm |
+
 ## Cái bẫy: một ví dụ cụ thể
 
 Dữ liệu: khách hàng tên An, có **một** đơn hàng trị giá 1.000.000đ. An hoàn tiền **hai lần** cho chính đơn đó — 200.000đ và 100.000đ.
@@ -324,6 +339,120 @@ thì chỉ cơ trưởng mới nhận ra và cầm lái lại.
 
 Và người cơ trưởng đó là người hiểu SQL.
 ```
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** AI viết cho bạn một câu báo cáo doanh thu. Nó chạy, ra một con số đẹp. **Làm sao biết nó đúng trong 60 giây?**
+
+**Quy trình bốn bước — chạy đúng thứ tự này mỗi lần:**
+
+```sql
+-- ═══ BƯỚC 1 (15 giây): KIỂM FANOUT — thủ phạm số 1 ═══
+-- Chạy câu của AI nhưng đổi phần SELECT
+SELECT count(*) AS so_dong_sau_join,
+       count(DISTINCT o.order_id) AS so_don_that
+FROM orders o
+LEFT JOIN refunds r USING (order_id);       -- giữ nguyên MỌI JOIN của AI
+```
+
+```text
+   HAI CON SỐ BẰNG NHAU  → không có fanout, đi tiếp bước 2.
+   KHÁC NHAU             → CÓ FANOUT. Mọi SUM/AVG/COUNT trong câu đó ĐANG SAI.
+                            Dừng lại, sửa bằng cách gộp từng bên TRƯỚC khi join.
+```
+
+```sql
+-- ═══ BƯỚC 2 (15 giây): KIỂM NULL ═══
+-- Cột nào trong điều kiện có thể NULL?
+SELECT count(*) FILTER (WHERE status IS NULL) AS status_null,
+       count(*) FILTER (WHERE total_amount IS NULL) AS tien_null
+FROM orders;
+-- Có NULL → xem lại: NOT IN sẽ trả rỗng, <> sẽ bỏ sót, SUM sẽ bỏ qua
+
+-- ═══ BƯỚC 3 (15 giây): KIỂM MÚI GIỜ ═══
+-- Nếu câu có gom nhóm theo ngày, so hai cách
+SELECT sum(total_amount) FILTER (
+         WHERE ordered_at >= '2026-08-01' AND ordered_at < '2026-08-02')
+       AS theo_utc,
+       sum(total_amount) FILTER (
+         WHERE ordered_at >= (DATE '2026-08-01')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+           AND ordered_at <  (DATE '2026-08-02')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
+       AS theo_gio_vn
+FROM orders;
+-- Lệch nhau → AI đã gom nhóm trên UTC, 7 tiếng đầu mỗi ngày bị đếm sai ngày
+
+-- ═══ BƯỚC 4 (15 giây): ĐỐI CHIẾU CON SỐ NEO ═══
+-- Luôn có ít nhất một con số bạn biết chắc
+SELECT sum(total_amount) FROM orders
+WHERE status <> 'cancelled' AND ordered_at >= '2026-01-01';
+-- So với tổng của báo cáo mới. Lệch = có gì đó sai.
+```
+
+**Đóng gói thành một script chạy được, dùng cho mọi câu AI viết:**
+
+```python
+def kiem_chung_sql(cau_lenh: str, bang_dich: str, khoa_chinh: str):
+    """Chạy trước khi tin bất kỳ câu SQL nào AI viết."""
+    tu_from = cau_lenh[cau_lenh.upper().index("FROM"):]
+    tu_from = tu_from.split("GROUP BY")[0].split("ORDER BY")[0]
+
+    r = db.execute(f"""
+        SELECT count(*) AS sau_join,
+               count(DISTINCT {bang_dich}.{khoa_chinh}) AS thuc_te
+        {tu_from}
+    """).fetchone()
+
+    if r.sau_join != r.thuc_te:
+        raise AssertionError(
+            f"⚠ FANOUT: {r.sau_join} dòng sau join nhưng chỉ {r.thuc_te} "
+            f"{bang_dich} thật. Mọi SUM/COUNT trong câu này đang SAI."
+        )
+```
+
+> **Tình huống 2:** Bạn nhờ AI tối ưu một query chậm. Nó đề xuất **5 index mới**. Có nên tạo hết không?
+
+**Không. Hỏi ngược ba câu trước — và tự đo.**
+
+```sql
+-- ① Index nào ĐANG CÓ mà KHÔNG AI DÙNG? (bỏ trước khi thêm)
+SELECT s.indexrelname, s.idx_scan,
+       pg_size_pretty(pg_relation_size(s.indexrelid)) AS kich_thuoc
+FROM pg_stat_user_indexes s
+JOIN pg_index i ON i.indexrelid = s.indexrelid
+WHERE s.relname = 'orders' AND s.idx_scan = 0
+  AND NOT i.indisunique AND NOT i.indisprimary;
+-- Thường có 3–5 index chưa bao giờ được quét → BỎ chúng trước
+
+-- ② Index đề xuất có bị index sẵn có PHỦ chưa?
+SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'orders';
+-- Index trên (a) là THỪA nếu đã có index trên (a, b)
+
+-- ③ Bảng này ghi nhiều hay đọc nhiều?
+SELECT n_tup_ins + n_tup_upd + n_tup_del AS so_lan_ghi,
+       seq_scan + idx_scan                AS so_lan_doc
+FROM pg_stat_user_tables WHERE relname = 'orders';
+-- Ghi áp đảo → mỗi index thêm vào là một cái giá phải trả MỖI LẦN GHI
+```
+
+**Rồi đo thật tác động của index trước khi giữ nó:**
+
+```sql
+-- Thử trên bản sao, đo cả hai chiều
+CREATE INDEX CONCURRENTLY idx_thu ON orders (customer_id, ordered_at);
+
+-- Chiều ĐỌC: nhanh hơn bao nhiêu?
+EXPLAIN (ANALYZE, BUFFERS) SELECT ... ;    -- trước: 420ms → sau: 3ms
+
+-- Chiều GHI: chậm đi bao nhiêu?
+\timing on
+INSERT INTO orders SELECT ... FROM generate_series(1, 100000);
+-- trước: 412ms → sau: 468ms  (+13%)
+
+-- Kết luận nói được bằng SỐ:
+-- "đọc nhanh hơn 140 lần, ghi chậm đi 13% — bảng này đọc nhiều nên GIỮ"
+```
+
+> **Nguyên tắc:** AI **gợi ý** được, nhưng **quyết định là của bạn** — vì bạn là người chịu tải ghi, không phải nó. Câu hỏi cuối luôn phải là *"index này làm chậm `INSERT` bao nhiêu?"*
 
 ## Bẫy thường gặp
 

@@ -15,6 +15,21 @@ N+1 là sát thủ thầm lặng nhất của hiệu năng backend. Nó ẩn tro
 
 Phase-3 bài 3 đã liệt kê nó là anti-pattern số 5. Bài này đi trọn vẹn: vì sao ORM tạo ra nó, cách phát hiện tự động, năm cách chữa, và **căn bệnh ngược lại** mà người mới sửa N+1 hay mắc phải.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **ORM** (*Object-Relational Mapping*) | o-a-em | **Ánh xạ đối tượng–quan hệ** — biến bảng thành đối tượng để viết code cho gọn |
+| **N+1 query** | | 1 truy vấn lấy danh sách **+ N** truy vấn cho từng phần tử |
+| **Lazy loading** | lê-di | **Nạp lười** — chỉ nạp quan hệ khi thật sự chạm vào nó |
+| **Eager loading** | i-gơ | **Nạp sớm** — khai báo trước là sẽ cần, nạp luôn trong cùng truy vấn |
+| **Round-trip** | rao-trịp | **Chuyến đi khứ hồi** qua mạng — thứ thật sự tốn thời gian |
+| **Overfetching** | ô-vơ-phét | **Lấy thừa** — kéo về nhiều hơn màn hình cần |
+| **Batching** | bát-ching | **Gom lô** — dồn nhiều yêu cầu lẻ thành một truy vấn |
+| **DataLoader** | | Thư viện gom yêu cầu lẻ trong cùng một nhịp thành một truy vấn |
+| **Counter cache** | | **Cột đếm sẵn** — lưu sẵn con số thay vì đếm lại mỗi lần |
+| **Fanout** | phen-ao | **Nhân dòng** — JOIN một-nhiều làm dòng bên trái bị lặp |
+
 ## Cơ chế: một query cho danh sách, N query cho từng phần tử
 
 ```python
@@ -336,6 +351,144 @@ Post.objects.select_related("author__profile__company__address")
 - **Dữ liệu nằm ở dịch vụ khác.** Sau khi tách microservice, JOIN không tồn tại — chỉ còn cách gom ID và gọi theo lô.
 
 **Quy tắc:** đo trước, đừng đoán. Câu hỏi đúng không phải "có N+1 không" mà là **"tổng thời gian của request này là bao nhiêu, và phần nào chiếm nhiều nhất"**.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Trang danh sách sản phẩm chạy 80 ms trên máy dev, nhưng **8 giây** trên production. Cùng một code, cùng lượng dữ liệu.
+
+**Chẩn đoán — quy trình bốn bước, mỗi bước một câu lệnh:**
+
+```sql
+-- ① Query nào bị gọi nhiều bất thường?
+SELECT calls, round(mean_exec_time::numeric, 2) AS tb_ms,
+       round((calls * mean_exec_time / 1000)::numeric) AS tong_giay,
+       left(query, 70) AS cau_lenh
+FROM pg_stat_statements
+ORDER BY calls DESC LIMIT 5;
+```
+
+```text
+  calls   | tb_ms | tong_giay | cau_lenh
+----------+-------+-----------+--------------------------------------
+  984320  |  0.21 |       207 | SELECT * FROM users WHERE id = $1
+      42  | 12.30 |         1 | SELECT * FROM products ORDER BY ...
+   ▲
+   Gần MỘT TRIỆU lượt gọi cùng một câu → GẦN NHƯ CHẮC CHẮN LÀ N+1.
+
+   VÀ CHÚ Ý: câu NHANH NHẤT (0.21ms) lại tốn TỔNG THỜI GIAN NHIỀU NHẤT (207s).
+   Đây là góc nhìn người mới hay bỏ qua khi đi tối ưu.
+```
+
+```python
+# ② Đếm số query trên MỘT request cụ thể
+from django.db import connection, reset_queries
+reset_queries()
+client.get("/products/")
+print(len(connection.queries))        # 101   ← 1 + 100
+```
+
+```python
+# ③ Xác nhận đúng là N+1: các query CHỈ khác con số ID
+for q in connection.queries[:5]:
+    print(q['sql'])
+# SELECT * FROM users WHERE id = 7
+# SELECT * FROM users WHERE id = 12
+# SELECT * FROM users WHERE id = 7     ← LẶP LẠI cùng một id!
+```
+
+```text
+   ④ VÌ SAO MÁY DEV KHÔNG LỘ?
+      RTT localhost      ~0,1 ms → 101 query = 10 ms   (không thấy gì)
+      RTT production      ~80 ms → 101 query = 8 GIÂY  (chết)
+      → Nút thắt là MẠNG, không phải database.
+```
+
+**Cách xử lý theo loại quan hệ — chọn sai vẫn chậm:**
+
+```python
+# Quan hệ NHIỀU-MỘT (mỗi post có 1 author) → JOIN
+posts = Post.objects.select_related("author")
+# → 1 query.  101 → 1
+
+# Quan hệ MỘT-NHIỀU (mỗi post có N comments) → KHÔNG dùng select_related!
+# ❌ select_related sẽ NHÂN DÒNG: 100 post × 20 comment = 2000 dòng qua mạng
+posts = Post.objects.prefetch_related("comments")
+# → 2 query, KHÔNG nhân dòng, dù N là 100 hay 1 triệu
+
+# LỒNG NHAU
+posts = Post.objects.select_related("author").prefetch_related("comments__user")
+```
+
+**Chặn tái diễn — để nó thất bại trong CI, đừng để khách hàng phát hiện:**
+
+```python
+def test_danh_sach_khong_bi_n_plus_1(client, django_assert_num_queries):
+    tao_100_bai_viet()
+    with django_assert_num_queries(3):     # CỐ ĐỊNH: 1 posts + 1 authors + 1 count
+        client.get("/products/")
+```
+
+```python
+# Và cảnh báo ở runtime cho mọi endpoint
+class DemQueryMiddleware:
+    NGUONG = 20
+    def __call__(self, request):
+        truoc = len(connection.queries)
+        resp = self.get_response(request)
+        n = len(connection.queries) - truoc
+        resp["X-Query-Count"] = str(n)      # ◄── nhìn thấy ngay trong DevTools
+        if n > self.NGUONG:
+            logger.warning("N+1 nghi ngờ: %s dùng %d query", request.path, n)
+        return resp
+```
+
+> **Tình huống 2:** Sửa N+1 xong, trang nhanh lên thật. Nhưng hai tuần sau, server bắt đầu **hết RAM** và bị OOM killer giết.
+
+**Chẩn đoán:** bạn vừa rơi vào **căn bệnh ngược lại**.
+
+```python
+# Xem code đã sửa
+posts = Post.objects.select_related("author", "category", "publisher") \
+                    .prefetch_related("comments__user", "tags", "images",
+                                      "likes", "revisions")
+# ← "eager load mọi thứ cho chắc"
+```
+
+```sql
+-- Đo xem một request kéo về bao nhiêu dữ liệu
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ... ;
+--  Buffers: shared hit=284192 read=18420
+--  ◄── chạm 300.000 trang = ~2,4 GB cho MỘT request
+```
+
+**Ba cách chữa:**
+
+```python
+# ① NẠP THEO MÀN HÌNH, không theo model
+# Màn hình danh sách chỉ hiện tiêu đề + tên tác giả:
+posts = Post.objects.select_related("author").only(
+    "id", "title", "author__id", "author__name")
+
+# ② GIỚI HẠN PHẠM VI prefetch — bài viral có 50.000 bình luận
+from django.db.models import Prefetch
+posts = Post.objects.prefetch_related(
+    Prefetch("comments", queryset=Comment.objects.order_by("-created_at")[:5])
+)
+
+# ③ Cho phần được phép hỏng thì tách riêng, đừng gộp vào query chính
+```
+
+```text
+   ĐIỂM CÂN BẰNG:
+
+   N+1                    ←────────────→          OVERFETCHING
+   101 chuyến đi nhỏ                        1 chuyến đi khổng lồ
+   chết vì ĐỘ TRỄ MẠNG                      chết vì BĂNG THÔNG và RAM
+
+              → NẠP ĐÚNG THỨ MÀN HÌNH NÀY CẦN, KHÔNG HƠN.
+              → Viết truy vấn theo MÀN HÌNH, không theo MODEL.
+```
 
 ## Bẫy thường gặp
 

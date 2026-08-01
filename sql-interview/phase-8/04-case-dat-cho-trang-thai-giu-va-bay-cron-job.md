@@ -484,6 +484,125 @@ COMMIT;
 
 Chú ý bước 2: điều kiện `giu_boi = $1 AND giu_den_luc > now()` đảm bảo **đúng người, và còn hạn**. Nếu hết hạn giữa lúc họ nhập thẻ, hệ thống phát hiện và hoàn tiền — thay vì bán cho hai người.
 
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Rạp báo có **hai vé cùng ghế H7**. Bạn cần trả lời: *"còn bao nhiêu ghế bị bán trùng nữa?"* và *"chặn thế nào?"*
+
+**Bước 1 — quét toàn bộ thiệt hại, đừng chỉ sửa cái được báo:**
+
+```sql
+-- ① Tìm MỌI ghế bị bán nhiều hơn một lần
+SELECT suat_chieu_id, ma_ghe, count(*) AS so_ve,
+       array_agg(booking_id ORDER BY created_at) AS cac_booking
+FROM booking
+WHERE trang_thai = 'da_thanh_toan'
+GROUP BY 1, 2
+HAVING count(*) > 1;
+
+-- ② Ai là người đặt SAU (người phải hoàn tiền)?
+SELECT b.booking_id, b.user_id, b.so_tien, b.created_at
+FROM booking b
+JOIN (
+    SELECT suat_chieu_id, ma_ghe, min(created_at) AS dau_tien
+    FROM booking WHERE trang_thai='da_thanh_toan'
+    GROUP BY 1,2 HAVING count(*) > 1
+) t USING (suat_chieu_id, ma_ghe)
+WHERE b.created_at > t.dau_tien;      -- người đặt sau → hoàn tiền + xin lỗi
+```
+
+**Bước 2 — chặn ở tầng database ngay, trước khi sửa code:**
+
+```sql
+-- Một ghế trong một suất chỉ được bán ĐÚNG MỘT LẦN
+CREATE UNIQUE INDEX booking_ghe_uk
+    ON booking (suat_chieu_id, ma_ghe)
+    WHERE trang_thai = 'da_thanh_toan';     -- partial: chỉ ràng buộc vé đã bán
+```
+
+> Từ giây này, dù code còn bug, database **vẫn từ chối** vé trùng thứ hai. Đây là lưới an toàn cuối cùng.
+
+**Bước 3 — sửa gốc và kiểm chứng bằng test tải:**
+
+```python
+# Bắn 200 request song song vào CÙNG một ghế
+import concurrent.futures as cf
+with cf.ThreadPoolExecutor(200) as ex:
+    kq = list(ex.map(lambda _: dat_ghe('H7'), range(200)))
+
+assert sum(1 for r in kq if r.ok) == 1, "VẪN CÒN BÁN TRÙNG"
+```
+
+> **Tình huống 2:** Người dùng phàn nàn *"ghế hiện đang bị giữ nhưng chẳng ai mua"*. Kiểm tra thì thấy có ghế bị treo tới **6 phút** sau khi hết hạn.
+
+**Chẩn đoán — đo độ trễ giải phóng thật:**
+
+```sql
+-- ① Có bao nhiêu ghế đang bị treo oan NGAY LÚC NÀY?
+SELECT count(*) AS treo_oan,
+       max(now() - giu_den_luc) AS treo_lau_nhat
+FROM ghe
+WHERE trang_thai = 'hold' AND giu_den_luc < now();
+--  treo_oan=143 | treo_lau_nhat=00:06:12   ◄── 143 ghế, treo tới 6 PHÚT
+
+-- ② Cron job chạy lần cuối khi nào?
+SELECT max(chay_luc) FROM cron_log WHERE ten_job = 'giai_phong_ghe';
+--  6 phút trước  → hoặc nó chạy mỗi 5 phút, hoặc nó vừa CHẾT
+```
+
+**Nguyên nhân: bạn đang dùng cron job để đảm bảo tính đúng đắn.**
+
+```text
+   Cron mỗi 1 phút  → treo oan tới 1 phút
+   Cron mỗi 5 phút  → treo oan tới 5 phút
+   Cron CHẾT        → treo oan MÃI MÃI, và không ai biết
+```
+
+**Cách xử lý — bỏ hẳn sự phụ thuộc vào cron:**
+
+```sql
+-- ✅ Đưa điều kiện hết hạn vào NGAY câu lệnh giữ chỗ
+UPDATE ghe
+SET trang_thai  = 'hold',
+    giu_boi     = $1,
+    giu_den_luc = now() + INTERVAL '10 minutes'
+WHERE ma = $2
+  AND (
+        trang_thai = 'trong'
+     OR (trang_thai = 'hold' AND giu_den_luc < now())   -- ◄── HẾT HẠN LÀ ĐIỀU KIỆN
+      )
+RETURNING ma, giu_den_luc;
+```
+
+```sql
+-- ✅ Và sơ đồ ghế cũng phải hiển thị theo cùng logic đó
+SELECT ma_ghe,
+       CASE
+           WHEN trang_thai = 'da_ban'                       THEN 'da_ban'
+           WHEN trang_thai = 'hold' AND giu_den_luc > now() THEN 'dang_giu'
+           ELSE 'trong'                          -- ◄── hết hạn = TRỐNG NGAY
+       END AS hien_thi
+FROM ghe WHERE suat_chieu_id = $1;
+```
+
+```text
+   KẾT QUẢ: ghế hết hạn lúc 23:57:01
+            → NGAY 23:57:02 đã có người cướp được.
+            → Độ trễ giải phóng: 0 giây, không phụ thuộc cron nào.
+```
+
+**Cron vẫn giữ lại — nhưng với vai trò khác hẳn:**
+
+```sql
+-- Dọn dữ liệu cho gọn (KHÔNG ảnh hưởng tính đúng đắn)
+UPDATE ghe SET trang_thai='trong', giu_boi=NULL, giu_den_luc=NULL
+WHERE trang_thai='hold' AND giu_den_luc < now() - INTERVAL '1 hour';
+
+-- Gửi thông báo "đơn của bạn đã hết hạn giữ chỗ"
+-- Thống kê: bao nhiêu % người giữ chỗ rồi bỏ
+```
+
+> **Nguyên tắc mang đi:** **đừng để tính đúng đắn của hệ thống phụ thuộc vào một job chạy nền.** Job chậm, job chết, hay job chạy trùng — hệ thống vẫn phải đúng.
+
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Cách tránh |

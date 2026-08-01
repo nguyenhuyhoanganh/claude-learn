@@ -6,6 +6,24 @@ Nguyên nhân không phải code dở, không phải server yếu. Họ đã **c
 
 Đây là câu hỏi phỏng vấn kinh điển, và cái bẫy của nó là: hầu hết ứng viên trả lời như đang đọc bài so sánh trên blog. Người phỏng vấn thì đang chờ một thứ khác — **bạn có biết cái giá của việc chọn sai, và có biết Postgres hôm nay đã làm được bao nhiêu phần việc của NoSQL chưa?**
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Relational database** | ri-lây-shân-nồ | **Database quan hệ** — dữ liệu nằm trong bảng, nối nhau bằng khoá |
+| **NoSQL** | nâu-si-quơ | Không phải một loại — là **bốn họ** database phi quan hệ |
+| **Document store** | đo-kiu-men | Kho **tài liệu** — lưu JSON lồng nhau (MongoDB) |
+| **Key-Value store** | | Kho **khoá–giá trị** — tra theo khoá cực nhanh (Redis) |
+| **Wide-Column** | oai-co-lăm | **Cột rộng** — hàng có số cột động, phân vùng theo khoá (Cassandra) |
+| **Graph database** | grap | Database **đồ thị** — nút và cạnh (Neo4j) |
+| **Normalize / Denormalize** | | **Chuẩn hoá / phi chuẩn hoá** — tách ra cho gọn / gom lại cho nhanh |
+| **ACID** | a-xịt | Bốn lời hứa của giao dịch: nguyên tử, nhất quán, cô lập, bền vững |
+| **CAP theorem** | cáp | Định lý về đánh đổi **nhất quán / sẵn sàng / chịu phân mảnh mạng** |
+| **PACELC** | pa-xen-si | Mở rộng của CAP, thêm đánh đổi **độ trễ** lúc mạng bình thường |
+| **Eventual consistency** | i-ven-chu-ồ | **Nhất quán sau cùng** — ngừng ghi một lúc thì mọi bản sao mới giống nhau |
+| **CDC** (*Change Data Capture*) | | **Bắt thay đổi dữ liệu** — đọc nhật ký ghi rồi phát sang hệ khác |
+| **`JSONB`** | jây-sần-bi | Kiểu JSON **nhị phân** của PostgreSQL, có index và toán tử riêng |
+
 ## Trước hết: "NoSQL" không phải một loại database
 
 Đây là hiểu lầm phổ biến nhất. NoSQL không phải một thứ — nó là **bốn họ hoàn toàn khác nhau**, gộp chung dưới một cái tên marketing.
@@ -234,6 +252,103 @@ Chọn NoSQL mà đáng lẽ nên QUAN HỆ:
 ```
 
 Sự bất đối xứng này là lý do "mặc định chọn quan hệ" không phải bảo thủ — nó là quản trị rủi ro. Bạn đang chọn cái sai **rẻ hơn**.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Sếp đọc bài viết trên mạng và yêu cầu *"chuyển sang MongoDB cho linh hoạt, khỏi phải migration mỗi lần đổi schema"*.
+
+**Đừng cãi. Hãy hỏi ba câu và để câu trả lời tự nói.**
+
+```text
+   ① "Dữ liệu này có cần đảm bảo tổng vào = tổng ra không?"
+      (tiền, kho, chỗ ngồi)
+      → CÓ  → quan hệ, hết bàn.
+
+   ② "Mình có biết trước mọi câu hỏi sẽ hỏi dữ liệu này không?"
+      → KHÔNG → quan hệ, vì truy vấn ad-hoc là điểm mạnh nhất của SQL.
+
+   ③ "Đội phân tích sẽ truy cập dữ liệu này bằng gì?"
+      → Nếu câu trả lời là "phải xây ETL đổ về kho SQL"
+        thì mình đang quay lại SQL bằng cửa sau, với chi phí gấp đôi.
+```
+
+**Rồi đề xuất giải pháp giải đúng vấn đề của sếp — mà không đổi database:**
+
+```sql
+-- Vấn đề thật của sếp: "đổi schema phải migration"
+-- Lời giải: cột thật cho phần ỔN ĐỊNH, JSONB cho phần BIẾN ĐỘNG
+CREATE TABLE events (
+    event_id   BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT      NOT NULL REFERENCES users(user_id),  -- ràng buộc giữ nguyên
+    event_type TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    payload    JSONB       NOT NULL      -- ◄── schema TỰ DO ở đây
+);
+CREATE INDEX events_payload_gin ON events USING gin (payload jsonb_path_ops);
+```
+
+```sql
+-- Thêm trường mới? KHÔNG cần migration:
+INSERT INTO events (user_id, event_type, payload)
+VALUES (42, 'checkout', '{"device":{"os":"iOS"},"ab_test":"variant_B"}');
+
+-- Vẫn truy vấn và index được như cột thật:
+SELECT payload->>'ab_test', count(*)
+FROM events WHERE payload @> '{"device":{"os":"iOS"}}'
+GROUP BY 1;
+```
+
+> **Kết quả:** sếp được cái mình cần (không migration), công ty giữ được JOIN, transaction, ràng buộc, và mọi công cụ BI.
+
+> **Tình huống 2:** Hệ thống đã có Postgres + Redis + Elasticsearch. Số liệu ba nơi **lệch nhau**, không ai biết nơi nào đúng.
+
+**Chẩn đoán: bạn có ba nguồn sự thật, tức là không có nguồn nào cả.**
+
+```text
+   Dấu hiệu nhận biết — kiểm bằng ba câu hỏi:
+
+   ① Nếu XOÁ SẠCH Redis lúc này, có mất dữ liệu không?
+      → CÓ mất → Redis đang là NGUỒN SỰ THẬT. SAI KIẾN TRÚC.
+
+   ② Nếu Elasticsearch chết, có dựng lại được từ Postgres không?
+      → KHÔNG → bạn đang ghi thẳng vào ES mà không qua nguồn gốc.
+
+   ③ Ứng dụng đang GHI vào mấy nơi?
+      → nhiều hơn 1 → GHI KÉP, và nó sẽ lệch. Chắc chắn.
+```
+
+**Cách xử lý — chọn một nguồn sự thật, phần còn lại tái dựng được:**
+
+```text
+   ❌ TRƯỚC — ghi kép, luôn có kịch bản ghi được chỗ này hỏng chỗ kia
+
+      App ──┬──► Postgres
+            ├──► Redis        (ghi thẳng)
+            └──► Elasticsearch (ghi thẳng)
+
+   ✅ SAU — một nguồn sự thật, đồng bộ bằng CDC
+
+      App ──► Postgres ──WAL──► Debezium ──► Kafka ──┬──► Redis
+              (NGUỒN SỰ THẬT)                        └──► Elasticsearch
+```
+
+```sql
+-- Bật CDC trên PostgreSQL
+ALTER SYSTEM SET wal_level = logical;
+CREATE PUBLICATION cdc_products FOR TABLE products, orders;
+```
+
+```python
+# Job đối soát chạy hằng đêm — phát hiện lệch TRƯỚC khi khách phát hiện
+def doi_soat():
+    pg = db.query("SELECT product_id, ton_kho FROM products")
+    es = es_client.search(index="products", size=10000)
+    lech = [p for p in pg if es_map.get(p.id) != p.ton_kho]
+    if lech:
+        canh_bao(f"{len(lech)} sản phẩm lệch giữa Postgres và Elasticsearch")
+```
+
+> **Nguyên tắc:** nếu Redis mất sạch lúc 3 giờ sáng, hệ thống phải chỉ **chậm đi**, không được **sai đi**.
 
 ## Bẫy thường gặp
 

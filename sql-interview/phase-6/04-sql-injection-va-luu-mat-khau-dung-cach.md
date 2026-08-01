@@ -6,6 +6,23 @@ Không có phần mềm gián điệp. Không có mật khẩu bị lộ. Kẻ t
 
 Làm sao một dòng chữ lại cướp được cả hệ thống? Bí mật nằm ở chỗ: với cơ sở dữ liệu, dòng chữ đó **không phải dữ liệu — nó là mệnh lệnh**.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **SQL Injection** | in-giếc-shân | **Tiêm mã SQL** — dữ liệu người dùng trèo thành mệnh lệnh |
+| **Prepared statement** | pri-pe-ơ | **Câu lệnh tham số hoá** — cấu trúc chốt trước, giá trị gửi sau |
+| **Parameterized query** | | Tên gọi khác của prepared statement |
+| **Allowlist** | a-lâu-lít | **Danh sách trắng** — chỉ chấp nhận giá trị nằm trong tập đã định |
+| **Second-order injection** | | Payload lưu an toàn rồi **nổ ở query khác** |
+| **Blind injection** | blain | Dò dữ liệu qua **đúng/sai** hoặc qua **thời gian phản hồi** |
+| **Least privilege** | lít pri-vi-lịt | **Quyền tối thiểu** — chỉ cấp đúng quyền cần thiết |
+| **Hash function** | hát | **Hàm băm** — một chiều, từ kết quả không tính ngược lại được |
+| **Salt** | sôn | **Muối** — chuỗi ngẫu nhiên riêng từng người, trộn vào trước khi băm |
+| **Pepper** | pép-pơ | **Tiêu** — khoá bí mật **chung**, lưu **ngoài** database |
+| **Rainbow table** | rên-bâu | Bảng tra sẵn hàng tỷ cặp mật khẩu ↔ chuỗi băm |
+| **Timing attack** | tai-ming | Dò bí mật qua **chênh lệch thời gian** phản hồi |
+
 ## Lỗ hổng nằm ở đúng một chỗ: chuỗi ghép chuỗi
 
 ```python
@@ -383,6 +400,124 @@ def dang_nhap(email, mat_khau):
 ```
 
 Sau vài tháng, phần lớn tài khoản đã nâng cấp. Số còn lại (người không đăng nhập) thì buộc đặt lại mật khẩu.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Bạn tiếp quản một dự án cũ. Sếp hỏi *"code này có bị SQL injection không?"* Có 340 file.
+
+**Đừng đọc tay. Quét theo bốn mẫu này:**
+
+```bash
+# ① Ghép chuỗi trực tiếp — thủ phạm số 1
+grep -rn --include=*.py -E "execute\(.*[\"'].*\+|execute\(f[\"']" .
+
+# ② f-string / template literal trong câu lệnh
+grep -rn --include=*.js -E "query\(\`.*\\\$\{"
+grep -rn --include=*.py -E "(SELECT|INSERT|UPDATE|DELETE).*\{.*\}" .
+
+# ③ ORM có đường thoát — nơi ORM KHÔNG cứu được
+grep -rn -E "\.raw\(|\.extra\(|createQuery\(\"|sequelize\.literal\(" .
+
+# ④ ORDER BY / tên cột động — không tham số hoá được
+grep -rn -E "ORDER BY.*(\+|\$\{|%s|f\")" .
+```
+
+**Rồi phân loại theo mức nguy hiểm để sửa có thứ tự:**
+
+```text
+   ĐỎ   — ghép chuỗi với dữ liệu từ request        → sửa NGAY
+   CAM  — ORDER BY/tên cột từ input                → danh sách trắng
+   VÀNG — ghép chuỗi với dữ liệu từ DATABASE        → second-order, vẫn phải sửa
+   XANH — ghép chuỗi với hằng số trong code         → an toàn, để sau
+```
+
+**Sửa mẫu:**
+
+```python
+# ❌ ĐỎ
+cur.execute(f"SELECT * FROM users WHERE email = '{email}'")
+# ✅
+cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+
+# ❌ CAM — không tham số hoá được tên cột
+sql = f"SELECT * FROM orders ORDER BY {sort} {dir}"
+# ✅ DANH SÁCH TRẮNG là cách DUY NHẤT
+COT = {"ordered_at", "total_amount", "status"}
+HUONG = {"ASC", "DESC"}
+if sort not in COT or dir.upper() not in HUONG:
+    raise ValueError("Tham số sắp xếp không hợp lệ")
+sql = f"SELECT * FROM orders ORDER BY {sort} {dir.upper()}"
+```
+
+**Chặn tái diễn — để máy canh, đừng để người nhớ:**
+
+```yaml
+# .pre-commit-config.yaml — chặn ngay trước khi commit
+- repo: https://github.com/PyCQA/bandit
+  hooks: [{ id: bandit, args: ["-s", "B608"] }]   # B608 = hardcoded_sql_expressions
+```
+
+> **Tình huống 2:** Database bị rò. Bảng `users` có cột `password` chứa chuỗi 64 ký tự hex. Sếp hỏi *"khách hàng có nguy hiểm không?"*
+
+**Chẩn đoán trong 3 câu lệnh — trả lời được chính xác mức độ:**
+
+```sql
+-- ① Đang dùng hàm băm nào? (nhìn tiền tố là biết)
+SELECT left(password, 8), count(*) FROM users GROUP BY 1 ORDER BY 2 DESC;
+--  $argon2i |  12000     → Argon2 — AN TOÀN
+--  $2b$12$  |   3000     → bcrypt — AN TOÀN
+--  (64 hex) | 850000     → SHA-256 KHÔNG MUỐI — NGUY HIỂM
+
+-- ② CÓ MUỐI KHÔNG? Đếm chuỗi băm trùng nhau
+SELECT count(*) - count(DISTINCT password) AS so_ban_ghi_trung FROM users;
+--  47.320  → CÓ TRÙNG → KHÔNG CÓ MUỐI
+--       0  → có muối riêng từng người
+
+-- ③ Chuỗi băm nào lặp nhiều nhất? (đây là mật khẩu phổ biến)
+SELECT password, count(*) FROM users GROUP BY 1 ORDER BY 2 DESC LIMIT 5;
+--  8d969ee... | 9840    ← chính là SHA-256 của "123456"
+```
+
+**Đánh giá thiệt hại — nói được con số:**
+
+```text
+   SHA-256 không muối:
+      Một GPU chơi game thử ~10 tỷ chuỗi/giây.
+      → mật khẩu 8 ký tự chữ+số: dò cạn trong VÀI GIỜ
+      → và không có muối nên bẻ MỘT chuỗi mở được TẤT CẢ người dùng cùng mật khẩu
+
+   → PHẢI coi như TOÀN BỘ mật khẩu đã lộ.
+```
+
+**Cách xử lý — theo thứ tự khẩn cấp:**
+
+```text
+   ① BẮT BUỘC ĐẶT LẠI MẬT KHẨU cho mọi tài khoản — không có lựa chọn khác
+   ② HUỶ MỌI PHIÊN đang hoạt động (nếu không, kẻ trộm vẫn đang ở trong)
+   ③ Thông báo cho người dùng — và nhắc họ đổi mật khẩu ở nơi khác nếu dùng chung
+   ④ Chuyển sang Argon2id, nâng cấp NGAY tại lần đăng nhập
+```
+
+```sql
+-- ② Huỷ mọi phiên: đặt mốc thu hồi cho toàn hệ thống
+UPDATE users SET tokens_invalid_before = now();
+DELETE FROM sessions;
+```
+
+```python
+# ④ Nâng cấp dần, không bắt ai chờ
+def dang_nhap(email, mat_khau):
+    u = tim_user(email)
+    if not u:
+        ph.hash("dummy"); raise LoiDangNhap()      # tốn cùng thời gian → không lộ
+
+    if u.password.startswith("$argon2"):
+        ph.verify(u.password, mat_khau)
+    else:                                           # SHA-256 cũ
+        if hashlib.sha256(mat_khau.encode()).hexdigest() != u.password:
+            raise LoiDangNhap()
+        cap_nhat_hash(u.id, ph.hash(mat_khau))      # NÂNG CẤP ngay tại đây
+```
 
 ## Bẫy thường gặp
 

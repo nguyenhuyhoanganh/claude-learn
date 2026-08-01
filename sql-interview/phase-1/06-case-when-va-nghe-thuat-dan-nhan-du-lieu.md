@@ -433,6 +433,140 @@ JOIN quy_che_xep_loai q
 
 **Ngưỡng thực dụng:** khi cùng bộ ngưỡng đó xuất hiện ở **ba câu lệnh trở lên**, hãy đưa nó vào bảng.
 
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Báo cáo xếp loại chạy ra kết quả **cả lớp Trung bình**, không một ai Giỏi. Câu lệnh không báo lỗi gì.
+
+**Chẩn đoán trong 10 giây — mẹo "thử giá trị cao nhất":**
+
+```sql
+-- Lấy điểm CAO NHẤT bảng, xem nó được xếp loại gì
+SELECT diem,
+    CASE
+        WHEN diem >= 5.0 THEN 'Trung bình'
+        WHEN diem >= 6.5 THEN 'Khá'
+        WHEN diem >= 8.0 THEN 'Giỏi'
+        ELSE 'Yếu'
+    END AS xep_loai
+FROM bang_diem ORDER BY diem DESC LIMIT 1;
+```
+
+```text
+ diem | xep_loai
+------+------------
+  9.8 | Trung bình     ◄── ĐIỂM CAO NHẤT MÀ RA "TRUNG BÌNH"
+                            → CHẮC CHẮN XẾP NGƯỢC THỨ TỰ
+```
+
+**Cách sửa — đảo lại cho khắt khe nhất lên trên:**
+
+```sql
+CASE
+    WHEN diem >= 8.0 THEN 'Giỏi'          -- ◄── sàng lỗ NHỎ NHẤT lên đầu
+    WHEN diem >= 6.5 THEN 'Khá'
+    WHEN diem >= 5.0 THEN 'Trung bình'
+    ELSE 'Yếu'
+END
+```
+
+**Chặn tái diễn — kiểm chứng bằng phân bố, không tin bằng mắt:**
+
+```sql
+-- Sau khi sửa, xem phân bố có hợp lý không
+SELECT xep_loai, count(*), round(100.0*count(*)/sum(count(*)) OVER (), 1) AS phan_tram
+FROM (SELECT CASE WHEN diem>=8.0 THEN 'Giỏi'
+                  WHEN diem>=6.5 THEN 'Khá'
+                  WHEN diem>=5.0 THEN 'Trung bình'
+                  ELSE 'Yếu' END AS xep_loai
+      FROM bang_diem) t
+GROUP BY 1 ORDER BY 2 DESC;
+```
+
+```text
+ xep_loai   | count | phan_tram
+------------+-------+-----------
+ Khá        |   118 |      39.3
+ Trung bình |    96 |      32.0
+ Giỏi       |    64 |      21.3
+ Yếu        |    22 |       7.3
+
+   ✅ Có đủ BỐN mức, phân bố hợp lý.
+   ⚠ Nếu thấy MỘT mức chiếm 100% → gần như chắc chắn sai thứ tự.
+   ⚠ Nếu thấy có mức = 0 → kiểm lại ngưỡng, có thể một nhánh không bao giờ tới được.
+```
+
+> **Tình huống 2:** Chạy `UPDATE` để điều chỉnh giá theo loại sản phẩm. Chạy xong, **hàng nghìn sản phẩm có giá `NULL`**.
+
+**Chẩn đoán — xem đúng câu lệnh đã chạy:**
+
+```sql
+-- Câu lệnh đã chạy
+UPDATE san_pham
+SET gia = gia * CASE loai
+                    WHEN 'ao'   THEN 0.9
+                    WHEN 'quan' THEN 0.8
+                    WHEN 'giay' THEN 0.95
+                END;                    -- ◄── THIẾU `ELSE 1`
+```
+
+```text
+   SẢN PHẨM LOẠI 'phu_kien' (không khớp nhánh nào):
+      CASE trả về NULL
+      → gia * NULL = NULL
+      → GIÁ BỊ XOÁ SẠCH.
+
+   Và câu lệnh CHẠY NGON LÀNH, không một lời cảnh báo.
+```
+
+**Đo thiệt hại:**
+
+```sql
+SELECT loai, count(*) AS so_sp_mat_gia
+FROM san_pham WHERE gia IS NULL GROUP BY 1;
+--  phu_kien | 3.412
+--  do_bo    |   890
+```
+
+**Cách khôi phục và cách viết đúng:**
+
+```sql
+-- ① KHÔI PHỤC từ backup / bảng lịch sử giá (nếu có)
+UPDATE san_pham s SET gia = h.gia
+FROM lich_su_gia h
+WHERE h.product_id = s.product_id AND s.gia IS NULL
+  AND h.hieu_luc_den IS NULL;
+
+-- ② VIẾT ĐÚNG: luôn có ELSE
+UPDATE san_pham
+SET gia = gia * CASE loai
+                    WHEN 'ao'   THEN 0.9
+                    WHEN 'quan' THEN 0.8
+                    WHEN 'giay' THEN 0.95
+                    ELSE 1                    -- ◄── giữ nguyên giá
+                END;
+```
+
+**Và quy trình an toàn — xem trước khi chạy thật:**
+
+```sql
+-- ③ CHẠY THỬ bằng SELECT trước, xem CÓ dòng nào ra NULL không
+SELECT loai, count(*) AS so_dong,
+       count(*) FILTER (WHERE CASE loai
+                                  WHEN 'ao'   THEN 0.9
+                                  WHEN 'quan' THEN 0.8
+                                  WHEN 'giay' THEN 0.95
+                              END IS NULL) AS se_thanh_null
+FROM san_pham GROUP BY 1;
+--  phu_kien | 3412 | 3412    ◄── PHÁT HIỆN TRƯỚC KHI CHẠY UPDATE
+
+-- ④ Rồi mới bọc transaction và chạy thật
+BEGIN;
+UPDATE san_pham SET gia = gia * CASE ... ELSE 1 END
+RETURNING product_id, loai, gia;
+-- đọc kết quả, khớp thì COMMIT, không khớp thì ROLLBACK
+COMMIT;
+```
+
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Cách tránh |

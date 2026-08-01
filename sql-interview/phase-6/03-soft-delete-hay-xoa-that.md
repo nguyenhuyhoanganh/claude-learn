@@ -6,6 +6,21 @@ Ghế còn ấm. Người phỏng vấn không hỏi gì về dự án cũ. Anh 
 
 Câu trả lời của bạn — dù là gì — gần như chắc chắn **đúng**. Và bạn vẫn có thể trượt, vì đây là câu hỏi bốn tầng, và mỗi tầng là **một tờ hoá đơn** sẽ tới tay bạn ở một mốc thời gian khác nhau.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Soft delete** | sóp đi-lít | **Xoá mềm** — chỉ đánh dấu là đã xoá, dữ liệu vẫn còn |
+| **Hard delete** | hát | **Xoá thật** — dòng biến mất khỏi bảng |
+| **Anonymization** | a-nô-ni-mai-zê-shân | **Ẩn danh hoá** — giữ dòng nhưng xoá phần nhận dạng cá nhân |
+| **Crypto-shredding** | crip-tô sret-đing | **Xoá bằng cách huỷ khoá** — dữ liệu mã hoá thành rác vĩnh viễn |
+| **RLS** (*Row Level Security*) | | **Bảo mật cấp dòng** — database tự lọc, code không cần nhớ |
+| **Partial unique index** | | Index duy nhất **chỉ áp cho tập dòng thoả điều kiện** |
+| **Retention** | ri-ten-shân | **Thời hạn lưu trữ** dữ liệu theo luật hoặc theo chính sách |
+| **Nghị định 13/2023** | | Luật Việt Nam về dữ liệu cá nhân — xoá trong **72 giờ** |
+| **GDPR** | ge-đi-pi-a | Luật châu Âu về dữ liệu cá nhân |
+| **SCD Type 2** | | Cách lưu **lịch sử thay đổi** có `hiệu_lực_từ` / `hiệu_lực_đến` |
+
 ## Soft delete là gì và vì sao ai cũng chọn nó
 
 **Soft delete** (xoá mềm) là không xoá thật, chỉ đánh dấu bản ghi là "đã xoá":
@@ -261,6 +276,107 @@ Khôi phục user 42 — những thứ phải kiểm:
 ```
 
 Câu hỏi tự kiểm tra dành cho hệ thống của bạn ngay hôm nay: **bảng nào đang soft delete mà chưa ai bấm khôi phục lần nào?** Nếu chưa ai bấm, bạn không có tính năng khôi phục — bạn chỉ có một cột `deleted_at` và một cái kho rác.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Khách gửi email yêu cầu **xoá toàn bộ dữ liệu cá nhân** theo Nghị định 13. Bạn có **72 giờ**. Nhưng họ có 200 đơn hàng mà kế toán bảo phải giữ 10 năm.
+
+**Đây là bài toán hai luật ngược chiều nhau. Cách xử lý:**
+
+```sql
+-- ═══ BƯỚC 1: ẨN DANH HOÁ, không xoá dòng ═══
+BEGIN;
+UPDATE users SET
+    full_name     = 'Đã xoá theo yêu cầu',
+    email         = 'deleted-' || user_id || '@invalid.local',
+    phone         = NULL,
+    address       = NULL,
+    id_number     = NULL,
+    date_of_birth = NULL,
+    anonymized_at = now()
+WHERE user_id = 42;
+
+-- Đơn hàng VẪN trỏ về user_id = 42 → báo cáo doanh thu KHÔNG GÃY
+-- Nhưng không còn dữ liệu cá nhân nào
+
+-- ═══ BƯỚC 2: xoá phần nhận dạng nằm rải rác ở bảng khác ═══
+UPDATE orders SET
+    ten_nguoi_nhan = 'Đã xoá', dia_chi_giao = 'Đã xoá', sdt_nguoi_nhan = NULL
+WHERE customer_id = 42;
+
+DELETE FROM addresses      WHERE user_id = 42;
+DELETE FROM payment_methods WHERE user_id = 42;
+COMMIT;
+```
+
+**Bước 3 — danh sách nơi cần dọn, đừng quên chỗ nào:**
+
+```text
+   □ Bảng chính              □ Replica đọc (tự đồng bộ)
+   □ Bảng lịch sử / audit    □ Kho phân tích (BigQuery/Snowflake)
+   □ Cache Redis             □ Chỉ mục tìm kiếm (Elasticsearch)
+   □ Log ứng dụng            □ Email marketing (Mailchimp)
+   □ CDC stream (Kafka)      □ BACKUP  ◄── chỗ khó nhất
+```
+
+**Bước 4 — backup: chỗ duy nhất không sửa được.**
+
+```text
+   Bạn KHÔNG thể sửa một bản backup đã ghi ra.
+
+   ✅ Cách duy nhất: CRYPTO-SHREDDING
+      Mã hoá dữ liệu cá nhân bằng khoá RIÊNG cho từng người,
+      lưu khoá ở nơi xoá được.
+      Xoá khoá → dữ liệu trong MỌI backup cũ vĩnh viễn thành rác.
+```
+
+```sql
+DELETE FROM user_encryption_keys WHERE user_id = 42;
+-- Từ giây này, không ai giải mã được dữ liệu của user 42, kể cả bạn
+```
+
+**Bước 5 — ghi nhận để chứng minh đã tuân thủ:**
+
+```sql
+INSERT INTO gdpr_requests (user_id, loai, nhan_luc, hoan_thanh_luc, nguoi_xu_ly)
+VALUES (42, 'erasure', '2026-08-01 09:00+07', now(), 'system');
+```
+
+> **Tình huống 2:** Sản phẩm có nút "Khôi phục tài khoản". Chưa ai bấm bao giờ. Sếp hỏi *"nó có chạy không?"*
+
+**Câu trả lời trung thực: bạn không biết — vì chưa ai kiểm.**
+
+```sql
+-- ① Đếm xem có bao nhiêu tài khoản đang chờ khôi phục
+SELECT count(*) FROM users
+WHERE deleted_at IS NOT NULL AND deleted_at > now() - INTERVAL '30 days';
+
+-- ② KIỂM THỬ THẬT: thử khôi phục một tài khoản trên môi trường staging
+```
+
+**Sáu thứ phải kiểm trước khi dám nói "khôi phục được":**
+
+```text
+   □ Email của họ đã bị người khác lấy chưa?     → partial unique index chặn
+   □ Bản ghi con đã bị CASCADE xoá chưa?          → orders, addresses còn không
+   □ Username / slug có bị chiếm chưa?
+   □ Subscription ở cổng thanh toán đã huỷ chưa?  → hệ thống NGOÀI, khó nhất
+   □ Dữ liệu đã bị dọn khỏi search index chưa?
+   □ Vai trò / quyền của họ còn tồn tại không?
+```
+
+```python
+# Test tự động — chạy trong CI, không để nó hỏng âm thầm
+def test_khoi_phuc_tai_khoan(db):
+    u = tao_user(email="test@x.com")
+    xoa_mem(u.id)
+    tao_user(email="test@x.com")          # người khác lấy email đó
+
+    with pytest.raises(EmailDaBiChiem):   # PHẢI báo lỗi rõ ràng
+        khoi_phuc(u.id)                   # chứ không phải im lặng thất bại
+```
+
+> **Câu ăn điểm khi phỏng vấn:** *"Khôi phục là một lời hứa. Nên em có kiểm tra nó thật."*
 
 ## Bẫy thường gặp
 

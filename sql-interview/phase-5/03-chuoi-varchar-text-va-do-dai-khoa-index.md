@@ -6,6 +6,21 @@ Hai cột trong cùng một bảng, khác nhau đúng một con số nằm trong
 
 Ngắn tới mức nghe như được tặng điểm. Và rất nhiều người trả lời xong rồi ra về tay không — vì họ dừng lại ở câu đầu tiên: *"nó là giới hạn số ký tự"*. Đúng. Nhưng đó là câu nằm sẵn trong trang đầu tài liệu, và người phỏng vấn thì đang muốn biết một thứ khác: **bạn đã tự chọn độ rộng cho một cột trên bảng thật bao giờ chưa?**
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **`VARCHAR(n)`** | va-cha | Chuỗi **độ dài thay đổi**, tối đa `n` ký tự |
+| **`CHAR(n)`** | cha | Chuỗi **độ dài cố định** — thiếu thì **đệm thêm dấu cách** |
+| **`TEXT`** | tếch | Chuỗi độ dài tuỳ ý |
+| **Charset** | cha-sét | **Bảng mã ký tự** — quy định mỗi ký tự chiếm mấy byte |
+| **utf8mb4** | | Bảng mã đầy đủ của MySQL: **4 byte/ký tự**, hỗ trợ emoji và tiếng Việt |
+| **Collation** | co-lây-shân | **Bảng đối chiếu** — luật so sánh và sắp xếp chuỗi (`'a' = 'A'` hay không) |
+| **Index key length** | | **Độ dài khoá index** — tính theo con số **khai báo**, không theo dữ liệu thật |
+| **Prefix index** | pri-phích | **Index một phần đầu chuỗi** (chỉ MySQL) |
+| **Generated column** | | **Cột sinh** — giá trị do database tự tính từ cột khác |
+| **Normalization (Unicode)** | | **Chuẩn hoá Unicode** — cùng một chữ có thể có nhiều cách mã hoá |
+
 ## Tầng 1: khai rộng có tốn đĩa không?
 
 Gần như không.
@@ -251,6 +266,67 @@ Từ giây đó, không một dòng code nào trên đời tạo được hai t�
 | Mã hash mật khẩu bcrypt | `CHAR(60)` | `CHAR(60)` |
 
 > **Số điện thoại không bao giờ lưu bằng kiểu số.** `0901234567` lưu thành `INT` sẽ mất số `0` đầu, và không chứa được `+84` hay dấu cách.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Chạy migration thêm index, MySQL báo `ERROR 1071: Specified key was too long; max key length is 767 bytes`.
+
+**Chẩn đoán — tính ra con số:**
+
+```sql
+-- ① Cột đang khai bao nhiêu, charset gì?
+SELECT column_name, character_maximum_length, character_set_name
+FROM information_schema.columns
+WHERE table_name = 'users' AND column_name = 'email';
+-- 255, utf8mb4  →  255 × 4 = 1020 byte  >  767  → VỠ TRẦN
+
+-- ② Bảng đang dùng row format nào?
+SELECT row_format FROM information_schema.tables WHERE table_name = 'users';
+-- COMPACT → trần 767. DYNAMIC → trần 3072.
+```
+
+**Ba cách xử lý, xếp theo mức độ can thiệp:**
+
+```sql
+-- ① RẺ NHẤT: đổi row format (nếu đang COMPACT)
+ALTER TABLE users ROW_FORMAT=DYNAMIC;    -- trần lên 3072 byte
+
+-- ② Hạ độ dài khai báo cho ĐÚNG NHU CẦU THẬT
+ALTER TABLE users MODIFY email VARCHAR(191);   -- 191 × 4 = 764 < 767
+
+-- ③ Nếu cột thật sự cần dài: index PHẦN ĐẦU thôi
+CREATE INDEX idx_email ON users (email(100));
+-- ⚠ prefix index chỉ LỌC được, KHÔNG dùng cho ORDER BY và không covering
+```
+
+> **Tình huống 2:** Sau khi nâng cấp server từ Debian 10 lên Debian 11, một số truy vấn **trả thiếu dòng** — không lỗi, không cảnh báo.
+
+**Đây là sự cố khó chẩn đoán nhất trong nhóm kiểu chuỗi.**
+
+```sql
+-- ① Kiểm phiên bản collation có lệch không
+SELECT collname, collversion, pg_collation_actual_version(oid) AS phien_ban_that
+FROM pg_collation
+WHERE collprovider = 'c' AND collversion IS NOT NULL
+  AND collversion <> pg_collation_actual_version(oid);
+-- Có dòng trả về → COLLATION ĐÃ ĐỔI → index B-tree cũ đang SAI THỨ TỰ
+```
+
+**Nguyên nhân:** PostgreSQL dùng collation của hệ điều hành. Nâng OS đổi glibc → **thứ tự sắp xếp thay đổi** → index cũ trở nên sai, và query dùng index đó trả thiếu dòng.
+
+```sql
+-- ✅ Cách xử lý
+REINDEX DATABASE ten_database;          -- dựng lại toàn bộ index
+-- rồi cập nhật lại phiên bản đã ghi nhận
+ALTER COLLATION "vi_VN" REFRESH VERSION;
+```
+
+**Cách phòng cho tương lai:** dùng collation `"C"` (so sánh theo byte, **không bao giờ đổi**) cho các cột kỹ thuật như email, slug, mã — chúng không cần thứ tự theo ngôn ngữ.
+
+```sql
+ALTER TABLE users ALTER COLUMN email TYPE TEXT COLLATE "C";
+REINDEX TABLE users;
+```
 
 ## Bẫy thường gặp
 

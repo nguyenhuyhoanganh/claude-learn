@@ -8,6 +8,24 @@ Không còn nước nào cao hơn nữa.
 
 Đây là câu chuyện về nước cờ cuối cùng, và về cái giá mà bạn phải trả **mãi mãi** sau khi đi nước đó.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Sharding** | sát-đing | **Chia mảnh** — cắt một bảng ra nhiều **máy** khác nhau |
+| **Shard** | sát | **Mảnh** — một phần dữ liệu nằm trên một máy |
+| **Shard key** | | **Khoá phân mảnh** — cột quyết định hàng nằm ở máy nào |
+| **Vertical scaling** | | **Mở rộng dọc** — thuê máy to hơn |
+| **Horizontal scaling** | | **Mở rộng ngang** — thêm máy |
+| **Connection pooling** | | **Gom kết nối** — dùng chung kết nối để đỡ tốn tài nguyên |
+| **Consistent hashing** | | Vòng tròn băm giúp thêm/bớt máy chỉ phải chuyển ~1/N dữ liệu |
+| **Virtual shard** | | **Mảnh ảo** — chia sẵn N mảnh logic rồi ánh xạ vào ít máy vật lý |
+| **Colocation** | cô-lô-kê-shân | **Đặt chung chỗ** — bảng liên quan dùng chung shard key để nằm cùng máy |
+| **Hot shard** | | **Mảnh nóng** — một máy gánh phần áp đảo lưu lượng |
+| **Scatter-gather** | | **Toả ra rồi gom về** — hỏi mọi shard rồi gộp kết quả; đắt gấp N lần |
+| **Saga** | sa-ga | Chuỗi bước cục bộ có **hành động bù trừ**, thay cho transaction xuyên máy |
+| **2PC** (*Two-Phase Commit*) | | **Chốt hai pha** — transaction phân tán; chậm và có kịch bản treo |
+
 ## Bậc thang: bốn nước đi trước khi shard
 
 Bài học lớn nhất của Figma không phải "hãy shard", mà là: **đừng shard khi các nước thang dễ hơn vẫn còn chỗ để leo.**
@@ -303,6 +321,100 @@ GIAI ĐOẠN 4 — Dọn dẹp
 ```
 
 Điểm mấu chốt: **giai đoạn 1 tách phần logic ra khỏi phần vật lý**. Bạn kiểm tra được mọi thứ trước khi có bất kỳ dữ liệu nào rời khỏi máy cũ. Đây là bài học vận hành đáng giá nhất của cả câu chuyện.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** CPU database chạm 85% vào giờ cao điểm. Sếp hỏi *"có phải shard rồi không?"*
+
+**Đừng trả lời ngay. Leo hết bậc thang trước — mỗi bậc là một câu lệnh đo.**
+
+```sql
+-- ═══ BẬC 1: có thật là hết sức máy không? ═══
+SELECT count(*) FILTER (WHERE state = 'active')  AS dang_chay,
+       count(*) FILTER (WHERE state = 'idle')     AS ngoi_khong,
+       count(*)                                    AS tong
+FROM pg_stat_activity;
+--  dang_chay=12 | ngoi_khong=480 | tong=492
+--  ◄── CPU cao vì 492 KẾT NỐI, không phải vì tải thật. Cần PgBouncer, KHÔNG cần shard.
+
+-- ═══ BẬC 2: tải là ĐỌC hay GHI? ═══
+SELECT sum(xact_commit) AS ghi, sum(blks_hit + blks_read) AS doc
+FROM pg_stat_database WHERE datname = current_database();
+--  Đọc áp đảo → thêm READ REPLICA. Shard KHÔNG giải quyết tải đọc.
+
+-- ═══ BẬC 3: một BẢNG chiếm bao nhiêu phần? ═══
+SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) AS kich_thuoc
+FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 5;
+--  events | 2.1 TB     ◄── nếu chỉ MỘT bảng lớn → TÁCH nó sang database riêng trước
+
+-- ═══ BẬC 4: query nào ăn tài nguyên nhất? ═══
+SELECT calls, round(mean_exec_time::numeric,1) AS tb_ms,
+       round((calls*mean_exec_time/1000)::numeric) AS tong_giay, left(query,60)
+FROM pg_stat_statements ORDER BY calls*mean_exec_time DESC LIMIT 5;
+--  Rất thường: MỘT query thiếu index đang ăn 60% CPU. Thêm index rẻ hơn shard 100 lần.
+```
+
+**Chỉ khi cả bốn bậc đều hết chỗ leo mới tới sharding:**
+
+```text
+   ĐIỀU KIỆN CẦN để shard (phải thoả CẢ BA):
+   ① MỘT BẢNG đã lớn hơn sức chứa một máy
+   ② Nút thắt là GHI (đọc thì replica giải quyết được)
+   ③ Đã thuê con máy to nhất nhà cung cấp có bán
+```
+
+> **Tình huống 2:** Đã shard theo `tenant_id` được 6 tháng. Một khách hàng lớn ký hợp đồng, và giờ shard chứa họ **cháy** trong khi 15 shard khác ngồi chơi.
+
+**Chẩn đoán — đo phân bố, đừng đoán:**
+
+```sql
+-- ① Lưu lượng chia thế nào giữa các shard?
+SELECT shard_id, count(*) AS so_request,
+       round(100.0 * count(*) / sum(count(*)) OVER (), 1) AS phan_tram
+FROM request_log WHERE ts > now() - INTERVAL '1 hour'
+GROUP BY shard_id ORDER BY 2 DESC;
+--  shard_03 | 412000 | 47.2     ◄── HOT SHARD
+--  shard_07 |  38000 |  4.4
+--  ...
+
+-- ② Trong shard nóng, ai chiếm phần lớn?
+SELECT tenant_id, count(*) FROM request_log
+WHERE shard_id = 3 AND ts > now() - INTERVAL '1 hour'
+GROUP BY 1 ORDER BY 2 DESC LIMIT 3;
+--  tenant 8842 | 398000    ◄── MỘT khách chiếm gần hết
+```
+
+**Ba cách xử lý, xếp theo mức can thiệp:**
+
+```sql
+-- ① RẺ NHẤT: chuyển RIÊNG tenant đó sang shard dành riêng
+--    (làm được vì dùng directory mapping, không phải hash % N)
+UPDATE shard_map SET shard_id = 16 WHERE tenant_id = 8842;
+-- rồi di trú dữ liệu của tenant đó bằng logical replication
+```
+
+```text
+   ② SUB-SHARD: với tenant khổng lồ, chia thêm một tầng theo user_id
+      shard_key = (tenant_id, user_id % 4)
+      → một tenant trải trên 4 shard
+
+   ③ TÁCH HẲN: khách hàng cực lớn cho hẳn một cụm riêng
+      → thường đi kèm gói dịch vụ cao cấp, và đó là quyết định KINH DOANH
+```
+
+**Và bài học phòng ngừa — đặt cảnh báo từ ngày đầu:**
+
+```yaml
+- alert: HotShard
+  expr: |
+    max(rate(shard_requests_total[5m])) by (shard)
+      / avg(rate(shard_requests_total[5m])) > 3
+  for: 10m
+  annotations:
+    summary: "Shard {{ $labels.shard }} đang nhận gấp 3 lần mức trung bình"
+```
+
+> **Điểm mấu chốt:** cách ① **chỉ làm được nếu bạn dùng bản đồ tra cứu** (directory) thay vì `hash % N`. Đây là lý do virtual shard + directory đáng giá hơn hash cố định — nó cho bạn **quyền chuyển từng mảnh một**.
 
 ## Bẫy thường gặp
 

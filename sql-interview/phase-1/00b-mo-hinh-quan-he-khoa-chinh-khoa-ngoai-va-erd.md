@@ -504,6 +504,128 @@ CREATE TABLE sinh_vien (
 
 > Chủ đề này được đào sâu ở [phase-5 bài 5](../phase-5/05-khoa-chinh-auto-increment-uuid-v4-hay-v7.md).
 
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Bạn nhận một database cũ, không có tài liệu, không ai còn làm ở đó. **Làm sao vẽ lại sơ đồ ERD?**
+
+**Ba câu lệnh, và database sẽ tự kể cho bạn nghe:**
+
+```sql
+-- ① Có những bảng nào, mỗi bảng bao nhiêu dòng?
+SELECT relname AS bang, n_live_tup AS so_dong
+FROM pg_stat_user_tables ORDER BY n_live_tup DESC;
+
+-- ② Khoá chính của từng bảng là gì?
+SELECT tc.table_name AS bang, kcu.column_name AS khoa_chinh
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu USING (constraint_name)
+WHERE tc.constraint_type = 'PRIMARY KEY'
+ORDER BY 1;
+
+-- ③ CÁC ĐƯỜNG NỐI — đây chính là sơ đồ ERD của bạn
+SELECT
+    tc.table_name  AS bang_con,      -- ◄── phía "NHIỀU" (chân chim)
+    kcu.column_name AS khoa_ngoai,
+    ccu.table_name  AS bang_cha,     -- ◄── phía "MỘT" (gạch đứng)
+    ccu.column_name AS khoa_chinh
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu USING (constraint_name)
+JOIN information_schema.constraint_column_usage ccu USING (constraint_name)
+WHERE tc.constraint_type = 'FOREIGN KEY'
+ORDER BY 1;
+```
+
+```text
+ bang_con    | khoa_ngoai  | bang_cha  | khoa_chinh
+-------------+-------------+-----------+------------
+ orders      | customer_id | customers | customer_id
+ order_items | order_id    | orders    | order_id
+ order_items | product_id  | products  | product_id
+
+   ĐỌC RA THÀNH SƠ ĐỒ:
+      customers ──┼───< orders ──┼───< order_items >───┼── products
+                                                  ▲
+                       HAI khoá ngoại trong order_items
+                       → ĐÂY LÀ BẢNG TRUNG GIAN giữa orders và products
+```
+
+**Và tìm những chỗ *đáng lẽ* phải có khoá ngoại mà lại thiếu:**
+
+```sql
+-- Cột tên có vẻ là khoá ngoại nhưng KHÔNG được khai báo
+SELECT c.table_name, c.column_name
+FROM information_schema.columns c
+WHERE c.column_name LIKE '%\_id'
+  AND c.table_schema = 'public'
+  AND NOT EXISTS (
+      SELECT 1 FROM information_schema.key_column_usage k
+      JOIN information_schema.table_constraints t USING (constraint_name)
+      WHERE t.constraint_type = 'FOREIGN KEY'
+        AND k.table_name = c.table_name AND k.column_name = c.column_name
+  );
+-- → những cột này có thể đang chứa DỮ LIỆU MỒ CÔI
+```
+
+```sql
+-- Kiểm tra thật: có bao nhiêu dòng mồ côi?
+SELECT count(*) FROM orders o
+WHERE NOT EXISTS (SELECT 1 FROM customers c WHERE c.customer_id = o.customer_id);
+-- > 0  → có đơn hàng trỏ về khách KHÔNG TỒN TẠI
+```
+
+> **Tình huống 2:** Bảng `orders` cần thêm khoá ngoại tới `customers`, nhưng bảng có **80 triệu dòng** và đang chạy production.
+
+**Chẩn đoán trước — có dữ liệu mồ côi không?**
+
+```sql
+SELECT count(*) FROM orders o
+WHERE o.customer_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.customer_id = o.customer_id);
+--  1.204  → phải dọn TRƯỚC, nếu không bước thêm ràng buộc sẽ thất bại
+```
+
+**Ba bước, không khoá bảng lâu:**
+
+```sql
+-- ① DỌN DỮ LIỆU MỒ CÔI (quyết định nghiệp vụ: xoá hay gán về khách "ẩn danh")
+INSERT INTO customers (customer_id, full_name)
+VALUES (0, '[Khách đã xoá]') ON CONFLICT DO NOTHING;
+
+UPDATE orders SET customer_id = 0
+WHERE customer_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.customer_id = orders.customer_id);
+
+-- ② THÊM Ở CHẾ ĐỘ NOT VALID — chỉ khoá vài mili giây,
+--    chặn NGAY dòng mới, chưa quét 80 triệu dòng cũ
+ALTER TABLE orders
+  ADD CONSTRAINT orders_customer_fk
+  FOREIGN KEY (customer_id) REFERENCES customers(customer_id) NOT VALID;
+
+-- ③ VALIDATE — quét dữ liệu cũ nhưng chỉ khoá NHẸ, không chặn đọc-ghi
+ALTER TABLE orders VALIDATE CONSTRAINT orders_customer_fk;
+```
+
+**Và bước cuối mà rất nhiều người quên:**
+
+```sql
+-- ④ TẠO INDEX CHO CỘT KHOÁ NGOẠI
+--    Database KHÔNG tự tạo. Thiếu nó, mỗi lần xoá một khách
+--    là một lần QUÉT TOÀN BỘ 80 triệu dòng orders.
+CREATE INDEX CONCURRENTLY orders_customer_id_idx ON orders (customer_id);
+```
+
+```sql
+-- Kiểm xem còn khoá ngoại nào chưa có index không — chạy câu này trên DB của bạn
+SELECT c.conrelid::regclass AS bang, a.attname AS cot_thieu_index
+FROM pg_constraint c
+JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+WHERE c.contype = 'f'
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_index i
+      WHERE i.indrelid = c.conrelid AND a.attnum = i.indkey[0]
+  );
+```
+
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Cách tránh |

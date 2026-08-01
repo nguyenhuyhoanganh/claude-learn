@@ -379,6 +379,143 @@ Hệ thống của bạn là gì?
 
 > **Sự thật ít ai nói:** rất nhiều dự án chọn JWT vì nghe "hiện đại" và "không trạng thái", rồi lại thêm blacklist trong Redis để thu hồi được — **tức là quay về có trạng thái, mà vẫn gánh nhược điểm payload lớn và không đổi quyền ngay được.** Nói được điều này trong phỏng vấn cho thấy bạn đã suy nghĩ thật.
 
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Vừa lên bản mới, **2.000 người bị đá ra khỏi tài khoản**. Không có lỗi nào trong log.
+
+**Chẩn đoán — ba câu hỏi, mỗi câu một cách kiểm:**
+
+```bash
+# ① Hệ thống đang chạy mấy máy?
+kubectl get pods -l app=api --no-headers | wc -l
+#  4    ← có 4 bản, mà phiên lại nằm trong bộ nhớ từng bản
+
+# ② Phiên đang lưu ở đâu? Grep cấu hình
+grep -rn "SESSION_ENGINE\|session_store\|MemoryStore" config/
+#  SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+#  CACHES = {'default': {'BACKEND': 'LocMemCache'}}   ◄── BỘ NHỚ TỪNG TIẾN TRÌNH
+```
+
+```text
+   ③ TÍNH RA CON SỐ:
+      4 máy, phiên chỉ nằm ở 1 máy
+      → xác suất request rơi đúng máy đó = 1/4
+      → 75% REQUEST MẤT PHIÊN
+
+      Và mỗi lần deploy = mọi máy khởi động lại = MẤT SẠCH phiên của tất cả.
+```
+
+**Cách xử lý — tách mã phiên khỏi dữ liệu phiên:**
+
+```python
+# ✅ Dữ liệu phiên ra KHO CHUNG
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://redis-master:6379/1",
+    }
+}
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+
+SESSION_COOKIE_HTTPONLY = True      # JS không đọc được → chống XSS
+SESSION_COOKIE_SECURE   = True      # chỉ gửi qua HTTPS
+SESSION_COOKIE_SAMESITE = "Lax"     # chống CSRF
+```
+
+**Kiểm chứng bằng test, đừng tin cảm giác:**
+
+```python
+def test_phien_song_qua_nhieu_may():
+    """Đăng nhập ở 'máy A', gọi API ở 'máy B' — phải vẫn nhận ra."""
+    sid = dang_nhap(client_may_a, "an@x.com", "matkhau")
+    r = client_may_b.get("/api/me", cookies={"sid": sid})
+    assert r.status_code == 200, "Phiên không sống qua nhiều máy"
+```
+
+**Và một chi tiết bảo mật hay bị quên trong lúc sửa:**
+
+```python
+# ✅ ĐĂNG NHẬP XONG PHẢI CẤP MÃ PHIÊN MỚI — chống session fixation
+def dang_nhap(request, email, password):
+    user = kiem_mat_khau(email, password)
+    request.session.cycle_key()      # ◄── huỷ mã cũ, cấp mã mới
+    request.session["user_id"] = user.id
+```
+
+```text
+   VÌ SAO CẦN?
+   ① Kẻ tấn công lấy một mã phiên hợp lệ (chưa đăng nhập): sid=XYZ
+   ② Lừa nạn nhân dùng chính mã đó
+   ③ Nạn nhân ĐĂNG NHẬP — nếu server giữ nguyên sid=XYZ...
+   ④ ...thì kẻ tấn công cũng đang giữ sid=XYZ, và nó vừa thành phiên ĐÃ ĐĂNG NHẬP.
+   → Chiếm tài khoản mà KHÔNG CẦN BIẾT MẬT KHẨU.
+```
+
+> **Tình huống 2:** Phát hiện một tài khoản admin bị chiếm. Bạn đổi mật khẩu và khoá tài khoản. **Nhưng kẻ tấn công vẫn đang thao tác trong hệ thống.**
+
+**Chẩn đoán:** hệ thống dùng JWT, và **JWT không thu hồi được**.
+
+```bash
+# Giải mã token của kẻ tấn công (lấy từ log) để biết còn bao lâu
+echo 'eyJhbGciOi...' | cut -d. -f2 | base64 -d | jq '.exp, .iat, .sub'
+#  1754121600   ← hết hạn lúc nào
+#  1754035200   ← cấp lúc nào
+#  → token sống 24 GIỜ. Còn 18 giờ nữa nó mới hết hiệu lực.
+```
+
+```text
+   ĐỔI MẬT KHẨU KHÔNG ĐÁ ĐƯỢC AI RA.
+   Server không giữ danh sách token nào để xoá — nó chỉ kiểm CHỮ KÝ.
+```
+
+**Cứu hoả ngay — ba lựa chọn theo mức độ khẩn cấp:**
+
+```text
+① NẶNG NHẤT (đá TẤT CẢ mọi người, dùng khi khẩn cấp thật):
+   Xoay khoá ký → mọi token cũ lập tức sai chữ ký
+   → nhưng 100% người dùng phải đăng nhập lại
+
+② VỪA: đặt MỐC THU HỒI cho riêng user đó
+③ NHẸ: chặn theo `jti` (mã token) — chỉ chặn đúng token đó
+```
+
+```python
+# ② MỐC THU HỒI — rẻ nhất và nên có sẵn từ đầu
+def khoa_tai_khoan(user_id):
+    db.execute("UPDATE users SET tokens_invalid_before = now() WHERE id = %s",
+               (user_id,))
+    cache.set(f"invalid_before:{user_id}", time.time(), ex=86400)
+
+def kiem_token(token: str):
+    p = jwt.decode(token, PUBLIC_KEY, algorithms=["RS256"],
+                   audience=AUD, issuer=ISS)
+    moc = cache.get(f"invalid_before:{p['sub']}")     # cache 60s, rất rẻ
+    if moc and p["iat"] < float(moc):
+        raise HTTPException(401, "TOKEN_REVOKED")
+    return p
+```
+
+**Sửa gốc — thu cửa sổ rủi ro từ 24 giờ xuống 15 phút:**
+
+```python
+# Access token ĐỜI NGẮN + refresh token CÓ TRẠNG THÁI
+ACCESS_TOKEN_TTL  = timedelta(minutes=15)      # ◄── cửa sổ rủi ro tối đa
+REFRESH_TOKEN_TTL = timedelta(days=30)         # lưu BẢN BĂM trong database
+
+def lam_moi(refresh_token: str):
+    ban_ghi = db.lay_refresh(hash_it(refresh_token))
+    if ban_ghi is None:
+        raise HTTPException(401)
+    if ban_ghi.da_dung:                          # ◄── PHÁT HIỆN TÁI SỬ DỤNG
+        db.huy_toan_bo_ho_token(ban_ghi.family_id)   # huỷ CẢ HỌ
+        canh_bao_bao_mat(ban_ghi.user_id)
+        raise HTTPException(401, "TOKEN_REUSE_DETECTED")
+    db.danh_dau_da_dung(ban_ghi.id)
+    return cap_token_moi(ban_ghi.user_id, family_id=ban_ghi.family_id)
+```
+
+> **Và đây là điều đáng suy nghĩ:** nếu bạn phải thêm blacklist hoặc mốc thu hồi để thu hồi được token, thì bạn **đã quay về có trạng thái** — mà vẫn gánh nhược điểm payload lớn và không đổi quyền ngay được. Với web app một tên miền, **session + Redis đơn giản hơn và mạnh hơn**.
+
 ## Bẫy thường gặp
 
 | Bẫy | Hậu quả | Cách tránh |

@@ -21,6 +21,24 @@ Nghe rất hợp lý. **Và nó sai ngay từ dòng đầu tiên.**
 
 Vì Minh chưa bao giờ hỏi: ***tấm thẻ này được cấp cho AI?***
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **OIDC** (*OpenID Connect*) | ô-pừn-ai-đi | Lớp **xác thực** đứng trên OAuth 2.0, thêm **ID token** |
+| **Relying Party** (RP) | ri-lai-ing | **Ứng dụng của bạn** — bên tin vào danh tính do bên kia cấp |
+| **OpenID Provider** (OP) | | **Nhà cung cấp danh tính** — Google, Facebook, Microsoft |
+| **ID token** | | **Hộ chiếu có niêm phong** — cho ỨNG DỤNG của bạn đọc, trả lời *"là ai"* |
+| **Access token** | | **Thẻ phòng khách sạn** — cho API đọc, trả lời *"được làm gì"* |
+| **Claim** | clêm | **Tuyên bố** — một trường trong token (`sub`, `iss`, `aud`, `exp`) |
+| **`sub`** (subject) | sấp | **Mã người dùng thật** — không bao giờ đổi, khác với email |
+| **`iss`** (issuer) | ít-siu | **Ai đã cấp** token này |
+| **`aud`** (audience) | o-đi-ần | **Cấp cho ứng dụng nào** — dấu kiểm cứu mạng |
+| **`nonce`** | non-sờ | Chuỗi ngẫu nhiên **nhúng trong token**, chống phát lại |
+| **JWKS** | jây-oắc-kít | Endpoint công khai chứa **khoá để xác minh chữ ký** |
+| **Confused deputy** | | **Kẻ đại diện bị lú lẫn** — dùng nhầm loại token dẫn tới chiếm tài khoản |
+| **Account linking** | | **Gộp tài khoản** — nối tài khoản email/mật khẩu với tài khoản Google |
+
 ## OIDC là gì và vì sao nó tồn tại
 
 Bài 4 đã nói: **OAuth 2.0 trả lời câu "ứng dụng này được làm gì", không trả lời câu "người dùng là ai".**

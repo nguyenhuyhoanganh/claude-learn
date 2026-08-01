@@ -12,6 +12,20 @@ Toàn bộ kho hàng vừa có giá 0 đồng.
 
 Thiếu đúng một mệnh đề. Không phải lỗi cú pháp. Không có cảnh báo nào. **Câu lệnh chạy đúng như bạn viết** — và đó mới là chỗ đáng sợ nhất.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Tập mặc định** | | Phạm vi `UPDATE`/`DELETE` khi **không có `WHERE`** — là **toàn bộ bảng** |
+| **Cartesian product** | các-tê-di-ần | **Tích Descartes** — mỗi dòng trái ghép với **mọi** dòng phải |
+| **Cross join** | | Chính là tích Descartes; xảy ra khi viết `FROM a, b` mà quên điều kiện |
+| **Rows affected** | | **Số dòng bị ảnh hưởng** — con số database trả về sau lệnh ghi |
+| **`RETURNING`** | ri-tơ-ning | Mệnh đề cho phép **xem đúng những dòng vừa đổi** trước khi commit |
+| **Safe updates** | | Chế độ MySQL **chặn** `UPDATE`/`DELETE` không dùng khoá |
+| **`lock_timeout`** | | Thời gian tối đa chờ lấy khoá trước khi bỏ cuộc |
+| **`statement_timeout`** | | Thời gian tối đa một câu lệnh được chạy |
+| **`IS DISTINCT FROM`** | | Phép so sánh **an toàn với `NULL`** — coi `NULL` là một giá trị so được |
+
 ## Vì sao SQL lại cho phép chuyện này
 
 `WHERE` không phải bộ lọc thêm vào cho đẹp. Trong SQL, mọi câu lệnh đều thao tác trên **một tập hợp**, và tập hợp mặc định của `UPDATE` hay `DELETE` là **toàn bộ số dòng trong bảng**. Bạn chỉ được phép **thu nó lại**.
@@ -235,6 +249,86 @@ while True:
 ```
 
 Bài học: khi xử lý theo lô, **điều kiện chọn lô phải là thứ mà chính lệnh đó thay đổi thành không-còn-thoả** (ví dụ đánh dấu cột `da_xu_ly`), hoặc phải dùng khoảng ID cố định.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Bạn cần sửa giá cho **một** sản phẩm. Đây là quy trình đầy đủ để không bao giờ thành 1.284.917 dòng.
+
+```sql
+-- ═══ BƯỚC 0: cấu hình phiên, làm MỘT LẦN khi mở kết nối production ═══
+\set AUTOCOMMIT off                    -- psql: tắt tự chốt
+SET lock_timeout       = '5s';
+SET statement_timeout  = '30s';
+
+-- ═══ BƯỚC 1: VIẾT SELECT TRƯỚC, xem đúng tập cần sửa ═══
+SELECT product_id, sku, price
+FROM products
+WHERE sku = 'AO-TRANG-M';
+--  1 dòng  ← ĐÚNG cái mình muốn
+
+-- ═══ BƯỚC 2: ĐỔI ĐÚNG MỘT TỪ ở đầu dòng, GIỮ NGUYÊN phần điều kiện ═══
+BEGIN;
+
+UPDATE products SET price = 250000
+WHERE sku = 'AO-TRANG-M'
+RETURNING product_id, sku, price;      -- ◄── xem ĐÚNG dòng vừa đổi
+--  product_id | sku        |  price
+--         142 | AO-TRANG-M | 250000.00
+--  UPDATE 1                            ← CON SỐ NÀY là chốt chặn cuối cùng
+
+-- ═══ BƯỚC 3: khớp thì chốt, không khớp thì huỷ ═══
+COMMIT;                                -- hoặc ROLLBACK;
+```
+
+**Điểm mấu chốt:** ở bước 2 bạn **không gõ lại câu lệnh** — chỉ thay từ đầu dòng. *Không gõ lại thì không gõ sai.*
+
+> **Tình huống 2:** Bạn chạy `SELECT` thấy **100 dòng**, đổi thành `DELETE` thì nó xoá **340 dòng**.
+
+**Chẩn đoán:** câu lệnh có `JOIN`, và `SELECT` đếm dòng **sau khi nhân**.
+
+```sql
+-- Bạn nhìn thấy:
+SELECT o.* FROM orders o
+JOIN order_items i ON i.order_id = o.order_id
+WHERE i.product_id = 42;
+--  100 dòng   ← nhưng đây là 100 dòng CÓ LẶP
+
+-- Đếm cho đúng — số ĐƠN HÀNG duy nhất:
+SELECT count(DISTINCT o.order_id) FROM orders o
+JOIN order_items i ON i.order_id = o.order_id
+WHERE i.product_id = 42;
+--  34 đơn   ← ĐÂY mới là số dòng DELETE sẽ xoá
+```
+
+**Luật:** khi câu lệnh có `JOIN`, luôn đếm bằng `count(DISTINCT khoá_chính_của_bảng_đích)`.
+
+> **Tình huống 3:** Bạn chạy `DELETE FROM users WHERE status <> 'active'` để dọn tài khoản không hoạt động. Chạy xong, vẫn còn 1.240 dòng rác.
+
+**Chẩn đoán:**
+
+```sql
+-- Những dòng nào KHÔNG bị xoá?
+SELECT status, count(*) FROM users GROUP BY status;
+--  active   | 45210
+--  banned   |     0     ← đã xoá
+--  (null)   |  1240     ◄── SỐNG SÓT
+```
+
+**Nguyên nhân:** `NULL <> 'active'` **không cho ra `TRUE`** — nó cho ra `UNKNOWN`, mà `WHERE` chỉ giữ `TRUE`. Dòng `NULL` **sống sót một cách lặng lẽ**.
+
+```sql
+-- ✅ Hai cách viết cho đủ
+DELETE FROM users WHERE status IS DISTINCT FROM 'active';
+-- hoặc
+DELETE FROM users WHERE status <> 'active' OR status IS NULL;
+```
+
+**Chặn tái diễn ở gốc:** đừng để cột trạng thái nhận `NULL`.
+
+```sql
+UPDATE users SET status = 'unknown' WHERE status IS NULL;
+ALTER TABLE users ALTER COLUMN status SET NOT NULL;
+```
 
 ## Bẫy thường gặp
 

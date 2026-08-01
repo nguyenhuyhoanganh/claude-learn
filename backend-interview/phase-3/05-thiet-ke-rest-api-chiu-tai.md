@@ -8,6 +8,23 @@ Một API công khai giống **cửa hàng mở 24/7**: ai cũng ghé được �
 
 Bài này là bài **tổng hợp** của cả phase 3: bốn trụ cột của một API tử tế, và cách chúng khớp với load balancer, gateway, cache, và hàng đợi đã học.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Rate limiting** | rêit li-mít | **Giới hạn tần suất** — mỗi khoá chỉ được gọi bấy nhiêu lần |
+| **Token bucket** | | **Xô token** — cho phép **bùng nổ ngắn**, mặc định nên chọn |
+| **Leaky bucket** | li-ki | **Xô rỉ** — làm phẳng lưu lượng đầu ra với tốc độ cố định |
+| **Fixed / Sliding window** | | **Cửa sổ cố định** (có bẫy biên) / **cửa sổ trượt** (chính xác, tốn bộ nhớ) |
+| **Burst** | bơt | **Bùng nổ** — nhiều request dồn trong thời gian rất ngắn |
+| **Pagination** | pây-ji-nê-shân | **Phân trang** — trả dữ liệu từng phần |
+| **Offset pagination** | óp-sét | Phân trang theo **vị trí** — `OFFSET` **không nhảy, nó đếm** |
+| **Cursor / Keyset pagination** | cơ-sơ | Phân trang theo **dữ liệu** — nhanh đều ở mọi độ sâu |
+| **Tie-breaker** | tai-brêi-cơ | **Cột phá hoà** — thêm vào `ORDER BY` để thứ tự luôn tất định |
+| **Versioning** | vơ-shân-ning | **Phiên bản hoá** API để nâng cấp không phá client cũ |
+| **Deprecation / Sunset** | | Header báo endpoint **sắp bị khai tử** và **ngày tắt** |
+| **Bulkhead** | bunk-hét | **Chia khoang** như tàu thuỷ — một khoang ngập không làm chìm cả tàu |
+
 ## Bốn trụ cột
 
 ```text

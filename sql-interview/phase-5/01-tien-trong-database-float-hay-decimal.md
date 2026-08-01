@@ -6,6 +6,21 @@ Con ma đó không nằm trong code. Nó nằm trong đúng một chữ ở câu
 
 Đây là câu hỏi phỏng vấn ngắn tới mức nghe như được tặng điểm — *"cột tiền bạn khai kiểu gì?"* — và là câu loại người đều đặn, vì đáp án đúng ("dùng `DECIMAL`") chỉ là tầng một.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Floating point** | phlot-ing point | **Dấu phẩy động** — cách lưu số thực bằng nhị phân, chỉ **gần đúng** |
+| **IEEE 754** | ai-tripồ-i | Chuẩn dấu phẩy động mà mọi CPU trên đời dùng |
+| **`FLOAT` / `REAL` / `DOUBLE`** | | Các kiểu số thực **gần đúng** |
+| **`NUMERIC` / `DECIMAL`** | niu-me-rịc | Kiểu số thập phân **chính xác tuyệt đối** |
+| **Precision** (`p`) | pri-si-giơn | **Độ chính xác** — tổng số chữ số |
+| **Scale** (`s`) | skêu | **Số lẻ** — số chữ số sau dấu phẩy |
+| **Minor unit** | mai-nơ iu-nít | **Đơn vị nhỏ nhất** của tiền tệ (cent, xu, đồng) |
+| **Rounding** | rao-đing | **Làm tròn** |
+| **Banker's rounding** | | Làm tròn **về số chẵn gần nhất** — cách CPU làm mặc định |
+| **Epsilon** | ép-si-lon | **Khoảng dung sai** khi so sánh hai số thực |
+
 ## Máy tính đếm bằng nhị phân, còn tiền thì đếm bằng thập phân
 
 Thử ngay trên database của bạn:
@@ -258,6 +273,73 @@ COMMIT;
 ```
 
 Giữ `amount_old` thêm vài ngày rồi mới `DROP COLUMN`. Đó là dây an toàn của bạn.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Kế toán báo *"mỗi ngày sổ lệch vài đồng, càng ngày càng nhiều"*. Không ai sửa code, không giao dịch nào lỗi.
+
+**Chẩn đoán trong 3 câu lệnh:**
+
+```sql
+-- ① Cột tiền đang là kiểu gì?
+SELECT column_name, data_type, numeric_precision, numeric_scale
+FROM information_schema.columns
+WHERE table_name = 'payments' AND column_name LIKE '%amount%';
+-- data_type = 'double precision'  → ĐÃ TÌM RA THỦ PHẠM
+
+-- ② Xác nhận bằng phép thử
+SELECT 0.1::float8 + 0.2::float8;        -- 0.30000000000000004
+
+-- ③ Đo mức lệch thực tế trên dữ liệu của bạn
+SELECT sum(amount::numeric) - sum(amount)::numeric AS do_lech
+FROM payments WHERE paid_at >= now() - INTERVAL '30 days';
+```
+
+**Cách xử lý — ba bước, theo đúng thứ tự:**
+
+```text
+① DỪNG CHẢY MÁU: đổi cột sang NUMERIC theo quy trình 5 bước ở trên
+② ĐỐI SOÁT LẠI QUÁ KHỨ: dữ liệu cũ ĐÃ SAI rồi, đổi kiểu KHÔNG sửa được
+   → phải đối chiếu với nguồn gốc (log giao dịch, sao kê ngân hàng)
+③ CHẶN TÁI DIỄN: thêm CHECK + review mọi CREATE TABLE mới
+```
+
+> **Tình huống 2:** Query `WHERE so_du = 0.3` trả về **0 dòng**, dù nhìn bằng mắt thấy rõ có dòng đó.
+
+**Chẩn đoán:** trong máy, giá trị đó **chưa bao giờ đúng bằng** `0.3`.
+
+```sql
+-- Xem giá trị THẬT được lưu, đủ 17 chữ số
+SET extra_float_digits = 3;
+SELECT so_du FROM tai_khoan WHERE id = 1;   -- 0.29999999999999998889776975
+```
+
+```sql
+-- ✅ Cách chữa TẠM (nếu chưa kịp đổi kiểu): so bằng khoảng dung sai
+SELECT * FROM tai_khoan WHERE abs(so_du - 0.3) < 1e-9;
+
+-- ✅ Cách chữa THẬT: đổi cột sang NUMERIC, rồi so bằng `=` bình thường
+```
+
+> **Tình huống 3:** Cột đã là `NUMERIC` rồi mà báo cáo vẫn lệch.
+
+**Chẩn đoán:** thủ phạm nằm ở **tầng ứng dụng**, không phải database.
+
+```python
+# Tìm chỗ ép kiểu — grep cả repo
+# grep -rn "float(" --include=*.py | grep -i "amount\|price\|total\|salary"
+
+row = cur.fetchone()
+tong = float(row["amount"]) * 1.1     # ◄── ĐÂY. Sai số quay lại ngay tại dòng này
+```
+
+**Cách xử lý:** giữ nguyên `Decimal` suốt đường đi, chỉ đổi sang chuỗi **đúng một lần** ở khâu hiển thị. Và thêm một test chặn tái diễn:
+
+```python
+def test_khong_dung_float_cho_tien():
+    r = client.get("/api/orders/1").json()
+    assert isinstance(r["total"], str), "Tiền phải trả về dạng CHUỖI, không phải số"
+```
 
 ## Bẫy thường gặp
 

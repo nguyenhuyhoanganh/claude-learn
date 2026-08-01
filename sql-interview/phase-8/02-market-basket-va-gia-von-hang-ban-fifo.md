@@ -12,6 +12,24 @@ Cả hai đều là câu hỏi phỏng vấn cấp mid–senior, và cả hai đ
 
 # Phần 1: Market basket analysis — tìm cặp sản phẩm mua chung
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Market basket analysis** | | **Phân tích giỏ hàng** — tìm sản phẩm hay được mua chung |
+| **Self join** | seo join | **Tự nối** — nối một bảng với chính nó |
+| **Non-equi join** | non-i-qui | Nối **không dùng dấu bằng** (dùng `<`, `>`, khoảng…) |
+| **Association rule** | a-sô-si-ê-shân | **Luật kết hợp** — "mua A thì hay mua B" |
+| **Support** | sấp-po | **Độ phổ biến** — cặp này xuất hiện trong bao nhiêu % số đơn |
+| **Confidence** | con-phi-đần | **Độ tin cậy** — trong số đơn có A, bao nhiêu % có B (**không đối xứng**) |
+| **Lift** | lịp | **Độ nâng** — mua A làm xác suất mua B **tăng bao nhiêu lần** |
+| **COGS** (*Cost of Goods Sold*) | | **Giá vốn hàng bán** — tiền thực bỏ ra mua đúng món vừa bán |
+| **FIFO** (*First In First Out*) | phai-phô | **Nhập trước xuất trước** |
+| **LIFO** | lai-phô | **Nhập sau xuất trước** — VAS 02 và IFRS **không cho phép** |
+| **Bình quân gia quyền** | | Lấy giá trung bình có trọng số theo số lượng |
+| **Running total** | | **Tổng luỹ tiến** — cộng dồn qua từng dòng |
+| **Materialized view** | ma-tê-ri-a-lai | **Khung nhìn vật chất hoá** — kết quả tính sẵn, lưu xuống đĩa |
+
 ## Dữ liệu đầu vào chỉ có hai cột
 
 ```sql
@@ -355,6 +373,129 @@ Nhớ `NULLIF(..., 0)` — nếu không, sản phẩm chưa nhập lô nào sẽ
 | Hợp lệ theo VAS 02 / IFRS | ✅ | ✅ | ❌ |
 | Cần lưu lịch sử lô hàng | ✅ | Không bắt buộc | ✅ |
 | Dùng cho hàng có hạn dùng | ✅ Bắt buộc | Không phù hợp | Không |
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Bạn chạy câu tìm cặp sản phẩm mua chung. Sau 25 phút nó vẫn chưa xong, và đĩa `temp` đầy.
+
+**Chẩn đoán — tính trước xem nó sinh ra bao nhiêu dòng:**
+
+```sql
+-- ① Phân bố số món mỗi đơn — thủ phạm nằm ở cái đuôi
+SELECT so_mon, count(*) AS so_don
+FROM (SELECT order_id, count(*) AS so_mon FROM order_items GROUP BY 1) t
+GROUP BY 1 ORDER BY 1 DESC LIMIT 5;
+--  so_mon | so_don
+--     847 |      3     ◄── ĐƠN SỈ! 847 món sinh ra 847×846/2 = 358.281 CẶP
+--     612 |      5
+--       8 | 1240000
+
+-- ② Ước lượng tổng số dòng trung gian TRƯỚC KHI chạy
+SELECT sum(so_mon * (so_mon - 1) / 2) AS so_cap_se_sinh_ra
+FROM (SELECT order_id, count(*) AS so_mon FROM order_items GROUP BY 1) t;
+--  2.847.000.000    ◄── GẦN 3 TỶ DÒNG. Đây là lý do nó không xong.
+```
+
+**Cách xử lý — ba lớp lọc, giảm theo cấp số nhân:**
+
+```sql
+WITH
+-- ① LỌC SẢN PHẨM HIẾM TRƯỚC — giảm đầu vào thì kết quả giảm BẬC HAI
+sp_pho_bien AS (
+    SELECT product_id FROM order_items
+    GROUP BY 1 HAVING count(DISTINCT order_id) >= 100
+),
+-- ② LOẠI ĐƠN SỈ — chúng không phản ánh hành vi tiêu dùng
+don_hop_le AS (
+    SELECT i.order_id, i.product_id
+    FROM order_items i
+    JOIN orders o USING (order_id)
+    JOIN sp_pho_bien s USING (product_id)
+    WHERE o.ordered_at >= now() - INTERVAL '90 days'    -- ③ GIỚI HẠN THỜI GIAN
+    GROUP BY 1, 2                                        -- khử trùng luôn
+),
+don_loc AS (
+    SELECT order_id FROM don_hop_le
+    GROUP BY 1 HAVING count(*) BETWEEN 2 AND 20          -- ② bỏ đơn quá lớn
+)
+SELECT a.product_id, b.product_id, count(*) AS so_don
+FROM don_hop_le a
+JOIN don_hop_le b ON a.order_id = b.order_id AND a.product_id < b.product_id
+JOIN don_loc      d ON d.order_id = a.order_id
+GROUP BY 1, 2
+HAVING count(*) >= 50
+ORDER BY 3 DESC;
+--  3 tỷ dòng → khoảng 40 triệu dòng → chạy trong ~2 phút
+```
+
+**Và với production, đừng tính lúc người dùng đang xem:**
+
+```sql
+-- Tính sẵn hằng đêm
+CREATE MATERIALIZED VIEW product_affinity AS SELECT ... ;
+CREATE INDEX ON product_affinity (p1, lift DESC);
+
+-- Lúc người dùng thả sản phẩm vào giỏ: một truy vấn, dưới 1 ms
+SELECT p2 FROM product_affinity WHERE p1 = $1 ORDER BY lift DESC LIMIT 5;
+
+-- Làm mới không khoá đọc
+REFRESH MATERIALIZED VIEW CONCURRENTLY product_affinity;
+```
+
+> **Tình huống 2:** Kế toán chạy báo cáo COGS, con số **không khớp** với tính tay. Câu SQL không báo lỗi gì.
+
+**Chẩn đoán — bước kiểm chứng bắt buộc mà nhiều người bỏ qua:**
+
+```sql
+-- ① Tổng số lượng KHỚP có bằng tổng số lượng XUẤT không?
+WITH nhap AS (...), xuat AS (...)
+SELECT x.xuat_id,
+       x.so_luong                                                   AS phai_khop,
+       sum(LEAST(n.ket_thuc, x.ket_thuc) - GREATEST(n.bat_dau, x.bat_dau)) AS da_khop
+FROM xuat x
+JOIN nhap n ON n.product_id = x.product_id
+           AND n.bat_dau < x.ket_thuc AND n.ket_thuc > x.bat_dau
+GROUP BY 1, 2
+HAVING x.so_luong <> sum(LEAST(n.ket_thuc, x.ket_thuc)
+                       - GREATEST(n.bat_dau, x.bat_dau));
+```
+
+```text
+   TRẢ VỀ 0 DÒNG  → khớp hoàn toàn, con số đúng.
+   CÓ DÒNG        → ĐÃ BÁN VƯỢT TỒN KHO.
+                    Dữ liệu kho SAI TỪ TRƯỚC, không phương pháp tính nào cứu được.
+```
+
+**Ba nguyên nhân thường gặp và cách sửa:**
+
+```sql
+-- ① BÁN VƯỢT TỒN: có xuất mà không có lô nhập tương ứng
+SELECT product_id,
+       sum(so_luong) FILTER (WHERE loai='nhap') AS tong_nhap,
+       sum(so_luong) FILTER (WHERE loai='xuat') AS tong_xuat
+FROM kho_movements GROUP BY 1
+HAVING sum(so_luong) FILTER (WHERE loai='xuat')
+     > sum(so_luong) FILTER (WHERE loai='nhap');
+--  → phải bổ sung phiếu nhập bị thiếu, hoặc điều chỉnh kiểm kê
+
+-- ② THỨ TỰ LÔ KHÔNG ỔN ĐỊNH: hai lô nhập cùng thời điểm
+-- ❌ SUM(...) OVER (ORDER BY nhap_luc)
+-- ✅ thêm tie-break để thứ tự tất định giữa các lần chạy
+SUM(so_luong) OVER (PARTITION BY product_id ORDER BY nhap_luc, lo_id)
+
+-- ③ ĐƠN GIÁ DÙNG FLOAT: sai số tích luỹ
+ALTER TABLE lo_nhap ALTER COLUMN don_gia TYPE NUMERIC(12,2);
+```
+
+**Chốt lại bằng một câu đối soát tổng — chạy mỗi lần lên báo cáo:**
+
+```sql
+SELECT
+    (SELECT sum(gia_von) FROM ket_qua_cogs)                       AS cogs_tinh_ra,
+    (SELECT sum(so_luong * don_gia) FROM lo_nhap
+      WHERE lo_id IN (SELECT DISTINCT lo_id FROM ket_qua_cogs))   AS tong_tien_lo;
+-- Hai con số phải có quan hệ hợp lý; lệch lớn = có lô bị tính thừa hoặc thiếu
+```
 
 ## Bẫy thường gặp
 

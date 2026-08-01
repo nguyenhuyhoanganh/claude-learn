@@ -6,6 +6,22 @@
 
 Phase-4 bài 3 đã dạy `SELECT FOR UPDATE`, khoá lạc quan và bài toán double booking. Bài này đi xa hơn một bậc: **cái gì xảy ra khi 50.000 request cùng đập vào một dòng dữ liệu**, và vì sao lời giải sách vở lại sập ở quy mô đó.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Oversell** | ô-vơ-seo | **Bán quá hàng** — bán nhiều hơn số thực có |
+| **Race condition** | rêis | **Điều kiện tranh đua** — hai tiến trình chạy đua trên cùng một dòng |
+| **Lost update** | | **Mất bản cập nhật** — ghi của người này bị người kia đè lên |
+| **Atomic write** | a-tô-mịc | **Ghi nguyên tử** — đọc-kiểm-ghi gộp thành một thao tác không tách rời |
+| **Pessimistic lock** | pe-si-mít | **Khoá bi quan** — khoá trước, hỏi sau |
+| **Optimistic lock** | óp-ti-mít | **Khoá lạc quan** — không khoá, kiểm tra lúc ghi |
+| **Livelock** | lai-lốc | Ai cũng bận rộn mà **không ai tiến được** |
+| **Deadlock** | đét-lốc | **Khoá chết** — hai bên cùng chờ nhau vô tận |
+| **Reservation** | rê-dơ-vê-shân | **Giữ chỗ có thời hạn** |
+| **Sharded counter** | | **Bộ đếm chia mảnh** — tách một dòng đếm thành N dòng để giảm tranh chấp |
+| **Idempotency key** | ai-đem-pô-tần | **Khoá bất biến** — để gọi lại nhiều lần vẫn ra một kết quả |
+
 ## Đoạn code ngây thơ gây ra tất cả
 
 ```python
@@ -380,6 +396,129 @@ tao_don (giữ chỗ) ──► cho_thanh_toan ──┬──► da_thanh_toan 
                                         └──► that_bai (hoàn chỗ giữ)
                                               ▲
                               Job quét đơn quá hạn thanh toán → tự hoàn
+```
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Sáng hôm sau đợt sale, kho báo **âm 40 chiếc**. Bạn cần trả lời hai câu: *"mất bao nhiêu tiền?"* và *"làm sao không tái diễn?"*
+
+**Bước 1 — đo thiệt hại chính xác trước khi làm gì khác:**
+
+```sql
+-- ① Sản phẩm nào âm, âm bao nhiêu
+SELECT product_id, name, ton_kho
+FROM products WHERE ton_kho < 0 ORDER BY ton_kho;
+
+-- ② Những đơn nào là "đơn ma" (bán vượt kho)
+WITH da_ban AS (
+    SELECT product_id, sum(quantity) AS tong_ban
+    FROM order_items i JOIN orders o USING (order_id)
+    WHERE o.ordered_at BETWEEN $1 AND $2 AND o.status <> 'cancelled'
+    GROUP BY 1
+)
+SELECT p.product_id, p.name,
+       d.tong_ban, p.ton_kho_ban_dau,
+       d.tong_ban - p.ton_kho_ban_dau AS so_don_ma
+FROM da_ban d JOIN products p USING (product_id)
+WHERE d.tong_ban > p.ton_kho_ban_dau;
+
+-- ③ Xác định ĐÚNG những khách cần hoàn tiền — ai đặt SAU khi hết hàng
+SELECT o.order_id, o.customer_id, o.total_amount, o.ordered_at
+FROM orders o JOIN order_items i USING (order_id)
+WHERE i.product_id = 42
+ORDER BY o.ordered_at
+OFFSET 10;              -- 10 chiếc đầu là hợp lệ, từ dòng 11 trở đi là đơn ma
+```
+
+**Bước 2 — chặn ở tầng database ngay, trước khi sửa code:**
+
+```sql
+UPDATE products SET ton_kho = 0 WHERE ton_kho < 0;    -- dọn dữ liệu sai trước
+ALTER TABLE products ADD CONSTRAINT ck_ton_kho CHECK (ton_kho >= 0);
+-- Từ giây này, KHÔNG một câu lệnh nào làm tồn kho âm được nữa
+```
+
+**Bước 3 — sửa gốc: đổi đọc-kiểm-ghi thành ghi nguyên tử:**
+
+```python
+# ❌ Code cũ — có khe hở giữa đọc và ghi
+ton = db.query("SELECT ton_kho FROM products WHERE id=%s", pid).scalar()
+if ton > 0:
+    db.execute("UPDATE products SET ton_kho=%s WHERE id=%s", (ton-1, pid))
+
+# ✅ Một thao tác duy nhất, không có khe hở
+row = db.execute(
+    "UPDATE products SET ton_kho = ton_kho - 1 "
+    "WHERE product_id = %s AND ton_kho >= 1 RETURNING ton_kho",
+    (pid,)).fetchone()
+if row is None:
+    raise HetHang()
+```
+
+**Bước 4 — kiểm chứng bằng test tải, đừng tin cảm giác:**
+
+```python
+# Bắn 500 request song song vào 10 sản phẩm — PHẢI chỉ có đúng 10 đơn thành công
+import concurrent.futures as cf
+with cf.ThreadPoolExecutor(500) as ex:
+    kq = list(ex.map(lambda _: mua_hang(pid=42), range(500)))
+assert sum(1 for r in kq if r.ok) == 10, "VẪN CÒN OVERSELL"
+assert db.query("SELECT ton_kho FROM products WHERE id=42").scalar() == 0
+```
+
+> **Tình huống 2:** Đã dùng bộ đếm Redis lọc trước. Nhưng sau đợt sale, Redis nói **còn 3**, database nói **còn 0**. Ai đúng?
+
+**Chẩn đoán — tìm chỗ rò:**
+
+```python
+# Chỗ rò gần như luôn nằm ở đây: đã DECR Redis nhưng database thất bại
+# mà KHÔNG hoàn lại
+con_lai = GIU_CHO(keys=[f"flash:ton:{pid}"])    # Redis giảm xuống
+if con_lai < 0:
+    return "Hết hàng"
+
+with db.transaction():                           # ← nếu chỗ này ném lỗi
+    ...                                          #   Redis đã giảm mà kho chưa trừ
+```
+
+**Cách xử lý — ba lớp:**
+
+```python
+# ① LUÔN HOÀN LẠI trong khối except
+try:
+    with db.transaction():
+        row = db.execute("UPDATE products SET ton_kho = ton_kho - 1 "
+                         "WHERE product_id=%s AND ton_kho>=1 RETURNING ton_kho",
+                         (pid,)).fetchone()
+        if row is None:
+            raise HetHang()
+        db.execute("INSERT INTO orders (...) VALUES (...)")
+except Exception:
+    redis.incr(f"flash:ton:{pid}")               # ◄── HOÀN LẠI, bắt buộc
+    raise
+```
+
+```sql
+-- ② JOB ĐỐI SOÁT chạy mỗi phút trong lúc sale
+--    DATABASE LÀ CHÂN LÝ — Redis phải theo nó, không phải ngược lại
+SELECT product_id, ton_kho FROM products WHERE product_id = ANY($1);
+```
+
+```python
+for pid, ton_that in ket_qua:
+    ton_redis = int(redis.get(f"flash:ton:{pid}") or 0)
+    if ton_redis != ton_that:
+        canh_bao(f"Lệch sp {pid}: Redis={ton_redis}, DB={ton_that}")
+        redis.set(f"flash:ton:{pid}", ton_that)   # ĐỒNG BỘ TỪ DATABASE
+```
+
+```text
+   ③ NGUYÊN TẮC KIẾN TRÚC:
+      Redis là BỘ LỌC — nó chỉ làm giảm số request tới database.
+      DATABASE là CHÂN LÝ CUỐI CÙNG — nó mới quyết định bán hay không.
+
+      → Redis nói "còn hàng" mà database nói "hết" → DATABASE ĐÚNG.
+      → Redis chết sạch lúc 3 giờ sáng → hệ thống chỉ CHẬM ĐI, không SAI ĐI.
 ```
 
 ## Bẫy thường gặp

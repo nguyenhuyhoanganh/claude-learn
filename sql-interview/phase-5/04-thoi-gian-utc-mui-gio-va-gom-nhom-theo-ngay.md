@@ -6,6 +6,22 @@ Người phỏng vấn xoay màn hình lại rồi hỏi đúng một câu: *"L�
 
 Câu hỏi nghe như đã có sẵn đáp án ai cũng thuộc — *"lưu UTC hết cho chuẩn"*. Chính chỗ đó là cái bẫy. Vì đáp án đó **đúng** mà vẫn **thiếu**, và người phỏng vấn sẽ hỏi tiếp hai câu nữa để tìm ra chỗ thiếu.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **UTC** | iu-ti-si | **Giờ phối hợp quốc tế** — mốc chuẩn của cả hành tinh, không có mùa hè |
+| **Timezone** | tai-zôn | **Múi giờ** — độ lệch so với UTC (Việt Nam là UTC+7) |
+| **Offset** | óp-sét | **Độ lệch** cụ thể tại một thời điểm, ví dụ `+07:00` |
+| **IANA timezone** | ai-a-na | **Tên vùng** như `Asia/Ho_Chi_Minh` — chứa cả lịch sử đổi luật giờ |
+| **`TIMESTAMPTZ`** | | Kiểu lưu **một thời điểm tuyệt đối**; cái tên nói dối vì nó **không lưu múi giờ** |
+| **`TIMESTAMP`** (trần) | | Ngày + giờ **không kèm múi giờ** — không biết giờ đó ở đâu |
+| **Wall time** | oan taim | **Giờ treo tường** — con số hiện trên đồng hồ ở một nơi |
+| **Instant** | in-sờ-tần | **Thời điểm** — một điểm duy nhất trên trục thời gian vũ trụ |
+| **DST** (*Daylight Saving Time*) | | **Giờ mùa hè** — vặn đồng hồ lên/xuống một tiếng theo mùa |
+| **ISO 8601** | ai-ét-ô | Chuẩn viết ngày giờ: `2026-08-01T09:00:00+07:00` |
+| **Epoch** | i-pốc | Số **giây tính từ 1/1/1970 UTC** |
+
 ## Ba khái niệm phải tách bạch trước khi bàn tiếp
 
 Hầu hết bug thời gian đến từ việc trộn lẫn ba thứ hoàn toàn khác nhau:
@@ -264,6 +280,81 @@ SELECT DATE '2026-01-31' + INTERVAL '2 months';                       -- 2026-03
 ```
 
 Với nghiệp vụ gia hạn thuê bao, phải quy định rõ luật (thường: giữ nguyên ngày, kẹp về ngày cuối tháng nếu tháng ngắn hơn) và viết ra thành hàm, đừng phó mặc cho `INTERVAL`.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Kế toán báo doanh thu ngày 01/08 trên dashboard **lệch** so với sổ của họ. Chạy lại vẫn lệch y như cũ.
+
+**Chẩn đoán — đo đúng phần bị đếm nhầm:**
+
+```sql
+-- ① So hai cách gom nhóm trên CÙNG một ngày
+SELECT
+    sum(total_amount) FILTER (
+        WHERE ordered_at >= '2026-08-01' AND ordered_at < '2026-08-02'
+    ) AS gom_theo_utc,
+    sum(total_amount) FILTER (
+        WHERE ordered_at >= (DATE '2026-08-01')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+          AND ordered_at <  (DATE '2026-08-02')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    ) AS gom_theo_gio_vn
+FROM orders;
+-- Hai con số khác nhau → ĐÃ TÌM RA NGUYÊN NHÂN
+
+-- ② Xem chính xác những đơn bị đếm nhầm sang ngày hôm trước
+SELECT count(*), min(ordered_at), max(ordered_at)
+FROM orders
+WHERE ordered_at >= '2026-07-31 17:00:00+00'    -- 0h ngày 01/08 giờ VN
+  AND ordered_at <  '2026-08-01 00:00:00+00';   -- 7h sáng 01/08 giờ VN
+-- Đây chính là 7 TIẾNG ĐẦU của ngày 01/08 bị đẩy sang 31/07
+```
+
+**Cách xử lý:**
+
+```sql
+-- ✅ Quy về múi giờ NGƯỜI XEM trước, rồi mới cắt ngày
+SELECT date_trunc('day', ordered_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AS ngay,
+       sum(total_amount)
+FROM orders
+GROUP BY 1 ORDER BY 1;
+```
+
+**Chặn tái diễn:** viết một test so con số của báo cáo với một mốc đã biết chắc.
+
+```sql
+-- Đơn đặt lúc 6h sáng giờ VN PHẢI thuộc về ngày hôm đó
+INSERT INTO orders (ordered_at, total_amount) VALUES ('2026-08-01 06:00+07', 100);
+-- báo cáo ngày 2026-08-01 phải chứa đơn này
+```
+
+> **Tình huống 2:** Người dùng ở Mỹ đặt lịch hẹn "9 giờ sáng thứ Hai tuần sau". Tới ngày đó, hệ thống nhắc lúc **8 giờ sáng**.
+
+**Chẩn đoán:** cuối tuần đó nước Mỹ **kết thúc giờ mùa hè**.
+
+```sql
+-- Xác nhận: cùng một giờ treo tường, hai offset khác nhau
+SELECT
+  (TIMESTAMP '2026-10-25 09:00' AT TIME ZONE 'America/New_York') AS truoc_doi_gio,
+  (TIMESTAMP '2026-11-05 09:00' AT TIME ZONE 'America/New_York') AS sau_doi_gio;
+-- 2026-10-25 13:00+00   |   2026-11-05 14:00+00
+--        ▲ lệch đúng MỘT TIẾNG
+```
+
+**Nguyên nhân:** bạn quy đổi cuộc hẹn sang UTC **tại lúc đặt**, nhưng luật giờ đã đổi giữa lúc đặt và lúc diễn ra.
+
+```sql
+-- ❌ Cách sai: chốt cứng thành một thời điểm
+INSERT INTO appointments (thoi_diem) VALUES ('2026-11-05 14:00+00');
+
+-- ✅ Cách đúng: lưu Ý ĐỊNH, quy đổi lúc đọc
+CREATE TABLE appointments (
+    local_time TIMESTAMP NOT NULL,       -- 2026-11-05 09:00 (giờ treo tường)
+    tz         TEXT      NOT NULL,       -- 'America/New_York' (TÊN VÙNG)
+    instant    TIMESTAMPTZ GENERATED ALWAYS AS (local_time AT TIME ZONE tz) STORED
+);
+-- Luật giờ có đổi thì `instant` tự tính lại đúng — cuộc hẹn vẫn 9 giờ sáng
+```
+
+> **Lưu ý:** phải lưu **tên vùng** (`America/New_York`) chứ không lưu **offset** (`-05:00`). Offset đúng hôm nay, sai sáu tháng sau.
 
 ## Bẫy thường gặp
 

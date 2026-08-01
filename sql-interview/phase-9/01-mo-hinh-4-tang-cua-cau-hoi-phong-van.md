@@ -10,6 +10,18 @@ Sáu chữ. Không mẹo, không đánh đố. Vậy mà nó loại người đ�
 
 Vì thứ họ chấm nằm ở tầng dưới của câu hỏi. Bài này giải mã cái tầng đó — và nó áp dụng cho **mọi** câu hỏi phỏng vấn kỹ thuật, không riêng SQL.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Nghĩa trong bài này |
+|---|---|
+| **Tầng (bậc thang)** | Mỗi câu hỏi ngắn thực ra là **bốn câu hỏi lồng nhau**, hỏi sâu dần |
+| **Ngưỡng lật** | Con số mà **vượt qua nó thì lựa chọn đúng đảo chiều** (ví dụ: index vượt RAM) |
+| **Đánh đổi đủ hai vế** | Nói cả **được gì** và **mất gì** — thiếu một vế thì chưa phải đánh đổi |
+| **Con số neo** | Một con số cụ thể bạn **tự đo được**, dùng để chứng minh thay vì mô tả |
+| **Quy trình** | Các bước cụ thể *"mở X ra xem, thấy Y thì làm Z"* — khác với ý kiến |
+| **Hỏi ngược** | Nhận ra đề bài **thiếu dữ kiện** và hỏi lại trước khi trả lời |
+| **Vết sẹo** | Kinh nghiệm **đã trả giá** — thứ không tra cứu được trong 10 giây |
+
 ## Bốn tầng của một câu hỏi
 
 Mỗi câu hỏi ngắn thực ra là một **cái thang**. Người phỏng vấn hỏi câu đầu, gật đầu, ghi một dòng, rồi hỏi tiếp — mỗi lần một sâu hơn, cho tới khi bạn hết chỗ để lấy câu trả lời ra.
@@ -249,6 +261,103 @@ Một buổi tối làm hết những thứ này cho bạn **con số thật đ�
 ```
 
 Bước ④ rất quan trọng: **tự leo lên tầng 2 mà không đợi được hỏi**. Nó cho người phỏng vấn thấy bạn biết câu hỏi thật nằm ở đâu, và tiết kiệm thời gian cho cả hai.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Người phỏng vấn hỏi một câu bạn **hoàn toàn không biết**. Im lặng 5 giây rồi.
+
+**Đây là khoảnh khắc quyết định, và có ba cách phản ứng:**
+
+```text
+   ❌ ĐOÁN BỪA
+      "Chắc là READ COMMITTED ạ."
+      → Họ hỏi thêm một câu là lộ. Và giờ họ nghi ngờ CẢ những câu
+        bạn trả lời đúng trước đó.
+
+   ❌ ĐẦU HÀNG
+      "Dạ em không biết ạ."
+      → Đúng nhưng lãng phí. Bạn vừa bỏ qua cơ hội cho họ thấy
+        BẠN SUY NGHĨ THẾ NÀO khi thiếu kiến thức.
+
+   ✅ NÓI THẬT + CHO THẤY CÁCH BẠN SẼ TÌM RA
+      "Em chưa gặp ca này. Nhưng em nghĩ nó liên quan tới [khái niệm gần nhất
+       bạn biết]. Em sẽ kiểm bằng cách [câu lệnh / thí nghiệm cụ thể].
+       Anh cho em hỏi thêm: [câu hỏi thu hẹp phạm vi]?"
+```
+
+**Công thức ba phần, dùng được cho mọi câu bí:**
+
+```text
+   ① NEO vào thứ bạn CÓ biết
+      "Em chưa làm với Oracle, nhưng trong Postgres thì cơ chế tương đương là..."
+
+   ② NÓI CÁCH BẠN SẼ ĐO
+      "Em sẽ mở hai phiên song song, một bên UPDATE chưa commit,
+       bên kia SELECT, xem nó thấy gì."
+
+   ③ HỎI NGƯỢC để thu hẹp
+      "Trường hợp anh đang nghĩ tới là đọc hay ghi ạ?"
+```
+
+> Câu ② là câu **được điểm**. Nó chứng minh bạn có **phương pháp**, và phương pháp thì áp dụng được cho cả những thứ bạn chưa gặp.
+
+> **Tình huống 2:** Bạn mới đi làm hai năm, chưa có "vết sẹo" nào để kể. Phỏng vấn hỏi tầng 2 và tầng 3 thì lấy gì trả lời?
+
+**Tự tạo vết sẹo trong một buổi tối. Đây là kịch bản cụ thể:**
+
+```sql
+-- ═══ Dựng bảng 1 triệu dòng (2 phút) ═══
+CREATE TABLE thu (
+    id BIGSERIAL PRIMARY KEY, a TEXT, b INT, c TIMESTAMPTZ
+);
+INSERT INTO thu (a, b, c)
+SELECT md5(i::text), i % 1000, now() - (i || ' minutes')::interval
+FROM generate_series(1, 1000000) i;
+
+-- ═══ THÍ NGHIỆM 1: index nhanh hơn bao nhiêu LẦN? ═══
+\timing on
+EXPLAIN ANALYZE SELECT * FROM thu WHERE a = md5('500000');
+--  Seq Scan ... 420 ms          ← GHI CON SỐ NÀY LẠI
+CREATE INDEX ON thu (a);
+EXPLAIN ANALYZE SELECT * FROM thu WHERE a = md5('500000');
+--  Index Scan ... 3 ms          ← nhanh hơn 140 LẦN. ĐÂY LÀ CON SỐ CỦA BẠN.
+
+-- ═══ THÍ NGHIỆM 2: index làm chậm INSERT bao nhiêu %? ═══
+CREATE TABLE thu2 (LIKE thu INCLUDING ALL);   -- có index
+CREATE TABLE thu3 (LIKE thu);                  -- không index
+INSERT INTO thu3 SELECT * FROM thu LIMIT 100000;   -- 412 ms
+INSERT INTO thu2 SELECT * FROM thu LIMIT 100000;   -- 468 ms  → +13%
+
+-- ═══ THÍ NGHIỆM 3: tự tay giết index ═══
+EXPLAIN ANALYZE SELECT * FROM thu WHERE lower(a) = md5('500000');  -- Seq Scan!
+EXPLAIN ANALYZE SELECT * FROM thu WHERE a LIKE '%abc%';            -- Seq Scan!
+
+-- ═══ THÍ NGHIỆM 4: OFFSET sâu chậm bao nhiêu? ═══
+EXPLAIN ANALYZE SELECT * FROM thu ORDER BY id LIMIT 20;               -- 0.1 ms
+EXPLAIN ANALYZE SELECT * FROM thu ORDER BY id OFFSET 900000 LIMIT 20; -- 180 ms
+```
+
+```text
+   ═══ THÍ NGHIỆM 5: tự tay dựng LOST UPDATE (mở HAI cửa sổ psql) ═══
+
+   Phiên A                          Phiên B
+   ────────────────────             ────────────────────
+   BEGIN;                           BEGIN;
+   SELECT ton FROM t WHERE id=1;    SELECT ton FROM t WHERE id=1;
+   -- thấy 1                        -- CŨNG thấy 1
+   UPDATE t SET ton=0 WHERE id=1;   
+   COMMIT;                          UPDATE t SET ton=0 WHERE id=1;
+                                     COMMIT;
+   → Bán 2 lần, tồn kho chỉ giảm 1. BẠN VỪA TỰ TAY TẠO RA NÓ.
+
+   Rồi làm lại với FOR UPDATE và xem phiên B ĐỨNG CHỜ.
+```
+
+**Sau buổi tối đó, bạn có sáu con số thật để nói.** Và khi kể, hãy kể trung thực:
+
+> *"Em dựng thử trên máy để hiểu cơ chế, đo được nhanh hơn khoảng 140 lần trên bảng một triệu dòng. Em chưa gặp ca này trên production."*
+
+Câu đó **vẫn hơn rất nhiều** so với đọc thuộc định nghĩa — vì nó cho thấy bạn **chủ động đi đo**.
 
 ## Bẫy thường gặp
 

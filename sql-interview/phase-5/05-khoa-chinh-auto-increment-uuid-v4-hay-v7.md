@@ -8,6 +8,22 @@ Bảng đó dùng `UUID v4` làm khoá chính. Suốt hai năm nó chạy êm �
 
 Đây là câu hỏi phỏng vấn ba tầng, và tầng nào cũng có người ngã.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Auto increment** | ô-tô in-cri-men | **Tự tăng** — database cấp số kế tiếp cho mỗi dòng mới |
+| **UUID** | iu-iu-ai-đi | **Mã định danh duy nhất toàn cầu** — 128 bit, gần như không bao giờ trùng |
+| **B+Tree** | bi-plớt-tri | Cấu trúc cây mà index dùng để sắp xếp và tìm nhanh |
+| **Page / Trang** | pêi | Khối dữ liệu database đọc/ghi mỗi lần, thường 8 KB |
+| **Page split** | pêi splịt | **Tách trang** — chèn vào trang đã đầy thì nó bị tách đôi, mỗi nửa chỉ đầy ~50% |
+| **Buffer pool** | ba-phơ pun | **Bộ nhớ đệm** giữ các trang hay dùng trong RAM |
+| **WAL** (*Write-Ahead Log*) | oan | **Nhật ký ghi trước** — database ghi vào đây trước khi sửa dữ liệu thật |
+| **Clustered index** | clớt-tơ | Index mà **dữ liệu thật nằm ngay ở lá** (InnoDB dùng kiểu này) |
+| **Heap** | híp | Vùng chứa dữ liệu rời, index chỉ trỏ tới (PostgreSQL dùng kiểu này) |
+| **Surrogate / Natural key** | | **Khoá thay thế** (ID vô nghĩa) / **khoá tự nhiên** (email, SKU) |
+| **Hot shard** | hót sát | **Mảnh nóng** — một máy nhận phần lớn lưu lượng trong khi các máy khác rảnh |
+
 ## Tầng 1: khác biệt cơ bản
 
 | | Auto increment (`BIGSERIAL` / `IDENTITY`) | UUID v4 |
@@ -242,6 +258,78 @@ id SERIAL PRIMARY KEY
 id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
 --        ▲ ALWAYS: chặn luôn việc ứng dụng tự chèn id, tránh lệch sequence
 ```
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Hệ thống chạy êm hai năm. Rồi một đêm, độ trễ ghi vọt từ 40 ms lên 5 giây. CPU ổn, RAM ổn, mạng ổn, không ai deploy gì.
+
+**Chẩn đoán — ba câu lệnh:**
+
+```sql
+-- ① Index của bảng đó lớn bao nhiêu so với bộ nhớ đệm?
+SELECT pg_size_pretty(pg_relation_size('orders_pkey')) AS kich_thuoc_index,
+       current_setting('shared_buffers')               AS bo_nho_dem;
+-- 18 GB index / 16 GB shared_buffers  →  ĐÃ VƯỢT RAM
+
+-- ② Tỉ lệ trúng bộ nhớ đệm có tụt không?
+SELECT round(100.0 * sum(heap_blks_hit) / nullif(sum(heap_blks_hit + heap_blks_read),0), 2)
+FROM pg_statio_user_tables WHERE relname = 'orders';
+-- 68%  → trước đây 99% → mỗi lần ghi giờ phải ĐỌC ĐĨA
+
+-- ③ Khoá chính đang là kiểu gì?
+SELECT data_type FROM information_schema.columns
+WHERE table_name='orders' AND column_name='order_id';   -- 'uuid'
+```
+
+**Kết luận:** UUID v4 ghi **ngẫu nhiên khắp cây**, nên trang đích thường không có sẵn trong RAM. Suốt hai năm index còn nằm gọn trong bộ nhớ đệm nên không ai thấy gì. Đêm đó nó vừa vượt qua.
+
+**Cách xử lý, xếp theo chi phí:**
+
+```text
+① RẺ NHẤT — tăng shared_buffers (mua thêm thời gian, không sửa gốc)
+② ĐÚNG GỐC  — đổi sang UUID v7 cho dữ liệu MỚI:
+      ALTER TABLE orders ALTER COLUMN order_id SET DEFAULT uuid_generate_v7();
+      → dòng mới ghi vào trang cuối, hết page split
+      → dòng cũ vẫn nguyên, không cần di trú
+③ DỌN BLOAT — index cũ đang phình vì trang đầy nửa vời:
+      REINDEX INDEX CONCURRENTLY orders_pkey;
+```
+
+> Điểm hay của cách ②: **không phải di trú dữ liệu cũ**. Chỉ đổi hàm sinh mặc định, và từ đó trở đi mọi dòng mới đều ghi tuần tự.
+
+> **Tình huống 2:** Bảo mật báo *"đối thủ đang biết chính xác mỗi ngày công ty tạo bao nhiêu đơn hàng"*, dù API không hề lộ con số nào.
+
+**Chẩn đoán:** khoá chính là **UUID v7**, và nó được phơi thẳng ra URL.
+
+```python
+# Đối thủ chỉ cần tạo 2 đơn cách nhau 24 giờ, rồi đọc timestamp trong ID
+import uuid
+def lay_thoi_diem(u: str) -> int:
+    return int(uuid.UUID(u).hex[:12], 16)      # 48 bit đầu = mili giây
+
+t1 = lay_thoi_diem("018f4d2c-9a1b-7000-...")   # đơn sáng nay
+t2 = lay_thoi_diem("018f5e3d-ab2c-7000-...")   # đơn sáng mai
+# → biết chính xác khoảng thời gian, và đếm được số đơn ở giữa
+```
+
+**Cách xử lý — ID hai lớp:**
+
+```sql
+ALTER TABLE orders
+    ADD COLUMN public_id UUID NOT NULL DEFAULT gen_random_uuid();   -- v4, ngẫu nhiên
+CREATE UNIQUE INDEX orders_public_id_uk ON orders(public_id);
+```
+
+```python
+# API dùng public_id; database nội bộ vẫn dùng order_id v7 để ghi nhanh
+@app.get("/orders/{public_id}")
+def xem_don(public_id: UUID, user = Depends(dang_nhap)):
+    return db.query(
+        "SELECT * FROM orders WHERE public_id = %s AND customer_id = %s",
+        public_id, user.id)
+```
+
+**Nhanh mà vẫn kín, ngon cả đôi đường.**
 
 ## Bẫy thường gặp
 

@@ -12,6 +12,21 @@ Không ai đụng vào code, không ai deploy gì cả. Cái sàn đó không b�
 
 Đây là loại sự cố đáng sợ nhất: nó được lập trình sẵn từ nhiều năm trước, bởi một người đã nghỉ việc, trong đúng một dòng `CREATE TABLE`, và nó nổ vào lúc bạn không có mặt.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Integer** | in-tơ-giơ | **Số nguyên** — số không có phần lẻ |
+| **Overflow** | ô-vơ-phlâu | **Tràn số** — giá trị vượt quá trần của kiểu |
+| **Bit** | bịt | Đơn vị nhỏ nhất, chỉ chứa 0 hoặc 1 |
+| **Signed / Unsigned** | sai-nờ | **Có dấu / không dấu** — có dành một bit cho dấu âm hay không |
+| **Sequence** | si-quen | **Bộ đếm tự tăng** của database, cấp số kế tiếp mỗi lần chèn |
+| **`SERIAL` / `IDENTITY`** | | Hai cách khai cột tự tăng; `IDENTITY` là chuẩn SQL và chặt hơn |
+| **Strict mode** | strịc | **Chế độ nghiêm** của MySQL — báo lỗi thay vì cắt giá trị im lặng |
+| **Clamp** | clem | **Cắt về trần** — thay giá trị vượt trần bằng chính giá trị trần |
+| **Wraparound** | ráp-a-rao | **Quay vòng** — vượt trần thì nhảy về số âm nhỏ nhất (C/Java làm vậy, SQL thì không) |
+| **`MAX_SAFE_INTEGER`** | | Trần 2⁵³−1 của JavaScript — quá số này là **làm tròn im lặng** |
+
 ## Mỗi kiểu số nguyên là một cái hộp có kích thước cố định
 
 Bạn khai kiểu nào, database cấp cho bạn đúng chừng đó bit — không hơn một bit.
@@ -264,6 +279,70 @@ Cái cuối ở PostgreSQL đáng nói riêng: **transaction ID wraparound**. Po
 SELECT datname, age(datfrozenxid) AS tuoi_xid
 FROM pg_database ORDER BY tuoi_xid DESC;
 -- Cảnh báo khi vượt 1.000.000.000 (trần là ~2.100.000.000)
+```
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** 1 giờ 47 sáng, mọi lệnh `INSERT` vào bảng `orders` đều thất bại với `integer out of range`. Không ai deploy gì cả.
+
+**Chẩn đoán trong 2 câu lệnh:**
+
+```sql
+-- ① Sequence đã chạy tới đâu?
+SELECT last_value FROM orders_order_id_seq;   -- 2147483647 → ĐÚNG TRẦN INT
+
+-- ② Cột đang là kiểu gì?
+SELECT data_type FROM information_schema.columns
+WHERE table_name='orders' AND column_name='order_id';   -- 'integer'
+```
+
+**Cách xử lý — theo thứ tự ưu tiên khi đang cháy:**
+
+```text
+① CỨU HOẢ NGAY (nếu chấp nhận được):
+   ALTER SEQUENCE orders_order_id_seq RESTART WITH -2147483648;
+   → dùng nốt nửa ÂM của INT, mua thêm 2,1 tỷ id
+   ⚠ chỉ làm khi mã hoá/hiển thị id không giả định số dương
+
+② HOẶC: bảng nhỏ (< vài triệu dòng) thì ALTER TYPE luôn, chịu khoá vài phút
+   ALTER TABLE orders ALTER COLUMN order_id TYPE BIGINT;
+   ALTER SEQUENCE orders_order_id_seq AS BIGINT;
+
+③ Bảng lớn → chạy quy trình 6 bước không downtime ở trên
+```
+
+> **Tình huống 2:** Backend và database đều đúng, nhưng người dùng bấm vào đơn hàng thì nhận **404**.
+
+**Chẩn đoán:** mở DevTools của trình duyệt, so id trong response với id trong database.
+
+```text
+   Database:  9223372036854775807
+   Trình duyệt: 9223372036854776000     ◄── đã bị LÀM TRÒN
+
+   → JavaScript chỉ giữ nguyên vẹn số nguyên tới 2⁵³−1.
+   → Không có lỗi nào, không có cảnh báo nào.
+```
+
+```javascript
+// Xác nhận nhanh trong console
+Number.MAX_SAFE_INTEGER          // 9007199254740991
+JSON.parse('{"id":9223372036854775807}').id   // 9223372036854776000
+```
+
+**Cách xử lý:** trả ID lớn về client dưới dạng **chuỗi**, và thêm test chặn tái diễn.
+
+```python
+class OrderOut(BaseModel):
+    order_id: int
+    model_config = ConfigDict(json_encoders={int: str})
+```
+
+```javascript
+// Test chặn tái diễn
+test('id trả về phải là chuỗi', async () => {
+  const r = await fetch('/api/orders/1').then(r => r.json());
+  expect(typeof r.order_id).toBe('string');
+});
 ```
 
 ## Bẫy thường gặp

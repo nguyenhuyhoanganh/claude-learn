@@ -10,6 +10,22 @@ Anh ta gật đầu, ghi một dòng, rồi hỏi tiếp:
 
 Bài này nói về hai thứ mà transaction thật sự gây ra trong hệ thống production: **khoá** (đã học ở phase-4 bài 3) và **kết nối** (phần ít ai nói). Rồi tới cách đúng để đưa việc nặng ra khỏi request.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Connection** | cần-néc-shân | **Kết nối** — một đường dây từ ứng dụng tới database |
+| **Connection pool** | pun | **Bể kết nối** — dùng chung, mượn rồi trả, thay vì mở mới mỗi lần |
+| **PgBouncer** | pi-ji-bao-sơ | Lớp gom kết nối phổ biến nhất cho PostgreSQL |
+| **Transaction pooling** | | Chế độ **trả kết nối về bể sau mỗi `COMMIT`** — gom được nhiều nhất |
+| **`idle in transaction`** | ai-đồ | Đã `BEGIN` nhưng **không làm gì** và chưa `COMMIT` — kẻ giết người thầm lặng |
+| **Context switch** | | **Chuyển ngữ cảnh** — chi phí hệ điều hành đổi từ tiến trình này sang tiến trình kia |
+| **`SKIP LOCKED`** | skịp lốc | Bỏ qua dòng đang bị phiên khác giữ, thay vì xếp hàng chờ |
+| **DLQ** (*Dead Letter Queue*) | | **Hàng đợi người chết** — nơi chứa job thất bại hết cách |
+| **Backoff + jitter** | béc-óp | **Giãn nhịp + nhiễu ngẫu nhiên** khi thử lại |
+| **Outbox pattern** | ao-bốc | Ghi bản ghi và message trong **cùng một transaction** để không lệch nhau |
+| **Backpressure** | béc-pre-shơ | **Áp lực ngược** — tín hiệu báo "chậm lại, tôi không theo kịp" |
+
 ## Kết nối tới database là tài nguyên đắt
 
 ```text
@@ -361,6 +377,138 @@ Và bạn vừa mua về một **hệ thống phân tán**:
 - Và đắt nhất: **job chết âm thầm**. Chạy được 3 tiếng, bị kill, không ai biết. Trên màn hình khách hàng cái vòng tròn vẫn quay, và nó sẽ quay như thế cho tới ngày bạn tự tay đi tìm.
 
 **Nên đừng ném mọi thứ vào hàng đợi.** Việc chạy dưới một giây và không ai chết nếu nó fail thì để yên đó.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Trang danh sách sản phẩm **đứng hình**, dù nó không đụng vào bảng đơn hàng và không có khoá nào liên quan. Cùng lúc đó, cổng thanh toán của đối tác đang chậm.
+
+**Chẩn đoán — ba câu lệnh chỉ đúng thủ phạm:**
+
+```sql
+-- ① Bể kết nối còn chỗ không?
+SELECT count(*) AS dang_dung, current_setting('max_connections') AS tran
+FROM pg_stat_activity;
+--  98 / 100    ◄── CẠN RỒI
+
+-- ② Chúng đang làm gì? Đây là câu quan trọng nhất
+SELECT state, count(*), max(now() - state_change) AS lau_nhat
+FROM pg_stat_activity GROUP BY state ORDER BY 2 DESC;
+--  idle in transaction | 87 | 00:00:29    ◄── 87 KẾT NỐI ĐANG NGỒI KHÔNG
+--  active              |  6 | 00:00:00
+--  idle                |  5 | 00:12:04
+
+-- ③ Câu lệnh cuối chúng chạy là gì? → chỉ ra ĐÚNG dòng code
+SELECT pid, now() - xact_start AS mo_bao_lau, left(query, 80) AS lenh_cuoi
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+ORDER BY xact_start LIMIT 3;
+--  INSERT INTO orders (...)    ← mở transaction, ghi xong, RỒI ĐI GỌI API
+```
+
+```text
+   KẾT LUẬN: transaction được mở, ghi đơn hàng, rồi ỨNG DỤNG ĐI GỌI
+   CỔNG THANH TOÁN và ngồi chờ 30 giây — trong khi VẪN GIỮ KẾT NỐI.
+
+   87 request như vậy = bể cạn = MỌI TRANG đều đứng,
+   kể cả trang không liên quan gì. Nó chỉ đơn giản KHÔNG MƯỢN ĐƯỢC KẾT NỐI.
+```
+
+**Cách xử lý — cứu hoả trước, sửa gốc sau:**
+
+```sql
+-- ═══ CỨU HOẢ (làm ngay) ═══
+-- Cắt các transaction ngồi không quá 60 giây
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+WHERE state = 'idle in transaction' AND now() - state_change > INTERVAL '60 seconds';
+```
+
+```sql
+-- ═══ CHẶN Ở TẦNG DATABASE (làm trong 5 phút, ngăn tái diễn) ═══
+ALTER ROLE app_user SET idle_in_transaction_session_timeout = '30s';
+ALTER ROLE app_user SET statement_timeout                    = '30s';
+ALTER ROLE app_user SET lock_timeout                         = '5s';
+```
+
+```python
+# ═══ SỬA GỐC: KHÔNG GỌI MẠNG TRONG TRANSACTION ═══
+
+# ❌ TRƯỚC — giữ kết nối suốt 30 giây
+with conn.transaction():
+    don = tao_don_hang(conn, ...)                # 5 ms
+    kq  = goi_cong_thanh_toan(don)               # 30 GIÂY hôm nay
+    cap_nhat_trang_thai(conn, don, kq)           # 3 ms
+
+# ✅ SAU — ba bước, không giữ kết nối lúc chờ
+with conn.transaction():                          # transaction 1: ~5 ms
+    don = tao_don_hang(conn, trang_thai="dang_cho")
+
+kq = goi_cong_thanh_toan(don, timeout=10)         # NGOÀI transaction
+
+with conn.transaction():                          # transaction 2: ~3 ms
+    cap_nhat_trang_thai(conn, don, kq)
+```
+
+**Và thêm cảnh báo để lần sau biết trước khi khách biết:**
+
+```yaml
+- alert: IdleInTransactionCao
+  expr: pg_stat_activity_count{state="idle in transaction"} > 10
+  for: 1m
+  annotations:
+    summary: "{{ $value }} kết nối đang idle in transaction — sắp cạn bể"
+```
+
+> **Tình huống 2:** Hàng đợi có **200.000 job tồn đọng**. Bạn tăng worker từ 10 lên 50, và database **sập**.
+
+**Chẩn đoán: worker không phải nút thắt — database mới là.**
+
+```sql
+-- ① Worker đang CHỜ ở đâu?
+SELECT wait_event_type, wait_event, count(*)
+FROM pg_stat_activity WHERE backend_type = 'client backend'
+GROUP BY 1,2 ORDER BY 3 DESC;
+--  Client | ClientRead | 42     → worker đang chờ ứng dụng, không phải DB
+--  LWLock | BufferPin  | 8      → đang tranh chấp trong DB
+--  IO     | DataFileRead | 31   ◄── ĐANG CHỜ ĐỌC ĐĨA → DB là nút thắt
+
+-- ② 50 worker × 5 kết nối = 250 > max_connections = 100
+SELECT count(*) FROM pg_stat_activity;    -- 100 (đã kịch trần)
+```
+
+**Cách xử lý — bốn bước theo thứ tự:**
+
+```text
+① ĐO TRƯỚC KHI THÊM WORKER
+   Nếu worker đang chờ DB thì thêm worker chỉ làm TỆ HƠN.
+   Con số đúng: min(CPU_khả_dụng / CPU_mỗi_job, RAM_khả_dụng / RAM_mỗi_job)
+
+② ĐẶT PgBouncer Ở GIỮA + giảm pool mỗi worker xuống 1–2
+
+③ GỘP THAO TÁC THEO LÔ thay vì từng cái
+```
+
+```python
+# ❌ 1.000 job = 1.000 chuyến đi mạng
+for j in jobs:
+    db.execute("UPDATE t SET x = %s WHERE id = %s", (j.x, j.id))
+
+# ✅ Một lệnh
+db.execute(
+    "UPDATE t SET x = v.x FROM (VALUES %s) AS v(id, x) WHERE t.id = v.id",
+    [(j.id, j.x) for j in jobs])
+```
+
+```sql
+-- ④ XẢ TẢI CÓ CHỌN LỌC nếu vẫn tồn đọng
+-- Bỏ hẳn job đã quá hạn ý nghĩa (thông báo khuyến mãi hôm qua)
+DELETE FROM jobs
+WHERE loai = 'thong_bao_khuyen_mai' AND chay_luc < now() - INTERVAL '1 day';
+
+-- Ưu tiên job liên quan tới tiền
+UPDATE jobs SET uu_tien = 100 WHERE loai IN ('thanh_toan', 'hoan_tien');
+```
+
+> **Nguyên tắc:** *"tăng worker"* là phản xạ đầu tiên và **thường sai**. Đo xem worker đang chờ ai trước đã.
 
 ## Bẫy thường gặp
 

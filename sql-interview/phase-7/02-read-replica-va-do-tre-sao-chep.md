@@ -10,6 +10,23 @@ Cả hai lần đều thành công. Chủ trọ nhận 4 triệu.
 
 Không có giao dịch nào trượt. **Chỉ có màn hình của Lan là nói dối cô ấy** — và cái màn hình đó không hề bị lỗi. Nó đang làm đúng thứ bạn đã bảo nó làm.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Replication** | rép-li-kê-shân | **Sao chép** — nhân bản dữ liệu sang máy khác |
+| **Primary** | prai-ma-ri | **Máy chính** — nơi duy nhất nhận lệnh ghi |
+| **Replica / Standby** | rép-li-ka | **Bản sao** — chỉ đọc, chép lại từ máy chính |
+| **WAL** (*Write-Ahead Log*) | oan | **Nhật ký ghi trước** — dòng thay đổi mà replica chép lại |
+| **Replay** | ri-plây | **Áp dụng lại** — replica thực thi WAL để cập nhật dữ liệu thật |
+| **Replication lag** | | **Độ trễ sao chép** — bản sao đang cũ hơn máy chính bao nhiêu |
+| **LSN** (*Log Sequence Number*) | eo-ét-en | **Vị trí trong dòng WAL** — như số trang của cuốn nhật ký |
+| **Read-after-write** | | Đọc lại ngay thứ **chính mình vừa ghi** — lệnh đọc nguy hiểm nhất |
+| **Monotonic read** | mô-nô-tô-nịc | **Đọc đơn điệu** — không bao giờ thấy thời gian đi lùi |
+| **`synchronous_commit`** | sin-cro-nớt | Núm chỉnh `COMMIT` chờ replica xác nhận tới mức nào |
+| **Failover** | phêu-ô-vơ | **Chuyển vai** — replica lên làm máy chính khi máy chính chết |
+| **p99** | pi-nai-nai | **Phân vị 99** — 99% request nhanh hơn con số này |
+
 ## Vì sao có replica, và cái giá kèm theo
 
 Ban đầu ứng dụng chỉ có một database. Mọi lệnh ghi vào nó, mọi lệnh đọc ra từ nó. Không bao giờ sai.
@@ -275,6 +292,131 @@ hot_standby_feedback = on           -- replica báo primary "đừng vacuum dòn
 **② Replica không giảm tải ghi.** Đây là hiểu lầm phổ biến: replica chỉ giảm tải **đọc**. Mọi lệnh ghi vẫn dồn về một máy, và replica còn phải replay **toàn bộ** lượng ghi đó. Nếu nút thắt là ghi, replica không giúp gì — bạn cần **sharding** (bài 4).
 
 **③ Failover làm mất dữ liệu đã commit.** Với sao chép bất đồng bộ, khi primary chết đột ngột, phần WAL chưa kịp gửi đi sẽ **mất vĩnh viễn** — kể cả giao dịch đã báo thành công cho người dùng. Đây là đánh đổi có ý thức: chấp nhận mất vài trăm mili giây dữ liệu để đổi lấy tốc độ ghi. Nếu không chấp nhận được thì phải dùng sao chép đồng bộ.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Bộ phận CSKH báo *"nhiều khách phản ánh chuyển tiền hai lần"*. Log giao dịch cho thấy hai giao dịch cách nhau **8 giây**, cùng số tiền, cùng người nhận.
+
+**Chẩn đoán — ba câu lệnh chỉ đúng thủ phạm:**
+
+```sql
+-- ① Độ trễ replica lúc đó bao nhiêu? (chạy TRÊN REPLICA)
+SELECT EXTRACT(epoch FROM (now() - pg_last_xact_replay_timestamp())) AS tre_giay;
+-- 2.4  → đang trễ 2,4 GIÂY
+
+-- ② Đỉnh trễ 30 ngày qua — con số này mới quan trọng
+SELECT max(lag_seconds), date_trunc('hour', ts) AS gio
+FROM replication_lag_history
+WHERE ts > now() - INTERVAL '30 days'
+GROUP BY 2 ORDER BY 1 DESC LIMIT 5;
+--  9.2 | 21:00   ◄── giờ cao điểm chuyển tiền, trễ tới 9 GIÂY
+
+-- ③ Giao dịch trùng có rơi vào cửa sổ đó không?
+SELECT from_user, count(*), max(created_at) - min(created_at) AS cach_nhau
+FROM transactions
+WHERE created_at > now() - INTERVAL '7 days'
+GROUP BY from_user, to_user, amount, date_trunc('minute', created_at)
+HAVING count(*) > 1;
+```
+
+```text
+   KẾT LUẬN: người dùng ghi vào PRIMARY, đọc lại từ REPLICA còn cũ 9 giây
+   → màn hình vẫn hiện số dư cũ
+   → họ tin mắt mình, bấm chuyển lần nữa.
+```
+
+**Cách xử lý — bốn lớp, xếp theo chi phí:**
+
+```python
+# ① RẺ NHẤT: không đọc lại. Lấy kết quả NGAY từ lệnh ghi.
+row = db_primary.execute(
+    "UPDATE tai_khoan SET so_du = so_du - %s "
+    "WHERE id = %s AND so_du >= %s RETURNING so_du, updated_at",
+    (tien, uid, tien)).fetchone()
+if row is None:
+    raise SoDuKhongDu()
+return {"so_du_moi": row.so_du}      # hiển thị THẲNG, không query lại
+```
+
+```python
+# ② CHÍNH XÁC NHẤT: ghim theo LSN
+lsn = db_primary.execute("SELECT pg_current_wal_lsn()").fetchone()[0]
+session["read_lsn"] = lsn
+
+def chon_ket_noi(session):
+    can = session.get("read_lsn")
+    if not can:
+        return replica_ngau_nhien()
+    for r in danh_sach_replica():
+        da = r.execute("SELECT pg_last_wal_replay_lsn()").fetchone()[0]
+        if da >= can:
+            return r                  # replica này CHẮC CHẮN đã có thay đổi của bạn
+    return primary                    # chưa ai kịp → về primary
+```
+
+```sql
+-- ③ Với riêng giao dịch tiền: chờ replica xác nhận
+BEGIN;
+SET LOCAL synchronous_commit = 'remote_apply';
+UPDATE tai_khoan SET so_du = so_du - 2000000 WHERE id = 1;
+COMMIT;   -- chỉ trả về khi ít nhất 1 replica ĐÃ REPLAY xong
+```
+
+```python
+# ④ CHẶN TRIỆU CHỨNG: idempotency key — dù có bấm lại vẫn chỉ một giao dịch
+db.execute(
+    "INSERT INTO transactions (idem_key, ...) VALUES (%s, ...) "
+    "ON CONFLICT (idem_key) DO NOTHING", (khoa_client_sinh,))
+```
+
+**Và đặt cảnh báo để không phải chờ khách hàng báo:**
+
+```yaml
+# Prometheus alert
+- alert: ReplicationLagCao
+  expr: pg_replication_lag_seconds > 1
+  for: 30s
+  annotations:
+    summary: "Replica trễ {{ $value }}s — nguy cơ đọc-sau-khi-ghi sai"
+```
+
+> **Tình huống 2:** Đội phân tích chạy báo cáo nặng trên replica. Từ hôm đó, ứng dụng thỉnh thoảng báo lỗi lạ:
+
+```text
+ERROR: canceling statement due to conflict with recovery
+DETAIL: User query might have needed to see row versions that must be removed.
+```
+
+**Chẩn đoán:** replay WAL cần xoá phiên bản dòng cũ mà query dài đang đọc → Postgres **huỷ query**.
+
+```sql
+-- Đếm xem bị huỷ bao nhiêu lần
+SELECT confl_snapshot, confl_bufferpin, confl_deadlock
+FROM pg_stat_database_conflicts WHERE datname = current_database();
+```
+
+**Ba cách chữa, mỗi cách một cái giá — phải nói ra được:**
+
+```sql
+-- ① Cho query nhiều thời gian hơn
+ALTER SYSTEM SET max_standby_streaming_delay = '5min';
+--    ✗ CÁI GIÁ: replay bị HOÃN → độ trễ replica tăng lên tới 5 phút
+
+-- ② Replica báo primary "đừng vacuum dòng này"
+ALTER SYSTEM SET hot_standby_feedback = on;
+--    ✗ CÁI GIÁ: PRIMARY bị bloat vì phải giữ dòng chết
+```
+
+```text
+   ③ ✅ CÁCH SẠCH NHẤT: TÁCH REPLICA RIÊNG
+
+      replica-app       → phục vụ ứng dụng, max_standby_streaming_delay THẤP
+                          (ưu tiên độ trễ thấp)
+      replica-analytics → phục vụ báo cáo, delay CAO + hot_standby_feedback on
+                          (ưu tiên query chạy xong)
+
+      → Hai nhu cầu ngược nhau thì đừng ép chung một máy.
+```
 
 ## Bẫy thường gặp
 

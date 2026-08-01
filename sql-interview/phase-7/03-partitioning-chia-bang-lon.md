@@ -10,6 +10,22 @@ Netflix có hơn 300 triệu người dùng. Mỗi giây, hàng triệu sự ki�
 
 Phase-3 bài 4 đã giới thiệu partitioning ở mức cơ bản. Bài này đi sâu vào phần quyết định thành bại: chọn khoá phân vùng, các bẫy làm mất partition pruning, ràng buộc bị vỡ, và vận hành vòng đời partition.
 
+## Giải nghĩa thuật ngữ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt |
+|---|---|---|
+| **Partitioning** | pa-ti-shân-ning | **Phân vùng** — chia một bảng lớn thành nhiều mảnh nhỏ |
+| **Partition** | pa-ti-shân | **Mảnh / phân vùng** — một phần của bảng |
+| **Partition key** | | **Khoá phân vùng** — cột quyết định hàng thuộc mảnh nào |
+| **Partition pruning** | pru-ning | **Tỉa phân vùng** — optimizer **loại bỏ** mảnh không cần nhìn tới |
+| **`RANGE` / `LIST` / `HASH`** | | Ba kiểu chia: theo **khoảng** / theo **danh sách** / theo **hàm băm** |
+| **Parent / Child table** | | **Bảng cha** (tên bạn query) / **bảng con** (mảnh thật chứa dữ liệu) |
+| **Local index** | | Index **của riêng từng mảnh** — Postgres và MySQL chỉ có loại này |
+| **Global index** | | Index **chung cho cả bảng** — Oracle/SQL Server có, Postgres **chưa** |
+| **`DETACH PARTITION`** | đi-tách | **Tách mảnh** ra thành bảng độc lập mà không xoá dữ liệu |
+| **`DEFAULT PARTITION`** | | Mảnh **hứng** giá trị không thuộc mảnh nào |
+| **Planning time** | | **Thời gian lập kế hoạch** — tăng theo số mảnh |
+
 ## Cơ chế: partition pruning
 
 ```text
@@ -316,6 +332,105 @@ SHARDING
 | SQL Server | Partition function + scheme | `SWITCH PARTITION` để trao đổi dữ liệu tức thì |
 
 Điểm khác biệt lớn nhất: **Oracle và SQL Server có global index**, cho phép giữ `UNIQUE` toàn cục trên cột không phải khoá phân vùng. PostgreSQL và MySQL thì chưa — đó là lý do bạn phải ghép khoá phân vùng vào PK.
+
+## Tình huống thực tế và cách xử lý
+
+> **Tình huống 1:** Đã phân vùng bảng `events` theo tháng, nhưng query vẫn **chậm y như cũ**.
+
+**Chẩn đoán — một câu lệnh cho biết ngay:**
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT count(*) FROM events
+WHERE date_trunc('day', created_at) = DATE '2026-06-15';
+```
+
+```text
+Append  (cost=... rows=...)
+  ->  Seq Scan on events_2024_01   (actual rows=0)
+  ->  Seq Scan on events_2024_02   (actual rows=0)
+  ->  Seq Scan on events_2024_03   (actual rows=0)
+  ...  (đủ 36 mảnh)                ◄── PRUNING KHÔNG HOẠT ĐỘNG
+
+   Thấy ĐỦ MỌI MẢNH  → mất pruning.
+   Thấy ĐÚNG MỘT MẢNH → pruning chạy tốt.
+```
+
+**Nguyên nhân và cách sửa — bốn thủ phạm, kiểm theo thứ tự:**
+
+```sql
+-- ① BỌC HÀM quanh khoá phân vùng (phổ biến nhất)
+-- ❌ WHERE date_trunc('day', created_at) = DATE '2026-06-15'
+-- ✅ giữ cột TRẦN TRỤI, so sánh khoảng
+WHERE created_at >= '2026-06-15' AND created_at < '2026-06-16';
+
+-- ② ÉP KIỂU NGẦM
+-- ❌ WHERE created_at::text LIKE '2026-06%'
+-- ✅ WHERE created_at >= '2026-06-01' AND created_at < '2026-07-01'
+
+-- ③ KHÔNG CÓ điều kiện nào trên khoá phân vùng
+-- ❌ WHERE user_id = 42          → buộc phải quét mọi mảnh
+-- ✅ WHERE user_id = 42 AND created_at >= now() - INTERVAL '30 days'
+
+-- ④ Tham số động (PG 10 trở xuống không có run-time pruning)
+SHOW enable_partition_pruning;    -- phải là 'on'
+SELECT version();                  -- nên từ PG 11 trở lên
+```
+
+> **Lưu ý về run-time pruning:** với tham số `$1`, `EXPLAIN` **không kèm** `ANALYZE` vẫn hiện đủ 36 mảnh. Phải xem dòng `(never executed)` trong `EXPLAIN ANALYZE` mới biết mảnh nào thật sự bị chạm.
+
+> **Tình huống 2:** 0 giờ 00 ngày 1 tháng mới, **mọi lệnh `INSERT` thất bại**:
+
+```text
+ERROR: no partition of relation "events" found for row
+DETAIL: Partition key of the failing row contains (created_at) = (2026-09-01 00:00:03+07).
+```
+
+**Chẩn đoán:** không ai tạo mảnh cho tháng mới.
+
+```sql
+-- Xem hiện có những mảnh nào, mảnh cuối tới đâu
+SELECT c.relname, pg_get_expr(c.relpartbound, c.oid) AS khoang
+FROM pg_class c
+JOIN pg_inherits i ON i.inhrelid = c.oid
+WHERE i.inhparent = 'events'::regclass
+ORDER BY c.relname DESC LIMIT 3;
+--  events_2026_08 | FOR VALUES FROM ('2026-08-01') TO ('2026-09-01')
+--  ◄── HẾT. Không có mảnh cho tháng 9.
+```
+
+**Cứu hoả ngay (30 giây):**
+
+```sql
+CREATE TABLE events_2026_09 PARTITION OF events
+    FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
+CREATE INDEX ON events_2026_09 (user_id, created_at);   -- ĐỪNG QUÊN INDEX
+```
+
+**Chặn tái diễn — hai lớp:**
+
+```sql
+-- ① LƯỚI AN TOÀN: mảnh DEFAULT hứng mọi giá trị lạ
+CREATE TABLE events_default PARTITION OF events DEFAULT;
+-- ⚠ Dữ liệu rơi vào đây KHÔNG được pruning, và tạo mảnh thật sau đó sẽ KHOÁ BẢNG
+--   → coi nó là lưới an toàn CÓ CẢNH BÁO, không phải giải pháp
+```
+
+```sql
+-- ② CẢNH BÁO khi mảnh DEFAULT có dữ liệu
+SELECT count(*) FROM events_default;   -- > 0 → có tháng chưa được tạo
+
+-- ③ JOB tạo trước 3 tháng, chạy hằng ngày (dùng procedure ở phần trên,
+--    hoặc extension pg_partman lo trọn vòng đời)
+```
+
+```yaml
+# Cảnh báo giám sát
+- alert: ThieuPartitionSapToi
+  expr: pg_partition_max_bound_days_remaining < 30
+  annotations:
+    summary: "Mảnh cuối cùng chỉ còn {{ $value }} ngày — tạo thêm ngay"
+```
 
 ## Bẫy thường gặp
 
