@@ -95,3 +95,8 @@ Khi bí, ba câu này luôn ghi điểm:
 
 > **Họ không hỏi bạn biết gì. Họ hỏi bạn đã mất gì.**
 > Định nghĩa tra 10 giây là có. Vết sẹo thì không tra được.
+
+## Khoá liên quan
+
+
+> **[N+1, ORM, và cách các công ty thật sự truy cập dữ liệu](../orm-n-plus-1/README.md)** — khoá chuyên sâu 8 bài về lỗi hiệu năng phổ biến nhất của backend, và câu hỏi lớn phía sau nó: **production có nên dùng ORM không, hay dùng gì thay thế**. Đi sâu Java/Hibernate (`JOIN FETCH`, `@EntityGraph`, `@BatchSize`, `MultipleBagFetchException`, `HHH90003004`), rồi mở sang MyBatis/jOOQ/Spring Data JDBC, kiến trúc CQRS-lite, N+1 qua mạng và GraphQL, và cách dựng lưới chắn tự động.

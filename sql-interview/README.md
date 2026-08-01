@@ -118,3 +118,6 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 ## Khoá liên quan
 
 > **[Phá đảo vòng phỏng vấn Backend & System Design](../backend-interview/README.md)** — phần backend nằm ngoài phạm vi SQL: API và idempotency, đồng bộ/bất đồng bộ, REST vs GraphQL vs gRPC, xác thực và phân quyền (Session/JWT/OAuth/OIDC), load balancer, API gateway, caching, job queue, Big O, thiết kế hệ thống, và các câu hỏi ngôn ngữ (OOP, con trỏ, Git). Hai khoá bổ sung cho nhau, không lặp lại.
+
+> **[N+1, ORM, và cách các công ty thật sự truy cập dữ liệu](../orm-n-plus-1/README.md)** — khoá chuyên sâu 8 bài về lỗi hiệu năng phổ biến nhất của backend, và câu hỏi lớn phía sau nó: **production có nên dùng ORM không, hay dùng gì thay thế**. Đi sâu Java/Hibernate (`JOIN FETCH`, `@EntityGraph`, `@BatchSize`, `MultipleBagFetchException`, `HHH90003004`), rồi mở sang MyBatis/jOOQ/Spring Data JDBC, kiến trúc CQRS-lite, N+1 qua mạng và GraphQL, và cách dựng lưới chắn tự động.
+
