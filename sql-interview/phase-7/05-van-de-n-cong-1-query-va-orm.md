@@ -531,6 +531,6 @@ Có. Khi N nhỏ và cố định, khi dữ liệu đã nằm trong cache nên N
 - Cẩn thận căn bệnh ngược lại — **overfetching**: viết truy vấn theo **màn hình**, không theo model.
 - N+1 đôi khi đúng: N nhỏ, dữ liệu trong cache, JOIN gây fanout lớn, hoặc dữ liệu ở dịch vụ khác. **Đo trước, đừng đoán.**
 
-> **Muốn đi sâu hơn?** Bài này là bản tổng quát, không phụ thuộc ngôn ngữ. Nếu bạn làm Java/Hibernate, hoặc đang phân vân **"production có nên dùng ORM không"**, hãy đọc khoá riêng: [N+1, ORM, và cách các công ty thật sự truy cập dữ liệu](../../orm-n-plus-1/README.md) — 8 bài về `JOIN FETCH` vs `@EntityGraph` vs `@BatchSize` và cái giá của từng cách, `MultipleBagFetchException`, `HHH90003004`, MyBatis/jOOQ/Spring Data JDBC, kiến trúc CQRS-lite, DataLoader, và cách dựng lưới chắn để N+1 không quay lại.
+> **Muốn đi sâu hơn?** Bài này là bản tổng quát, không phụ thuộc ngôn ngữ. Nếu bạn làm Java/Hibernate, hoặc đang phân vân **"production có nên dùng ORM không"**, hãy đọc khoá riêng: [N+1, ORM, và cách các công ty thật sự truy cập dữ liệu](../../orm-n-plus-1/README.md) — 10 bài về `JOIN FETCH` vs `@EntityGraph` vs `@BatchSize` và cái giá của từng cách, `MultipleBagFetchException`, `HHH90003004`, MyBatis/jOOQ/Spring Data JDBC, kiến trúc CQRS-lite, DataLoader, và cách dựng lưới chắn để N+1 không quay lại.
 
 **Bài kế tiếp** → [Bài 6: Connection pool, job queue và transaction dài](06-connection-pool-job-queue-va-transaction-dai.md)

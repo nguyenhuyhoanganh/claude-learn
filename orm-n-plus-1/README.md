@@ -48,6 +48,15 @@ Hầu hết tài liệu về N+1 dừng ở *"dùng `JOIN FETCH` là xong"*. Đ�
 | [07](07-n-cong-1-khong-chi-o-database.md) | **N+1 không chỉ ở database** — qua mạng tệ hơn **20–100 lần**, khuếch đại độ trễ đuôi (p99 của họ thành p60 của bạn), sập dây chuyền; **bulk endpoint** và 4 quy tắc thiết kế; **DataLoader** và 2 luật sống còn; vì sao GraphQL dính N+1 mặc định; 4 lớp bảo vệ GraphQL |
 | [08](08-phat-hien-n-cong-1.md) | **Phát hiện N+1** — vì sao `show-sql` **không đủ**; Hibernate Statistics; **test đếm query** (`@AssertMaxQueries`); datasource-proxy/p6spy; **tắt `open-in-view`**; đọc `pg_stat_statements` đúng cách; **vì sao code AI sinh hay dính N+1**; danh sách kiểm tra dán vào dự án |
 
+### Phần V — Bảy bài toán production làm end-to-end
+
+Bảy bài trước dùng ví dụ Author/Book cho gọn. Hai bài này làm trên **nghiệp vụ thật**, đủ SQL, `EXPLAIN`, và con số đo được.
+
+| Bài | Nội dung |
+|---|---|
+| [09](09-bon-bai-toan-doc-kinh-dien.md) | **Bốn bài toán đọc** — ① danh sách có **filter động + sort + phân trang sâu** (`OFFSET` chậm gấp **700 lần**, keyset pagination, `ORDER BY` thiếu mốc phá hoà gây **trùng/mất dòng**); ② **feed + trạng thái người xem** ("đã thích chưa" — N+1 tường minh mà ArchUnit không bắt được, `IN` vs `EXISTS`); ③ **badge/đếm số** (`COUNT` luôn phải quét, counter cache, Redis, materialized view); ④ **export triệu dòng** (5,4 GB heap, và bẫy cursor PostgreSQL cần đủ `autoCommit=false` + `fetchSize`) |
+| [10](10-ba-bai-toan-ghi-va-van-hanh.md) | **Ba bài toán ghi và vận hành** — ⑤ **batch job hàng đêm** (dirty checking **O(n²)**, `flush`/`clear` đúng thứ tự, và **`IDENTITY` vô hiệu hoá batch insert** khiến chậm **52 lần**); ⑥ **consumer Kafka** (N+1 nhân với lưu lượng, batch listener giảm **500 lần**, pod > partition thì ngồi không); ⑦ **read replica + replication lag** (read-after-write — cái giá thật của định tuyến `readOnly` ở bài 6) |
+
 ## Ba cách dùng khoá này
 
 **① Đang có sự cố hiệu năng, cần sửa ngay.**
@@ -57,7 +66,10 @@ Hầu hết tài liệu về N+1 dừng ở *"dùng `JOIN FETCH` là xong"*. Đ�
 Vào thẳng [Bài 4](04-su-that-ve-orm-trong-production.md) → [Bài 5](05-khong-dung-orm-thi-dung-gi.md) → [Bài 6](06-kien-truc-thuc-te-va-lo-trinh-chuyen-doi.md). Ba bài này là phần trọng tâm của khoá.
 
 **③ Chuẩn bị phỏng vấn.**
-Đọc tuần tự 1 → 8. Mỗi bài có mục **Câu hỏi phỏng vấn hay gặp** với đáp án mẫu viết theo giọng ứng viên, dùng được nguyên văn.
+Đọc tuần tự 1 → 10. Mỗi bài có mục **Câu hỏi phỏng vấn hay gặp** với đáp án mẫu viết theo giọng ứng viên, dùng được nguyên văn.
+
+**④ Đang phải làm một màn hình/job cụ thể.**
+Vào thẳng [Bài 9](09-bon-bai-toan-doc-kinh-dien.md) (danh sách có lọc, feed, badge, export) hoặc [Bài 10](10-ba-bai-toan-ghi-va-van-hanh.md) (batch job, consumer Kafka, read replica) — mỗi bài toán là một mục độc lập, đọc riêng được.
 
 ## Ba câu trả lời ngắn gọn cho ba câu hỏi lớn
 

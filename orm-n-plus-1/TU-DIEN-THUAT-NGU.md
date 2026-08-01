@@ -176,6 +176,57 @@ Tra nhanh mọi thuật ngữ xuất hiện trong khoá. Cột **Đọc là** gh
 | **Regression test** | ri-gre-sần | **Test hồi quy** — chặn lỗi cũ quay lại | [8](08-phat-hien-n-cong-1.md) |
 | **WireMock** | | Giả lập HTTP server trong test — dùng để **đếm số lời gọi mạng** | [7](07-n-cong-1-khong-chi-o-database.md) |
 
+## 12. Phân trang và truy vấn danh sách
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt | Bài |
+|---|---|---|---|
+| **Offset pagination** | óp-sét | **Phân trang theo vị trí** — `LIMIT 20 OFFSET 9740`. Chi phí tăng **tuyến tính** theo số trang | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Deep offset** | | **Offset sâu** — trang thứ vài trăm; database vẫn **đọc rồi vứt** hết dòng trước | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Keyset pagination / Seek method** | ki-sét / sịc | **Phân trang theo mốc** — `WHERE (created_at, id) < (?, ?)`. Chi phí **hằng số** | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Mốc phá hoà** (*tie-breaker*) | | Cột duy nhất thêm vào `ORDER BY`; thiếu nó gây **trùng/mất dòng** giữa các trang | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **`Specification`** | | API Spring Data dựng **điều kiện động** bằng Java | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **`EXISTS`** | ếch-dít | Kiểm tra *"có tồn tại dòng nào không"* — **dừng ngay ở dòng đầu** | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Semi join** | xê-mi | **Nối một nửa** — kế hoạch tối ưu planner chọn cho `EXISTS`/`IN` | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Counter cache** | | **Cột đếm sẵn** trên bảng cha thay cho `COUNT` mỗi lần | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Denormalization** | đi-noọc-ma-lai | **Phi chuẩn hoá** — cố ý lặp dữ liệu để đọc nhanh hơn | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Materialized view** | ma-tê-ri-ơ-lai | **Khung nhìn vật chất hoá** — kết quả lưu sẵn; `REFRESH CONCURRENTLY` không khoá bảng | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+
+## 13. Export, batch job và consumer
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt | Bài |
+|---|---|---|---|
+| **Cursor** | cơ-xơ | **Con trỏ** — đọc kết quả từng phần. PostgreSQL cần đủ `autoCommit=false` **và** `fetchSize>0` | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **`fetchSize`** | phét-sai | Số dòng driver JDBC lấy về **mỗi lượt** | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Streaming** | strim-ming | **Đọc dòng chảy** — xử lý từng dòng, bộ nhớ hằng số | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **`RowCallbackHandler`** | | Xử lý **từng dòng** `ResultSet`, không tích luỹ kết quả | [9](09-bon-bai-toan-doc-kinh-dien.md) |
+| **Batch job** | bắch | **Tác vụ theo lô** — chạy định kỳ, khối lượng lớn | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`flush()`** | phờ-lát | **Đẩy** — buộc Hibernate sinh SQL cho thay đổi đang chờ | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`clear()`** | | **Dọn** Persistence Context. ⚠ Phải gọi **sau** `flush()` | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`StatelessSession`** | | Phiên Hibernate **không Persistence Context** — không cache, không dirty checking | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **JDBC batch** | | Gửi **nhiều câu lệnh trong một chuyến đi mạng** | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`hibernate.jdbc.batch_size`** | | Số câu lệnh gom mỗi lô | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`order_inserts` / `order_updates`** | | Sắp lại câu lệnh **theo bảng** để gom lô được | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`GenerationType.IDENTITY`** | ai-đen-ti-ti | ID từ cột tự tăng. ⚠ **Vô hiệu hoá batch insert một cách lặng lẽ** | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`GenerationType.SEQUENCE`** | si-quần | ID từ bộ sinh số — **cấp phát trước được** nên batch insert hoạt động | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`allocationSize`** | | Số ID lấy trước mỗi lần. ⚠ Phải **khớp `INCREMENT BY`** của sequence | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **Checkpoint** | chéc-poi | **Mốc tiến độ** — lưu `lastProcessedId` để job chạy tiếp khi bị ngắt | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **Consumer lag** | | **Độ tụt hậu** — consumer chậm hơn producer bao nhiêu message | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **`max-poll-records`** | | Số message consumer lấy **mỗi lượt** | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **DLQ** (*Dead Letter Queue*) | | **Hàng đợi thư chết** — nơi chứa message xử lý lỗi | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **Idempotent** | ai-đêm-pô-tần | **Bất biến khi lặp** — bắt buộc vì Kafka giao "ít nhất một lần" | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+
+## 14. Nhân bản và độ trễ
+
+| Thuật ngữ | Đọc là | Nghĩa tiếng Việt | Bài |
+|---|---|---|---|
+| **Read replica** | rép-li-ca | **Bản sao chỉ đọc** của database | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **Replication lag** | ré-pli-cây-sần | **Độ trễ nhân bản** — replica chậm hơn primary bao lâu | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **Read-after-write** | | **Đọc sau khi ghi** — vừa lưu xong đã đọc lại và thấy dữ liệu cũ | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **Read-your-own-writes** | | Đảm bảo **người ghi luôn thấy thay đổi của chính mình** | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **WAL** (*Write-Ahead Log*) | oa-eo | **Nhật ký ghi trước** — nguồn dữ liệu để replica bắt kịp | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **LSN** (*Log Sequence Number*) | eo-ét-en | **Số thứ tự bản ghi WAL** — dùng để biết replica đã bắt kịp chưa | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+| **Write affinity** | | **Ghim primary** một khoảng sau khi ghi, để tránh read-after-write | [10](10-ba-bai-toan-ghi-va-van-hanh.md) |
+
 ---
 
 ## Mười điều dễ nhầm nhất — đọc lại trước khi phỏng vấn
@@ -192,6 +243,12 @@ Tra nhanh mọi thuật ngữ xuất hiện trong khoá. Cột **Đọc là** gh
 | "ORM không được ưa chuộng" | ⚠ **Đúng ở Go/Rust, sai ở Java/Python/Ruby/PHP** |
 | Tìm query **chậm nhất** để tối ưu | ❌ Thủ phạm là câu **nhanh nhất nhưng gọi triệu lần** |
 | `show-sql` đủ để phát hiện N+1 | ❌ Nó **in** chứ không **đếm** — dùng test đếm query |
+| `OFFSET 9740` là "nhảy tới dòng 9740" | ❌ Là **"đọc 9.760 dòng rồi vứt 9.740"** — chậm gấp 700 lần |
+| `COUNT(*)` đọc số đếm lưu sẵn | ❌ PostgreSQL **luôn phải quét** (khác MyISAM của MySQL) |
+| `Stream<T>` là đủ để export không OOM | ❌ Persistence Context **vẫn tích luỹ** — phải `clear()`, hoặc bỏ hẳn entity |
+| Bật `batch_size` là có batch insert | ❌ **`GenerationType.IDENTITY` vô hiệu hoá nó lặng lẽ** |
+| Scale thêm pod thì consumer hết lag | ❌ Pod **vượt số partition** thì ngồi không; nút thắt thường là query/message |
+| Định tuyến `readOnly` sang replica là miễn phí | ❌ Gây **read-after-write** — người dùng thấy dữ liệu cũ sau khi lưu |
 
 ---
 

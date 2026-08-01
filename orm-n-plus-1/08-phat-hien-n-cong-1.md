@@ -785,6 +785,6 @@ Vì AI tối ưu cho code **chạy đúng và đọc dễ**, không phải code 
 - **Code do AI sinh hay dính N+1** vì nó tối ưu cho tính dễ đọc và trông quá sạch để bị soi — bù bằng tự động hoá phát hiện, không bằng "review kỹ hơn".
 - Khi thêm test vào hệ thống cũ: **đặt ngưỡng bằng hiện trạng, siết dần** — chặn tăng trước, hoàn hảo sau.
 
-**Quay lại** → [Bài 7: N+1 không chỉ ở database](07-n-cong-1-khong-chi-o-database.md)
+**Bài kế tiếp** → [Bài 9: Bốn bài toán đọc kinh điển trong production](09-bon-bai-toan-doc-kinh-dien.md)
 
-**Về mục lục** → [README khoá học](README.md)
+**Quay lại** → [Bài 7: N+1 không chỉ ở database](07-n-cong-1-khong-chi-o-database.md)
