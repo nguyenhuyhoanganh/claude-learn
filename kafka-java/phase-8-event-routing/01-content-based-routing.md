@@ -454,4 +454,4 @@ private String determineDestination(OrderEvent order) {
 - Cả 2 đều chạy được; Send-To header slightly idiomatic hơn theo Spring style.
 - Best practice: extract routing rule sang `Map` hoặc Router service class. Luôn có **fallback destination** cho case không match.
 
-**Bài kế tiếp** → [Bài 2: Dynamic Routing — runtime configuration](02-dynamic-routing.md)
+**Bài kế tiếp** → [Bài 2: Dynamic Routing — runtime configuration](02-dynamic-routing-summary.md)

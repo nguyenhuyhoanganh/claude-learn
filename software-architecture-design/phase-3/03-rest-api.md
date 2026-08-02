@@ -244,4 +244,4 @@ Naming: noun (số nhiều cho collection), meaningful, URL-friendly
 Hoàn thành Phase 3. Bạn đã hiểu 2 phong cách API chính (RPC và REST), khi nào dùng cái nào. Phase 4 sẽ bắt đầu chuyển sang **Architectural Building Blocks** — các thành phần lego để xây dựng hệ thống.
 
 ---
-**Bài kế tiếp**: [Phase 4 - Architectural Building Blocks](../phase-4/01-load-balancing.md) →
+**Bài kế tiếp**: [Phase 4 - Architectural Building Blocks](../phase-4/01-dns-load-balancing-gslb.md) →

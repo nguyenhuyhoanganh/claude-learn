@@ -392,4 +392,4 @@ Khi Consumer 1 chết, broker vẫn nhớ **last committed offset** của Consum
 - Production: giảm disruption khi rebalance bằng cooperative protocol + static membership (Phase 11).
 - Số consumer hiệu quả tối đa = số partition. Cần plan số partition trước khi tạo topic.
 
-**Bài kế tiếp** → [Phase 7 - SCS Processor pattern](../phase-7-spring-cloud-stream-processor/01-processor-pattern.md)
+**Bài kế tiếp** → [Phase 7 - SCS Processor pattern](../phase-7-spring-cloud-stream-processor/01-processor-1to1-filter-split.md)

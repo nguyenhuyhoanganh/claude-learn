@@ -386,4 +386,4 @@ Tools like **Honeycomb**, **Datadog**, **Grafana Tempo + Loki + Mimir** support 
 - 3 pillars integrate: trace → log → metric jumps in modern tools.
 - Anti-pattern: tracing as log replacement (dump body), no sampling.
 
-**Bài kế tiếp** → [Phase 8 — Bài 1: Containerization và Kubernetes cho microservices](../phase-8-deployment/01-containers-k8s.md)
+**Bài kế tiếp** → [Phase 8 — Bài 1: Containerization và Kubernetes cho microservices](../phase-8-deployment/01-vm-dedicated-serverless.md)

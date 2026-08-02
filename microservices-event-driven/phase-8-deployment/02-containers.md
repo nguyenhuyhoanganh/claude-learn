@@ -437,4 +437,4 @@ Better: 1 process per container. Multiple containers if needed.
 - Image best practices: specific tags, minimal base, non-root, healthcheck, CVE scan.
 - Anti-patterns: stateful without PV, log to file, huge images, multi-process per container.
 
-**Bài kế tiếp** → [Bài 3: Container orchestration + Kubernetes](03-kubernetes.md)
+**Bài kế tiếp** → [Bài 3: Container orchestration + Kubernetes](03-kubernetes-orchestration.md)

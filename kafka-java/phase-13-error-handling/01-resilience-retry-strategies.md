@@ -312,4 +312,4 @@ Spring Cloud Stream default chưa có jitter built-in cho retry. Có thể imple
 - Default Spring retry **mọi exception**. Bài 2 sẽ phân loại retryable vs non-retryable.
 - Bài 3: Dead Letter Queue cho exhausted retry case.
 
-**Bài kế tiếp** → [Bài 2: Phân loại retryable vs non-retryable exception](02-retryable-vs-nonretryable.md)
+**Bài kế tiếp** → [Bài 2: Phân loại retryable vs non-retryable exception](02-retryable-nonretryable-dlq.md)

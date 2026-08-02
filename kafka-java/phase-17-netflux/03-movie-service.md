@@ -435,4 +435,4 @@ public class MovieTestConsumerConfiguration {
 - Test pattern giống Customer Service: REST API + Test Binder + Testcontainers.
 - Key publishing = movieId (Long, dùng `LongSerializer`).
 
-**Bài kế tiếp** → [Bài 4: Recommendation Service — event-driven design + consuming](04-recommendation-design.md)
+**Bài kế tiếp** → [Bài 4: Recommendation Service — event-driven design + consuming](04-recommendation-consumer.md)

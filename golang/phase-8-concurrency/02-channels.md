@@ -538,4 +538,4 @@ sem := make(chan struct{}, N)  // semaphore
 - Nil channel → block forever (dùng để disable select case).
 - Channel chậm hơn mutex ~3x — trade-off cho code rõ ràng.
 
-**Bài kế tiếp** → [Bài 3: select, context và pattern cancel](03-select-context.md)
+**Bài kế tiếp** → [Bài 3: select, context và pattern cancel](03-mutex-sync.md)

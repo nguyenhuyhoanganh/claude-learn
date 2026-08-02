@@ -462,4 +462,4 @@ kubectl logs -n ingress-nginx ingress-nginx-controller-xxx
 
 Phase 9 hoàn thành! Bạn đã master CNI/Pod network, DNS, Service routing, Ingress, Gateway API.
 
-**Bài kế tiếp** → [Phase 10 - Bài 1: Install Kubernetes (kubeadm)](../phase-10-install-kubeadm/01-install-kubeadm.md)
+**Bài kế tiếp** → [Phase 10 - Bài 1: Install Kubernetes (kubeadm)](../phase-10-install-design/01-design-install-cluster.md)

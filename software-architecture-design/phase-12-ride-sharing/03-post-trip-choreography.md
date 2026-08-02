@@ -388,4 +388,4 @@ What's not yet:
 - Decoupled, independently scalable, resilient.
 - Trade-off: harder tracing → trace_id in events.
 
-**Bài kế tiếp** → [Bài 4: Scaling stateful + Bloom Filter](04-scaling-bloom.md)
+**Bài kế tiếp** → [Bài 4: Scaling stateful + Bloom Filter](04-scaling-bloom-filter.md)

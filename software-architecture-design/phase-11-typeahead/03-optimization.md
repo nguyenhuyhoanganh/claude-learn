@@ -398,4 +398,4 @@ User → [Load Balancer] → [Autocomplete Service x N]
 
 🎉 **Phase 11 complete** — Google typeahead architecture. Phase 12 vào Uber ride sharing (5-part deep dive with geospatial indexing, real-time matching).
 
-**Bài kế tiếp** → [Phase 12 - Bài 1: Ride Sharing Requirements](../phase-12-ride-sharing/01-requirements.md)
+**Bài kế tiếp** → [Phase 12 - Bài 1: Ride Sharing Requirements](../phase-12-ride-sharing/01-requirements-state.md)

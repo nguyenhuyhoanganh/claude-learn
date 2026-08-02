@@ -262,4 +262,4 @@ Combine 3 phase:
 - Phase 12-14 build full reliability stack: ack foundation → error handling patterns → strict EOS guarantee.
 - Production rule: bắt đầu at-least-once + idempotent. Upgrade to transactional nếu requirement đòi.
 
-**Bài kế tiếp** → [Phase 15 - Integration Testing Strategies](../phase-15-testing/01-testing-strategies.md)
+**Bài kế tiếp** → [Phase 15 - Integration Testing Strategies](../phase-15-testing/01-test-binder.md)

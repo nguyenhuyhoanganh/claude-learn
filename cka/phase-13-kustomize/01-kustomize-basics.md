@@ -445,4 +445,4 @@ diff <(kustomize build dev/) <(kustomize build prod/)
 - Helm vs Kustomize: Helm = public chart phức tạp. Kustomize = internal multi-env.
 - Có thể combine: `helm template | kustomize build`.
 
-**Bài kế tiếp** → [Phase 14 - Bài 1: Troubleshooting Pod issues](../phase-14-troubleshooting/01-troubleshoot-pods.md)
+**Bài kế tiếp** → [Phase 14 - Bài 1: Troubleshooting Pod issues](../phase-14-troubleshooting/01-troubleshoot-pods-apps.md)

@@ -376,4 +376,4 @@ Về long-run (chạy lâu), phân phối gần đều giữa các partition.
 - Null key: **sticky partitioner** (Kafka 2.4+) — gom batch theo partition, đổi theo chunk. Throughput tốt, phân phối không đều trong window ngắn.
 - Partition assignment được tính ở **client library**, không phải broker.
 
-**Bài kế tiếp** → [Bài 7: Rebalancing + Scaling scenarios + Modify partitions](07-rebalancing-scaling.md)
+**Bài kế tiếp** → [Bài 7: Rebalancing + Scaling scenarios + Modify partitions](07-rebalancing-scaling-partitions.md)

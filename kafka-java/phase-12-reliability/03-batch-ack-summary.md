@@ -219,4 +219,4 @@ Phase 12 đã đặt nền tảng reliability. 2 phase tiếp:
 - Exactly-once semantic khả thi với Kafka transactions (Phase 14).
 - Phase 13 sẽ học error handling, DLQ, retry strategies — bổ sung cho ack mechanism này.
 
-**Bài kế tiếp** → [Phase 13 - Error Handling & Fault Tolerance](../phase-13-error-handling/01-error-handling-basics.md)
+**Bài kế tiếp** → [Phase 13 - Error Handling & Fault Tolerance](../phase-13-error-handling/01-resilience-retry-strategies.md)

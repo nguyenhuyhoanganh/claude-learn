@@ -333,4 +333,4 @@ async function suggest(input: string): Promise<string | null> {
 
 Đủ knowledge để build full search bar cho app. Phase 19 sẽ implement thực vào app RB.
 
-**Phase tiếp theo** → [Phase-19 — Bài 1: Implement search trong app RB](../phase-19/01-search-implementation.md)
+**Phase tiếp theo** → [Phase-19 — Bài 1: Implement search trong app RB](../phase-19/01-search-implementation-plan.md)

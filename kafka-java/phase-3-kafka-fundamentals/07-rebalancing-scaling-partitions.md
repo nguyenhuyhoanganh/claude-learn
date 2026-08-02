@@ -353,4 +353,4 @@ Fix: tăng `max.poll.interval.ms` lên (vd 10 phút), hoặc giảm `max.poll.re
   - Rebalance storm khi rolling deploy → fix: static membership + tăng session timeout.
   - Long processing bị kick → fix: tăng `max.poll.interval.ms`.
 
-**Bài kế tiếp** → [Bài 8: Offset tracking + Resetting offsets](08-offset-tracking.md)
+**Bài kế tiếp** → [Bài 8: Offset tracking + Resetting offsets](08-offset-tracking-reset.md)

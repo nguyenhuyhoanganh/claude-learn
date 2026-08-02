@@ -91,6 +91,8 @@ WHERE table_schema = DATABASE() AND data_type = 'timestamp'
 - **API key, mTLS, tường lửa và phân quyền**: [Backend — Phase 2](../backend-interview/phase-2/03-basic-auth-api-key-va-mtls.md)
 - **N+1 và tầng truy cập dữ liệu**: [khoá ORM & N+1](../orm-n-plus-1/README.md)
 
+Gặp thuật ngữ lạ → tra [Từ điển thuật ngữ](TU-DIEN-THUAT-NGU.md).
+
 ---
 
 **Bắt đầu** → [Bài 1: 32 bit — vì sao 4,29 tỷ địa chỉ IP lại không đủ](01-ba-muoi-hai-bit-cua-dia-chi-ip.md)

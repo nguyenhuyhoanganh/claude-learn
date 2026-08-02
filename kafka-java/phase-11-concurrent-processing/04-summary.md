@@ -277,4 +277,4 @@ Step 5: deploy → monitor consumer lag → tăng dần concurrency nếu lag v�
 - Có thể stack: nhiều JVM × framework concurrency × app concurrency.
 - Pitfalls: cardinality key thấp, quên batch-mode, processing time dài kick consumer.
 
-**Bài kế tiếp** → [Phase 12 - Reliability & Message Acknowledgement](../phase-12-reliability/01-acknowledgement-modes.md)
+**Bài kế tiếp** → [Phase 12 - Reliability & Message Acknowledgement](../phase-12-reliability/01-acknowledgement-intro.md)

@@ -447,4 +447,4 @@ kubectl describe validatingwebhookconfiguration my-webhook
 
 Phase 3 đã xong! Bạn đã master mọi cơ chế scheduling: manual, labels, taints, affinity, resource, DaemonSet/Static Pod, Priority, Multiple Scheduler, Admission Controllers.
 
-**Bài kế tiếp** → [Phase 4 - Bài 1: Logging & Monitoring](../phase-4-logging-monitoring/01-logging-monitoring.md)
+**Bài kế tiếp** → [Phase 4 - Bài 1: Logging & Monitoring](../phase-4-logging-monitoring/01-monitor-cluster.md)

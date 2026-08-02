@@ -310,4 +310,4 @@ Trước khi deploy app dùng Redis lên prod, đi qua:
 
 **Phase tiếp theo** (phase-6 = Section 07 trong transcript) sẽ chuyển từ "lý thuyết về data structure" sang **Powerful Design Patterns** — xây dựng các feature lớn của app RB (user, auction, session) với pattern thực tế: query-first design, serialization layer, multi-key transactions.
 
-→ [Phase-6 — Bài 1: Tổng quan các feature cần xây](../phase-6/01-app-overview.md)
+→ [Phase-6 — Bài 1: Tổng quan các feature cần xây](../phase-6/01-app-overview-va-queries.md)

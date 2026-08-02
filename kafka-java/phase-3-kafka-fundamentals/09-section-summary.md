@@ -252,4 +252,4 @@ Phase 3 đã build mental model:
 
 Bạn đã có đủ base để **code Java/Spring** app phase tiếp theo. Mental model rõ ràng = code clear.
 
-**Bài kế tiếp** → [Phase 4 - Bài 1: Setup Spring Cloud Stream + first consumer](../phase-4-spring-cloud-stream-consumer/01-spring-cloud-stream-intro.md)
+**Bài kế tiếp** → [Phase 4 - Bài 1: Setup Spring Cloud Stream + first consumer](../phase-4-spring-cloud-stream-consumer/01-scs-intro-binders-bindings.md)

@@ -305,4 +305,4 @@ Detail ở Phase 11 (Concurrent Message Processing).
 - Pull dùng **persistent TCP + long-polling** — không phải HTTP polling overhead.
 - `max.poll.records` (default 500) controls batch size per poll. Tune theo processing time.
 
-**Bài kế tiếp** → [Bài 4: Serialization + retention policies](04-serialization-retention.md)
+**Bài kế tiếp** → [Bài 4: Serialization + retention policies](04-serialization-retention-offset.md)

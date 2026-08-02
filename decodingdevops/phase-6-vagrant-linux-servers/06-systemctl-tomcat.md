@@ -441,4 +441,4 @@ Kỹ năng đạt được:
 - **System user không login** (`-s /sbin/nologin`) cho service.
 - **systemd timer** modern alternative cho cron.
 
-**Phase kế tiếp** → [Phase 7 — Bài 1: Variables, JSON, YAML — ngôn ngữ dữ liệu của DevOps](../phase-7-variables-json-yaml/01-variables.md)
+**Phase kế tiếp** → [Phase 7 — Bài 1: Variables, JSON, YAML — ngôn ngữ dữ liệu của DevOps](../phase-7-variables-json-yaml/01-variables-data-structures.md)

@@ -187,4 +187,4 @@ Mỗi processor = 1 microservice riêng. Cùng input topic, trách nhiệm khác
 - Traditional OK cho logic CPU-bound, không có I/O.
 - Phase 7 đã cover nền tảng processor pattern. Phase 8 sẽ học **event routing** — emit ra các topic khác nhau theo điều kiện.
 
-**Bài kế tiếp** → [Phase 8 - Event Routing](../phase-8-event-routing/01-routing-patterns.md)
+**Bài kế tiếp** → [Phase 8 - Event Routing](../phase-8-event-routing/01-content-based-routing.md)

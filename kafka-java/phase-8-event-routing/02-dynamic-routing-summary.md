@@ -331,4 +331,4 @@ Router trở thành **service quan trọng**. Phải test kỹ, monitor sát.
 - Test với mock service. Verify routing rules + fallback.
 - Phase 8 complete: bạn build được routing processor production-ready.
 
-**Bài kế tiếp** → [Phase 9 - Kafka Cluster Architecture deep dive](../phase-9-kafka-cluster/01-replication-isr.md)
+**Bài kế tiếp** → [Phase 9 - Kafka Cluster Architecture deep dive](../phase-9-kafka-cluster/01-replication-listeners.md)

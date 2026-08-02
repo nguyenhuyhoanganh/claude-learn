@@ -309,4 +309,4 @@ playground/
 - Setup: Spring Initializr → dependencies (Cloud Stream + Kafka binder + Testcontainers) → move runner → create section folders.
 - Docker Compose Kafka cùng project root.
 
-**Bài kế tiếp** → [Bài 3: First Functional Consumer](03-first-consumer.md)
+**Bài kế tiếp** → [Bài 3: First Functional Consumer](03-first-consumer-config.md)

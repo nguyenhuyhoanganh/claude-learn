@@ -440,4 +440,4 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 
 🎉 **Hoàn thành Phase 14** — E-Commerce REST API production-ready blueprint.
 
-**Bài kế tiếp** → [Phase 15 - Bài 1: GraphQL với gqlgen](../phase-15-graphql-mcp/01-graphql.md)
+**Bài kế tiếp** → [Phase 15 - Bài 1: GraphQL với gqlgen](../phase-15-graphql-mcp/01-graphql-basics.md)

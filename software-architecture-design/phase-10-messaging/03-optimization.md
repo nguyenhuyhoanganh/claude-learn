@@ -445,4 +445,4 @@ shard sharded]              │
 
 🎉 **Phase 10 complete** — WhatsApp/Slack-scale real-time messaging. Phase 11 vào typeahead autocomplete với latency budgets cực ngắn (< 50ms target).
 
-**Bài kế tiếp** → [Phase 11 - Bài 1: Typeahead Autocomplete Requirements](../phase-11-typeahead/01-requirements.md)
+**Bài kế tiếp** → [Phase 11 - Bài 1: Typeahead Autocomplete Requirements](../phase-11-typeahead/01-requirements-trie-attempt.md)

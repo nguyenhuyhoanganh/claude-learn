@@ -200,7 +200,7 @@ Phase 16 sẽ học **Lua scripting** chi tiết. Lua cho phép:
 - Toggle like với atomic check.
 - Distributed lock release (verify owner).
 
-→ [Phase-16 — Bài 1: Lua scripting trong Redis](../phase-16/01-lua-scripting.md)
+→ [Phase-16 — Bài 1: Lua scripting trong Redis](../phase-16/01-lua-scripting-la-gi.md)
 
 ## Tóm tắt phase-15 (cô đọng)
 

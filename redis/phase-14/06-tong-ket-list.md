@@ -150,4 +150,4 @@ Quy tắc: **đo memory thực** với `MEMORY USAGE key` và `MEMORY STATS` tr�
 
 **Phase tiếp theo** (phase-15 = Section 16): **More practice with e-Commerce app** — implement chi tiết bid validation, atomic updates, transaction. Đây là phase áp dụng nặng kiến thức đã học.
 
-→ [Phase-15 — Bài 1: More on Bids](../phase-15/01-more-on-bids.md)
+→ [Phase-15 — Bài 1: More on Bids](../phase-15/01-bid-validation.md)

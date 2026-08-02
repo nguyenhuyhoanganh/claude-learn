@@ -240,4 +240,4 @@ Goal hợp lý:
 - Testcontainers catch được serialization bug mà Test Binder miss → must have.
 - CI/CD: tag e2e, profile riêng để control khi nào chạy.
 
-**Bài kế tiếp** → [Phase 16 - Kafka Security](../phase-16-security/01-security-basics.md)
+**Bài kế tiếp** → [Phase 16 - Kafka Security](../phase-16-security/01-sasl-plaintext-ssl.md)

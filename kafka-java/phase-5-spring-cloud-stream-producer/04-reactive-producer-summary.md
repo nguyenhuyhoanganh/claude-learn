@@ -299,4 +299,4 @@ Next phases will add:
 - Critical configs: `key.serializer`, `MessageBuilder`, `KafkaHeaders.KEY`.
 - Outbox pattern preview cho atomic "save + emit" (Phase 13 deep-dive).
 
-**Bài kế tiếp** → [Phase 6 - Consumer Groups scaling](../phase-6-consumer-groups/01-scaling-deep-dive.md)
+**Bài kế tiếp** → [Phase 6 - Consumer Groups scaling](../phase-6-consumer-groups/01-scaling-rebalancing-demo.md)

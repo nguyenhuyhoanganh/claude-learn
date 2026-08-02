@@ -371,4 +371,4 @@ Producer App (JVM 1)
 - Supplier hợp cho **event periodic** (heartbeat, emit metric, trigger batch). KHÔNG hợp cho business event on-demand.
 - Business event → dùng **`StreamBridge`** (bài 3 sẽ học).
 
-**Bài kế tiếp** → [Bài 2: Message attributes + key serialization](02-message-attributes-keys.md)
+**Bài kế tiếp** → [Bài 2: Message attributes + key serialization](02-message-builder-keys-serialization.md)

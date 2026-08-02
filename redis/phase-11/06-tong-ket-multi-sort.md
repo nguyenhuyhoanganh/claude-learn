@@ -242,4 +242,4 @@ App RB giờ có 5+ sort indexes, sub-millisecond response cho mọi list view.
 
 **Phase tiếp theo** (phase-12 = Section 13): **Relational data trong Redis** — học SORT command, BY pattern, GET pattern để "JOIN" giữa Redis structures.
 
-→ [Phase-12 — Bài 1: Migrating relational data vào Redis](../phase-12/01-migrating-relational.md)
+→ [Phase-12 — Bài 1: Migrating relational data vào Redis](../phase-12/01-loading-relational-2-cach.md)

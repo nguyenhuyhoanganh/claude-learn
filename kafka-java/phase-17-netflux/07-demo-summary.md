@@ -282,4 +282,4 @@ DRY pattern cho cross-cutting concerns (log, metrics, error).
 - Demo là **scaffold** — production cần thêm reliability (DLQ, idempotency, outbox), schema management (Avro), observability (tracing, metrics), security (SASL_SSL, OAuth), scalability (partitions, instances).
 - 10 design patterns demonstrated: CQRS lite, Event-Carried State Transfer, Database per Service, Saga, ApplicationEventPublisher decoupling, namespace records, async listeners, reactive Sinks, filter subscriptions, helper wrappers.
 
-**Bài kế tiếp** → [Phase 18 - Best Practices for Production EDA](../phase-18-best-practices/01-foundational-practices.md)
+**Bài kế tiếp** → [Phase 18 - Best Practices for Production EDA](../phase-18-best-practices/01-producer-best-practices.md)

@@ -257,4 +257,4 @@ CLI = swiss army knife cho dev + debug. Production stack khác.
 - `--from-beginning` đọc full history. Dùng cho debug, replay, new consumer init.
 - CLI = learning + debug. Production dùng client library.
 
-**Bài kế tiếp** → [Bài 3: Tuning producer — timeout, linger.ms, batch.size](03-producer-tuning.md)
+**Bài kế tiếp** → [Bài 3: Tuning producer — timeout, linger.ms, batch.size](03-producer-consumer-tuning.md)

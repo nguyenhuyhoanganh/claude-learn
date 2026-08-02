@@ -425,4 +425,4 @@ CKA không test deep.
 
 Phase 5 hoàn thành! Bạn đã master rollout, command/args, env/ConfigMap, Secret + encryption, multi-container, autoscaling.
 
-**Bài kế tiếp** → [Phase 6 - Bài 1: OS Upgrade & Cluster Maintenance](../phase-6-cluster-maintenance/01-os-upgrade-cluster-maintenance.md)
+**Bài kế tiếp** → [Phase 6 - Bài 1: OS Upgrade & Cluster Maintenance](../phase-6-cluster-maintenance/01-os-upgrade-maintenance.md)

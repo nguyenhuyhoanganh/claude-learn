@@ -197,4 +197,4 @@ Error Budget = công cụ quản lý cân bằng feature vs reliability
 Đây là kết thúc Phase 2. Bạn đã nắm 5 quality attributes quan trọng nhất: Performance, Scalability, Availability, Fault Tolerance, và cách đo lường (SLA/SLO/SLI). Phase 3 sẽ chuyển sang **API Design** — cách thiết kế giao diện giữa các thành phần.
 
 ---
-**Bài kế tiếp**: [Phase 3 - API Design](../phase-3/01-api-design-intro.md) →
+**Bài kế tiếp**: [Phase 3 - API Design](../phase-3/01-api-design-introduction.md) →

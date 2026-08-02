@@ -458,4 +458,4 @@ Go win khi cần custom logic (auth, retry, checksum, etc) trong 1 binary deploy
 
 🎉 **Hoàn thành Phase 8** — Concurrency Go mastery. Bạn đã có toolkit đầy đủ để viết hệ thống concurrent production.
 
-**Bài kế tiếp** → [Phase 9 - Bài 1: File IO và bufio](../phase-9-io-encoding/01-file-io-bufio.md)
+**Bài kế tiếp** → [Phase 9 - Bài 1: File IO và bufio](../phase-9-io-encoding/01-file-io.md)

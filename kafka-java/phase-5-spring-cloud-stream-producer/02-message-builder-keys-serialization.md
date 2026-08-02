@@ -396,4 +396,4 @@ Signature: `Function<Message<A>, Message<B>>`. Cả input và output đều dạ
 - Spring **renames inbound headers** (`KEY` → `RECEIVED_KEY`) để tránh accidental copy in processor.
 - Consumer flexible: `T` payload-only hoặc `Message<T>` full metadata.
 
-**Bài kế tiếp** → [Bài 3: StreamBridge — dynamic message production](03-streambridge.md)
+**Bài kế tiếp** → [Bài 3: StreamBridge — dynamic message production](03-streambridge-dynamic.md)

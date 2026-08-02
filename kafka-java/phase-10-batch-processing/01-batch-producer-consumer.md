@@ -456,4 +456,4 @@ private List<EnrichedMessage> extractMessages(Message<List<String>> msg) {
 - Trade-off chính: đánh đổi latency lấy throughput. Skip cho traffic thấp hoặc latency-critical.
 - Phase 11 sẽ học **concurrent processing** (multi-thread mỗi consumer) — bổ sung cho batching để scale thêm nữa.
 
-**Bài kế tiếp** → [Phase 11 - Concurrent Message Processing](../phase-11-concurrent-processing/01-concurrency-models.md)
+**Bài kế tiếp** → [Phase 11 - Concurrent Message Processing](../phase-11-concurrent-processing/01-framework-concurrency.md)

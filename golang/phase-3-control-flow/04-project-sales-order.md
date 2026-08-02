@@ -419,4 +419,4 @@ func processOrder(orderID string, codes []string, lookup PriceLookup) Invoice {
 - Refactor cho production: interface để inject + test.
 - Đây là pattern cho POS, e-commerce checkout, billing — tuỳ scale lên hoặc xuống.
 
-**Bài kế tiếp** → [Phase 4 - Bài 1: Arrays, Slices và memory model của Go](../phase-4-data-memory/01-arrays-slices.md)
+**Bài kế tiếp** → [Phase 4 - Bài 1: Arrays, Slices và memory model của Go](../phase-4-data-memory/01-arrays.md)

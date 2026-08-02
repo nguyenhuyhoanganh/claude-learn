@@ -389,4 +389,4 @@ Vẫn chạy bình thường.
 - Client tự discover full cluster từ bootstrap server. Bootstrap broker **không phải runtime-critical**.
 - Cluster 3 node chịu được **1 broker fail** đồng thời. Cluster 5 node chịu được 2.
 
-**Bài kế tiếp** → [Phase 10 - High-Throughput Batch Processing](../phase-10-batch-processing/01-batch-consumer.md)
+**Bài kế tiếp** → [Phase 10 - High-Throughput Batch Processing](../phase-10-batch-processing/01-batch-producer-consumer.md)

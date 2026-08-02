@@ -240,4 +240,4 @@ Bạn đã đi qua trong Phase 4:
 - **Multi-input function**: index 1+ qua `Tuple2/3<Flux<A>, Flux<B>>`. Use case zip streams. Hiếm gặp.
 - Phase 4 complete: bạn đã build được consumer Spring Cloud Stream production-grade.
 
-**Bài kế tiếp** → [Phase 5 - Bài 1: Spring Cloud Stream Producer](../phase-5-spring-cloud-stream-producer/01-producer-intro.md)
+**Bài kế tiếp** → [Phase 5 - Bài 1: Spring Cloud Stream Producer](../phase-5-spring-cloud-stream-producer/01-supplier-poller.md)

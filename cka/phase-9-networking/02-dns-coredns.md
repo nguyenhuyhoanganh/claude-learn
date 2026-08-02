@@ -351,4 +351,4 @@ spec:
 - **ExternalName** Service = DNS alias cho external host.
 - Custom DNS qua `dnsPolicy: None` + `dnsConfig`.
 
-**Bài kế tiếp** → [Bài 3: Service Networking deep dive](03-service-networking.md)
+**Bài kế tiếp** → [Bài 3: Service Networking deep dive](03-ingress.md)
