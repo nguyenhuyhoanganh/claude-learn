@@ -4,7 +4,7 @@
 
 Khoá về **kiến thức nghiệp vụ** mà kỹ sư fintech buộc phải có: tiền được biểu diễn thế nào, hạch toán kép, danh mục tài khoản, phong toả số dư, vòng đời giao dịch, đối soát và làm tròn tiền tệ.
 
-**15 bài** trong 2 phần.
+**26 bài** trong 4 phần.
 
 ## Mục lục
 
@@ -35,6 +35,27 @@ Khoá về **kiến thức nghiệp vụ** mà kỹ sư fintech buộc phải c�
 | [04](phase-2-thanh-toan/04-qr-va-vi-dien-tu.md) | Bài 4: QR code và ví điện tử — mô hình thanh toán phổ biến nhất Việt Nam |
 | [05](phase-2-thanh-toan/05-cong-thanh-toan.md) | Bài 5: Cổng thanh toán — tích hợp thế nào cho không phải làm lại |
 | [06](phase-2-thanh-toan/06-hoan-tien-va-tranh-chap.md) | Bài 6: Hoàn tiền, tranh chấp và đối soát với cổng thanh toán |
+
+### Phase 3 — tin dung
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-3-tin-dung/01-vong-doi-khoan-vay.md) | Bài 1: Vòng đời một khoản vay — từ đơn đề nghị tới tất toán |
+| [02](phase-3-tin-dung/02-cham-diem-tin-dung.md) | Bài 2: Chấm điểm tín dụng — quyết định cho vay dựa trên gì |
+| [03](phase-3-tin-dung/03-cac-cach-tinh-lai.md) | Bài 3: Lãi suất — bốn cách tính cho ra bốn con số khác nhau |
+| [04](phase-3-tin-dung/04-lich-tra-no.md) | Bài 4: Lịch trả nợ — dựng, sửa và những phép tính không được sai |
+| [05](phase-3-tin-dung/05-nhom-no-va-du-phong.md) | Bài 5: Nhóm nợ, dự phòng và cách nhìn sức khoẻ danh mục |
+
+### Phase 4 — rui ro tuan thu
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-4-rui-ro-tuan-thu/01-kyc-va-dinh-danh.md) | Bài 1: KYC và định danh khách hàng |
+| [02](phase-4-rui-ro-tuan-thu/02-aml-va-giam-sat-giao-dich.md) | Bài 2: Phòng chống rửa tiền — giám sát giao dịch và báo cáo |
+| [03](phase-4-rui-ro-tuan-thu/03-chong-gian-lan.md) | Bài 3: Chống gian lận — phát hiện và phản ứng theo thời gian thực |
+| [04](phase-4-rui-ro-tuan-thu/04-han-muc-va-kiem-soat.md) | Bài 4: Hạn mức và kiểm soát rủi ro vận hành |
+| [05](phase-4-rui-ro-tuan-thu/05-bao-mat-du-lieu.md) | Bài 5: Bảo mật dữ liệu thẻ và dữ liệu cá nhân |
+| [06](phase-4-rui-ro-tuan-thu/06-audit-trail-va-thanh-tra.md) | Bài 6: Dấu vết kiểm toán và sẵn sàng cho thanh tra |
 
 ## Nên bắt đầu từ đâu
 
