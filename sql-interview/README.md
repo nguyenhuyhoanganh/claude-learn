@@ -72,6 +72,7 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 | [04](phase-5/04-thoi-gian-utc-mui-gio-va-gom-nhom-theo-ngay.md) | `TIMESTAMPTZ` thật sự lưu gì, bẫy gom nhóm ngày trên UTC, lịch hẹn tương lai, DST, `now()` vs `clock_timestamp()` |
 | [05](phase-5/05-khoa-chinh-auto-increment-uuid-v4-hay-v7.md) | Auto increment vs UUID v4 vs v7, page split, ngưỡng lật là RAM, ID hai lớp, surrogate vs natural key |
 | [06](phase-5/06-rang-buoc-constraint-luat-nam-trong-du-lieu.md) | `NOT NULL`/`CHECK`/`UNIQUE`/`FK`/`EXCLUDE`, partial unique index, `NOT VALID` → `VALIDATE`, dịch lỗi cho người dùng |
+| [07](phase-5/07-email-va-chuan-hoa-du-lieu-truoc-khi-so-trung.md) | Chuẩn hoá trước khi so trùng: vì sao `lower()` ở tầng ứng dụng **không đủ**, cột sinh + `UNIQUE`, RFC 5321 local-part, bẫy gỡ dấu chấm Gmail **gộp nhầm hai người**, Turkish I |
 
 ### Phase 6 — Lệnh nguy hiểm và an toàn dữ liệu
 
@@ -118,6 +119,9 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 ## Khoá liên quan
 
 > **[Phá đảo vòng phỏng vấn Backend & System Design](../backend-interview/README.md)** — phần backend nằm ngoài phạm vi SQL: API và idempotency, đồng bộ/bất đồng bộ, REST vs GraphQL vs gRPC, xác thực và phân quyền (Session/JWT/OAuth/OIDC), load balancer, API gateway, caching, job queue, Big O, thiết kế hệ thống, và các câu hỏi ngôn ngữ (OOP, con trỏ, Git). Hai khoá bổ sung cho nhau, không lặp lại.
+
+> **[Những con số ma thuật: vì sao hệ thống vẫn chạy theo luật của 45 năm trước](../con-so-ma-thuat/README.md)** — 3 bài về ba con số nằm im trong mọi hệ thống và ba nhóm sự cố **không có thông báo lỗi**: **32 bit** của IPv4 (cột `VARCHAR(15)` cắt cụt IPv6, chặn một IP là chặn cả toà nhà), **1500 byte** MTU (file tải treo ở 41% khi bật VPN — hố đen PMTUD), và **4 byte** của Unix epoch (hợp đồng 2040 lưu thành `0000-00-00`). Mỗi bài kèm việc sửa được ngay trong tuần.
+
 
 > **[N+1, ORM, và cách các công ty thật sự truy cập dữ liệu](../orm-n-plus-1/README.md)** — khoá chuyên sâu 10 bài về lỗi hiệu năng phổ biến nhất của backend, và câu hỏi lớn phía sau nó: **production có nên dùng ORM không, hay dùng gì thay thế**. Đi sâu Java/Hibernate (`JOIN FETCH`, `@EntityGraph`, `@BatchSize`, `MultipleBagFetchException`, `HHH90003004`), rồi mở sang MyBatis/jOOQ/Spring Data JDBC, kiến trúc CQRS-lite, N+1 qua mạng và GraphQL, và cách dựng lưới chắn tự động.
 

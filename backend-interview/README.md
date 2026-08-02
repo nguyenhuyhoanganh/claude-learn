@@ -100,3 +100,5 @@ Khi bí, ba câu này luôn ghi điểm:
 
 
 > **[N+1, ORM, và cách các công ty thật sự truy cập dữ liệu](../orm-n-plus-1/README.md)** — khoá chuyên sâu 10 bài về lỗi hiệu năng phổ biến nhất của backend, và câu hỏi lớn phía sau nó: **production có nên dùng ORM không, hay dùng gì thay thế**. Đi sâu Java/Hibernate (`JOIN FETCH`, `@EntityGraph`, `@BatchSize`, `MultipleBagFetchException`, `HHH90003004`), rồi mở sang MyBatis/jOOQ/Spring Data JDBC, kiến trúc CQRS-lite, N+1 qua mạng và GraphQL, và cách dựng lưới chắn tự động.
+
+> **[Những con số ma thuật: vì sao hệ thống vẫn chạy theo luật của 45 năm trước](../con-so-ma-thuat/README.md)** — 3 bài về ba con số nằm im trong mọi hệ thống và ba nhóm sự cố **không có thông báo lỗi**: **32 bit** của IPv4 (cột `VARCHAR(15)` cắt cụt IPv6, chặn một IP là chặn cả toà nhà), **1500 byte** MTU (file tải treo ở 41% khi bật VPN — hố đen PMTUD), và **4 byte** của Unix epoch (hợp đồng 2040 lưu thành `0000-00-00`). Mỗi bài kèm việc sửa được ngay trong tuần.

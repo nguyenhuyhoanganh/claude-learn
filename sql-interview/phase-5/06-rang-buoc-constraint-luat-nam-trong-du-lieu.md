@@ -458,4 +458,4 @@ Khách xoá tài khoản rồi đăng ký lại bằng email cũ sẽ bị chặ
 - `EXCLUDE USING gist` giải sạch bài toán chồng lấn thời gian; `DEFERRABLE` giải bài toán tham chiếu vòng và hoán đổi giá trị.
 - Thêm ràng buộc trên bảng lớn: `NOT VALID` → backfill theo lô → `VALIDATE`. Luôn **đặt tên** constraint để dịch được lỗi.
 
-**Bài kế tiếp** → [Phase 6, Bài 1: DELETE vs TRUNCATE vs DROP](../phase-6/01-delete-truncate-drop-lenh-nao-khong-co-duong-quay-lai.md)
+**Bài kế tiếp** → [Bài 7: Email và nghệ thuật chuẩn hoá dữ liệu trước khi so trùng](07-email-va-chuan-hoa-du-lieu-truoc-khi-so-trung.md)
