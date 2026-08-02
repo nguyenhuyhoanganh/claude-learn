@@ -4,7 +4,7 @@
 
 Khoá về **kiến thức nghiệp vụ** mà kỹ sư fintech buộc phải có: tiền được biểu diễn thế nào, hạch toán kép, danh mục tài khoản, phong toả số dư, vòng đời giao dịch, đối soát và làm tròn tiền tệ.
 
-**26 bài** trong 4 phần.
+**41 bài** trong 6 phần.
 
 ## Mục lục
 
@@ -56,6 +56,31 @@ Khoá về **kiến thức nghiệp vụ** mà kỹ sư fintech buộc phải c�
 | [04](phase-4-rui-ro-tuan-thu/04-han-muc-va-kiem-soat.md) | Bài 4: Hạn mức và kiểm soát rủi ro vận hành |
 | [05](phase-4-rui-ro-tuan-thu/05-bao-mat-du-lieu.md) | Bài 5: Bảo mật dữ liệu thẻ và dữ liệu cá nhân |
 | [06](phase-4-rui-ro-tuan-thu/06-audit-trail-va-thanh-tra.md) | Bài 6: Dấu vết kiểm toán và sẵn sàng cho thanh tra |
+
+### Phase 5 — case su co
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-5-case-su-co/01-tru-tien-hai-lan.md) | Case 1: Trừ tiền hai lần |
+| [02](phase-5-case-su-co/02-tien-di-khong-toi.md) | Case 2: Tiền đi không tới |
+| [03](phase-5-case-su-co/03-so-du-am.md) | Case 3: Số dư âm |
+| [04](phase-5-case-su-co/04-lech-so-cai.md) | Case 4: Lệch sổ cái |
+| [05](phase-5-case-su-co/05-doi-soat-lech.md) | Case 5: Đối soát lệch không giải thích được |
+| [06](phase-5-case-su-co/06-job-chay-hai-lan.md) | Case 6: Job chạy hai lần |
+| [07](phase-5-case-su-co/07-webhook-mat.md) | Case 7: Webhook mất — đơn hàng không được ghi nhận |
+| [08](phase-5-case-su-co/08-deploy-giua-chung.md) | Case 8: Deploy giữa chừng làm hỏng giao dịch |
+| [09](phase-5-case-su-co/09-sai-ty-gia-lam-tron.md) | Case 9: Sai tỷ giá và sai làm tròn hàng loạt |
+| [10](phase-5-case-su-co/10-ro-ri-du-lieu-noi-bo.md) | Case 10: Rò rỉ dữ liệu từ bên trong |
+
+### Phase 6 — thiet ke he thong
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-6-thiet-ke-he-thong/01-thiet-ke-ledger.md) | Bài 1: Thiết kế mô hình sổ cái |
+| [02](phase-6-thiet-ke-he-thong/02-idempotency.md) | Bài 2: Idempotency — nền tảng của mọi luồng tiền |
+| [03](phase-6-thiet-ke-he-thong/03-saga-cho-luong-tien.md) | Bài 3: Saga — điều phối luồng tiền qua nhiều dịch vụ |
+| [04](phase-6-thiet-ke-he-thong/04-doi-soat-tu-dong.md) | Bài 4: Đối soát tự động |
+| [05](phase-6-thiet-ke-he-thong/05-dong-so-va-bao-cao.md) | Bài 5: Đóng sổ và báo cáo |
 
 ## Nên bắt đầu từ đâu
 
