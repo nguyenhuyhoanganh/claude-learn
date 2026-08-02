@@ -319,7 +319,6 @@ Phép kiểm tra 1 là quan trọng nhất và rẻ nhất:
 - Truyền tiền qua API dưới dạng **số nguyên + mã tiền tệ**, không bao giờ dùng chuỗi đã định dạng hay số thực.
 - **Kiểm tra tổng sau khi chia ngay trong code** — thà từ chối giao dịch còn hơn làm lệch sổ.
 
-> **Hết phase 1.** Phase 2 (hệ sinh thái thanh toán), phase 3 (tín dụng), phase 4 (rủi ro & tuân thủ),
-> phase 5 (case sự cố) và phase 6 (thiết kế hệ thống) đang được viết.
+**Bài kế tiếp** → [Phase 2, Bài 1: Bản đồ hệ sinh thái thanh toán — ai là ai](../phase-2-thanh-toan/01-ban-do-he-sinh-thai.md)
 
-**Quay lại** → [Bài 6: Đối soát](06-doi-soat.md) · **Mục lục** → [README](../README.md) · **Tra thuật ngữ** → [Từ điển](../00-thuat-ngu.md)
+**Quay lại** → [Bài 6: Đối soát](06-doi-soat.md) · **Tra thuật ngữ** → [Từ điển](../00-thuat-ngu.md)
