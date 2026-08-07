@@ -74,6 +74,104 @@ sudo tcpdump -i any -A 'port 5432' | grep -A2 SELECT
 
 Đây là bài tập nên làm một lần: nhìn thấy câu SQL của chính mình chạy qua mạng dưới dạng chữ khiến việc bật TLS trở nên rất dễ thuyết phục.
 
+### Câu SQL dài bao nhiêu thì gãy?
+
+Một thí nghiệm đáng làm, vì kết quả của nó giải thích một lỗi hiệu năng rất hay gặp: gửi câu `SELECT ... WHERE id IN (...)` với danh sách hàng nghìn giá trị.
+
+```javascript
+// Sinh cau SQL dai dan roi gui, xem Wireshark dem duoc bao nhieu goi TCP
+let sql = 'SELECT * FROM t WHERE id = 1';
+for (let i = 0; i < N; i++) sql += ` OR id = ${i}`;
+await client.query(sql);
+```
+
+```text
+   N          KICH THUOC     GOI TCP PHAI GHEP     KET QUA
+   ────────   ──────────     ─────────────────     ────────────────────
+   1               ~60 B                 1         xong ngay
+   100          ~1,0 KB                  1         xong ngay
+   1.000         ~12 KB                  9         xong
+   10.000       ~125 KB                 90         xong, bat dau cham
+   100.000      ~1,3 MB                960         xong, RAT nhieu goi gui lai
+   1.000.000     ~14 MB                  —         SAP SERVER
+```
+
+```text
+FATAL:  terminating connection because of crash of another server process
+DETAIL: The postmaster has commanded this server process to roll back the
+        current transaction and exit...
+```
+
+Ba điều rút ra:
+
+```text
+   1. KHONG CO GIOI HAN CUNG ro rang.
+      PostgreSQL nhan duoc cau 1,3 MB. Nhung "nhan duoc" ≠ "nen lam".
+
+   2. MOI GOI TCP PHAI DUOC XAC NHAN.
+      960 goi = 960 lan cho xac nhan, va neu mot goi mat thi
+      PHAI GUI LAI va cho GHEP LAI dung thu tu.
+      → do tre tang PHI TUYEN theo kich thuoc cau lenh.
+
+   3. Cau lenh khong long duoc trong MOT goi thi khong con "gui mot phat".
+      Day la ly do that su khien `IN (10.000 gia tri)` cham,
+      chu khong phai vi database xu ly cham.
+```
+
+Cách viết đúng thay cho danh sách `IN` khổng lồ:
+
+```sql
+-- SAI: 10.000 gia tri noi thanh chuoi → ~125 KB, 90 goi TCP
+SELECT * FROM t WHERE id IN (1, 2, 3, ..., 10000);
+
+-- DUNG 1: truyen mot MANG lam THAM SO (mot gia tri nhi phan gon)
+SELECT * FROM t WHERE id = ANY($1);          -- $1 = mang int[]
+
+-- DUNG 2: dua danh sach vao BANG TAM roi JOIN
+CREATE TEMP TABLE ids (id BIGINT PRIMARY KEY);
+COPY ids FROM STDIN;                          -- COPY, khong phai INSERT
+SELECT t.* FROM t JOIN ids USING (id);
+
+-- DUNG 3: neu danh sach den TU CHINH database, dung subquery
+SELECT * FROM t WHERE id IN (SELECT user_id FROM active_users);
+```
+
+Cách 1 là cách gọn nhất và nên là mặc định — mảng được truyền ở **dạng nhị phân**, không phải nối chuỗi, nên 10.000 số nguyên chỉ tốn ~40 KB thay vì 125 KB, và quan trọng hơn: **kế hoạch truy vấn được tái sử dụng** thay vì phải phân tích lại một câu SQL mới mỗi lần.
+
+> **Ghi chú vận hành:** nếu bạn thấy trong log những câu SQL dài hàng trăm KB, đó gần như luôn là ORM đang nối chuỗi `IN` từ kết quả của một truy vấn trước — chính là mẫu N+1 biến tướng. Xem [orm-n-plus-1](../../orm-n-plus-1/README.md).
+
+### Wire protocol của hệ khác — và cách xem khi đã mã hoá
+
+MongoDB **luôn** mã hoá theo mặc định, nên `tcpdump` không đọc được gì. Muốn xem vẫn có cách — bằng cách để client tự nhả khoá phiên:
+
+```bash
+# NodeJS: xuat khoa phien TLS ra file
+SSLKEYLOGFILE=/tmp/keys.log node app.js
+```
+
+```text
+Wireshark → Preferences → Protocols → TLS
+          → (Pre)-Master-Secret log filename: /tmp/keys.log
+→ Wireshark giai ma va HIEN THI duoc giao thuc MongoDB ben trong
+```
+
+```text
+   ⚠ KY THUAT NAY LA CON DAO HAI LUOI
+     • Rat huu ich khi GO LOI o may phat trien
+     • Nhung file khoa do giai ma duoc TOAN BO phien
+     → TUYET DOI khong bat SSLKEYLOGFILE tren san pham that
+     → va khong commit file khoa vao git
+```
+
+Điểm đáng nhớ chung: **mọi database đều có giao thức dây riêng**, và tất cả đều truyền câu lệnh cùng dữ liệu. Khác biệt duy nhất là hệ nào bật mã hoá theo mặc định:
+
+| Hệ | Mã hoá mặc định | Ghi chú |
+|---|---|---|
+| PostgreSQL | **Không** (`prefer`) | Phải tự bắt buộc bằng `hostssl` |
+| MySQL | Có từ 8.0 (`PREFERRED`) | Vẫn hạ cấp được — cần `VERIFY_IDENTITY` |
+| MongoDB Atlas | **Có, bắt buộc** | Không tắt được |
+| Redis | **Không** | Phải bật `tls-port` |
+
 ---
 
 ## Bật TLS cho PostgreSQL

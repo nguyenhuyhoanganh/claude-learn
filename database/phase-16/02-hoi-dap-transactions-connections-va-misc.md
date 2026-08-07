@@ -386,6 +386,93 @@ SELECT count(*) FROM orders;   -- bang 50 trieu dong → ~4 giay
      → KHONG CO "so dong" duy nhat de luu san
 ```
 
+### `COUNT(*)` và `COUNT(cột)` **không** giống nhau
+
+Đây là chi tiết rất hay bị bỏ qua, và nó quyết định truy vấn có được `Index Only Scan` hay không.
+
+```sql
+EXPLAIN ANALYZE SELECT count(*) FROM grades WHERE id BETWEEN 1000 AND 4000;
+```
+
+```text
+Aggregate  (actual time=1.882..1.883 rows=1 loops=1)
+  ->  Index Only Scan using grades_pkey on grades  (rows=3001 loops=1)
+        Index Cond: ((id >= 1000) AND (id <= 4000))
+        Heap Fetches: 0
+Execution Time: 1.918 ms                              ← KHONG cham heap
+```
+
+```sql
+EXPLAIN ANALYZE SELECT count(g) FROM grades WHERE id BETWEEN 1000 AND 4000;
+--                        ▲ dem theo MOT COT cu the
+```
+
+```text
+Aggregate  (actual time=12.442..12.443 rows=1 loops=1)
+  ->  Index Scan using grades_pkey on grades  (rows=3001 loops=1)
+        Index Cond: ((id >= 1000) AND (id <= 4000))
+Execution Time: 12.488 ms                             ← MAT chu "Only"
+```
+
+Vì sao khác nhau:
+
+```text
+   COUNT(*)     →  "dem SO DONG"
+                   khong can biet gia tri nao ca
+                   → index la du → INDEX ONLY SCAN  ✔
+
+   COUNT(cot)   →  "dem so dong co `cot` KHAC NULL"
+                   → PHAI biet gia tri cua `cot`
+                   → neu `cot` khong nam trong index → PHAI VAO HEAP  ✘
+```
+
+Và kết quả cũng khác:
+
+```text
+   COUNT(*)  → 3001
+   COUNT(g)  → 2987      ← thieu 14 dong co g IS NULL
+```
+
+Hai hiểu lầm cần dẹp:
+
+```text
+   ❌ "COUNT(*) doc HET moi cot roi dem"
+   ✔  Gan nhu moi database hien dai deu KHONG lam vay.
+      COUNT(*) chi dem MUC, khong cham gia tri nao.
+      → COUNT(*) NHANH HON HOAC BANG COUNT(cot), khong bao gio cham hon.
+
+   ❌ "COUNT(1) nhanh hon COUNT(*)"
+   ✔  Y HET NHAU. Planner xu ly hai cai nhu nhau.
+      Day la truyen thuyet tu thoi Oracle nhung nam 1990.
+```
+
+### `Heap Fetches` xuất hiện sau khi `UPDATE`
+
+Ngay cả `COUNT(*)` cũng mất tác dụng nếu visibility map cũ:
+
+```sql
+UPDATE grades SET g = 20 WHERE id BETWEEN 1000 AND 4000;
+EXPLAIN ANALYZE SELECT count(*) FROM grades WHERE id BETWEEN 1000 AND 4000;
+```
+
+```text
+  ->  Index Only Scan using grades_pkey on grades
+        Heap Fetches: 6002        ← van phai vao heap 6.002 lan
+Execution Time: 18.882 ms
+```
+
+```sql
+VACUUM grades;
+-- chay lai → Heap Fetches: 0, Execution Time: 1.9 ms
+```
+
+```text
+   Index KHONG biet dong nao con song.
+   Sau UPDATE, cac page bi sua MAT bit visibility
+   → Index Only Scan phai vao heap kiem tra tung dong
+   → chi `VACUUM` moi bat lai bit do
+```
+
 Ba cách thay thế:
 
 ```sql
@@ -432,6 +519,8 @@ SELECT ... LIMIT 21;   -- lay 21, hien 20, con 1 dong nghia la "con trang sau"
 | Chỉ đọc có cần transaction? | **Có** nếu nhiều truy vấn phải nhất quán với nhau |
 | `UPDATE` có đụng mọi index? | **Có**, trừ khi đạt điều kiện **HOT update** |
 | `COUNT(*)` sao chậm? | MVCC — không có "số dòng" duy nhất để lưu sẵn |
+| `COUNT(*)` hay `COUNT(cột)`? | **`COUNT(*)`** — nó không cần biết giá trị nên `Index Only Scan` được |
+| `COUNT(1)` có nhanh hơn `COUNT(*)`? | **Không** — y hệt nhau; đây là truyền thuyết cũ |
 
 ## Tóm tắt bài 2
 
@@ -443,5 +532,6 @@ SELECT ... LIMIT 21;   -- lay 21, hien 20, con 1 dong nghia la "con trang sau"
 - **Transaction chỉ đọc vẫn cần** khi nhiều truy vấn phải nhất quán với nhau — nhưng nó **giữ ảnh chụp và chặn `VACUUM`**, nên báo cáo nặng phải chạy trên replica.
 - **`UPDATE` trong PostgreSQL đụng mọi index** vì `ctid` đổi — trừ khi đạt **HOT update**. Theo dõi tỉ lệ HOT; tỉ lệ thấp thì giảm `fillfactor` hoặc bỏ index trên cột hay thay đổi.
 - **`COUNT(*)` chậm vì MVCC**: mỗi transaction thấy số dòng khác nhau nên không có con số duy nhất để lưu sẵn. Dùng `reltuples` cho số xấp xỉ, hoặc `LIMIT n+1` cho phân trang.
+- **`COUNT(*)` và `COUNT(cột)` không giống nhau**: `COUNT(*)` chỉ đếm mục nên `Index Only Scan` được; `COUNT(cột)` phải biết giá trị để loại `NULL` nên **phải vào heap** — đo được **1,9 ms so với 12,5 ms**. Và `COUNT(1)` **không** nhanh hơn `COUNT(*)` — đó là truyền thuyết từ thời Oracle thập niên 1990.
 
 **Bài kế tiếp** → [Bài 3: Hỏi & Đáp - Database Internals và Best Practices](03-hoi-dap-database-internals.md)

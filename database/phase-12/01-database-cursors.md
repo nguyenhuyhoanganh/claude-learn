@@ -271,6 +271,78 @@ WHERE xact_start IS NOT NULL
 ORDER BY xact_start LIMIT 5;
 ```
 
+### Nó có thể bị rò rỉ — và rò rỉ cursor làm sập database
+
+Đây là rủi ro nghiêm trọng nhất của server-side cursor, và nó ít được nhắc tới vì nó chỉ lộ ra khi có tải thật.
+
+```text
+   Client-side cursor: du lieu nam o CLIENT.
+     → client chet → bo nho duoc thu hoi → SERVER khong biet gi
+     → khong ro ri duoc
+
+   Server-side cursor: SERVER giu trang thai.
+     → client chet giua chung, hoac code quen `cur.close()`
+     → cursor VAN SONG tren server cho toi khi ket noi dut
+     → moi cursor giu: mot anh chup + bo nho + co the ca file tam
+```
+
+```python
+# RO RI: co ngoai le thi `close()` KHONG BAO GIO chay
+cur = conn.cursor(name='cur_export')
+cur.execute("SELECT * FROM events")
+for row in cur:
+    xu_ly(row)              # ← nem ngoai le o day
+cur.close()                 # ← khong bao gio toi duoc
+
+# DUNG: context manager dam bao dong trong MOI truong hop
+with conn.cursor(name='cur_export') as cur:
+    cur.execute("SELECT * FROM events")
+    for row in cur:
+        xu_ly(row)
+```
+
+Vì sao nó nguy hiểm ở quy mô lớn:
+
+```text
+   1.000 client, moi client mo mot server-side cursor va ro ri
+     → 1.000 anh chup dong bang tren server
+     → 1.000 transaction mo
+     → `VACUUM` KHONG don duoc gi TREN TOAN BO DATABASE
+     → bang phinh khong ngung, do dai XID tang
+     → cuoi cung: he thong dung de tranh XID wraparound
+```
+
+Săn cursor bị rò rỉ:
+
+```sql
+-- Cursor dang mo trong PHIEN hien tai
+SELECT name, statement, is_holdable, creation_time FROM pg_cursors;
+
+-- Ket noi dang giu transaction mo ma khong lam gi — dau hieu ro ri
+SELECT pid,
+       now() - xact_start   AS transaction_mo,
+       now() - state_change AS im_lang_bao_lau,
+       state,
+       left(query, 60)      AS cau_lenh_cuoi
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+  AND now() - state_change > interval '1 minute'
+ORDER BY xact_start;
+```
+
+Phòng thủ bắt buộc khi dùng server-side cursor trong sản phẩm thật:
+
+```sql
+-- Database tu cat ket noi bo quen
+ALTER SYSTEM SET idle_in_transaction_session_timeout = '5min';
+
+-- Va gioi han thoi gian mot cau lenh
+ALTER SYSTEM SET statement_timeout = '30min';   -- dat theo VAI TRO, xem [phase-14 bai 2]
+SELECT pg_reload_conf();
+```
+
+> **Quy tắc:** server-side cursor chỉ nên dùng cho **job nền có kiểm soát**, không bao giờ cho **đường xử lý request của người dùng**. Người dùng đóng trình duyệt giữa chừng là chuyện xảy ra hàng nghìn lần mỗi ngày — và mỗi lần như vậy để lại một cursor treo.
+
 ### Nó tốn nhiều vòng mạng
 
 ```text
@@ -434,6 +506,7 @@ Cột giữa cho thấy một sự thật: **gần như mọi driver mặc đị
 - Đo thật trên 10 triệu dòng: client-side **4.218 MB / 18,4 giây** để thấy dòng đầu; server-side **34 MB / 0,04 giây** — ít RAM hơn **124 lần**, thấy dòng đầu nhanh hơn **460 lần**.
 - Trong psycopg2, khác biệt chỉ là **một tham số `name`**. Trong JDBC PostgreSQL là **`setAutoCommit(false)` + `setFetchSize`**. Trong MySQL là **`setFetchSize(Integer.MIN_VALUE)`**.
 - Cái giá thật của server-side cursor: **nó giữ một transaction mở** — chặn `VACUUM` trên toàn database, làm phình bảng, và làm replica tụt lại.
+- Và nó **rò rỉ được**: client chết giữa chừng hoặc quên `close()` thì cursor vẫn sống trên server. Hàng nghìn cursor rò rỉ làm `VACUUM` tê liệt trên toàn database. **Chỉ dùng server-side cursor cho job nền có kiểm soát, không bao giờ cho đường xử lý request của người dùng.**
 - `itersize` quá nhỏ gây hàng chục nghìn vòng mạng; khuyến nghị **1.000-10.000 dòng**.
 - **`cursor_tuple_fraction`** mặc định 0.1 khiến planner tối ưu cho "dòng đầu tiên nhanh". Đặt `1.0` nếu chắc chắn đọc hết.
 - Với **job chạy dài**, **keyset pagination thường tốt hơn cursor**: không giữ transaction, dừng và tiếp được, chạy song song được — đổi lại mất ảnh chụp nhất quán.

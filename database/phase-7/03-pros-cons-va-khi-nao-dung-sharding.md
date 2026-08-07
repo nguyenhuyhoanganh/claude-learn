@@ -214,6 +214,80 @@ Trước khi chia **một bảng** ra nhiều máy, hãy thử chia **các bản
 
 ---
 
+## Trục thứ hai: giảm việc, hay chia việc
+
+Cái thang ở trên là một trục. Nhưng có một trục thứ hai vuông góc với nó, và nhìn ra được nó giúp chọn công cụ đúng nhanh hơn nhiều:
+
+```text
+   ┌─────────────────────────────────────────────────────────────────┐
+   │  TRUC 1 — GIAM VIEC PHAI LAM                                    │
+   │                                                                 │
+   │  Bang 1 ty dong, tim mot dong:                                  │
+   │    khong index  →  quet 1 TY dong                               │
+   │    co index     →  quet ~4 PAGE          ← giam 250 trieu lan   │
+   │    + partition  →  index nho hon, chi dung 1 manh               │
+   │                                                                 │
+   │  → Cong cu: INDEX, PARTITION, bang tong hop, cache              │
+   │  → Luon thu truc nay TRUOC                                      │
+   ├─────────────────────────────────────────────────────────────────┤
+   │  TRUC 2 — CHIA VIEC RA NHIEU NOI                                │
+   │                                                                 │
+   │  Bang 1 ty dong, phai quet HET (bao cao, ETL, huan luyen):      │
+   │    mot luong    →  1 ty dong tuan tu                            │
+   │    8 luong      →  moi luong 125 trieu     ← nhanh ~6 lan       │
+   │    8 may        →  moi may 125 trieu       ← nhanh ~8 lan       │
+   │                                                                 │
+   │  → Cong cu: truy van song song, worker chia khoang, MapReduce,  │
+   │             SHARDING                                            │
+   │  → Chi can khi KHONG THE giam viec duoc nua                     │
+   └─────────────────────────────────────────────────────────────────┘
+```
+
+Nguyên tắc rút ra:
+
+> **Sharding nằm ở trục 2. Nó chia việc, nó không giảm việc.**
+>
+> Nếu vấn đề của bạn giải được bằng trục 1 — mà phần lớn là như vậy — thì sharding chỉ nhân độ phức tạp lên N lần mà không giải quyết gì.
+
+### Trục 2 không nhất thiết phải sharding
+
+Điểm quan trọng: **chia việc ra nhiều nơi không đồng nghĩa với chia dữ liệu ra nhiều máy**. Có ba mức, và sharding là mức đắt nhất:
+
+```sql
+-- MUC 1: song song hoa TRONG MOT MAY — PostgreSQL lam san
+SET max_parallel_workers_per_gather = 8;
+EXPLAIN ANALYZE SELECT count(*) FROM events WHERE created_at > '2026-01-01';
+```
+
+```text
+Gather  (actual time=2418.882..2511.117 rows=1 loops=1)
+  Workers Planned: 8
+  Workers Launched: 8              ← 8 tien trinh cung quet
+  ->  Parallel Seq Scan on events
+```
+
+```python
+# MUC 2: worker cua UNG DUNG chia khoang — khong doi gi o database
+def worker(phan, tong):
+    lo, hi = phan * BUOC, (phan + 1) * BUOC
+    cur.execute("SELECT ... FROM events WHERE id >= %s AND id < %s", (lo, hi))
+    # ... xu ly ...
+
+with ThreadPoolExecutor(8) as pool:
+    pool.map(lambda p: worker(p, 8), range(8))
+```
+
+```text
+   MUC 3: SHARDING — chia du lieu ra nhieu MAY
+          → chi khi muc 1 va 2 da cham tran cua MOT MAY
+```
+
+Mức 1 và mức 2 **không đòi hỏi thay đổi kiến trúc nào** và có thể triển khai trong một buổi chiều. Rất nhiều đội nhảy thẳng tới mức 3 mà chưa từng thử hai mức đầu.
+
+> Nếu bảng đã được **phân mảnh** ([phase-6](../phase-6/01-database-partitioning-la-gi.md)), mức 2 còn tự nhiên hơn: mỗi worker xử lý một mảnh, và bật `enable_partitionwise_aggregate` để PostgreSQL tự gom nhóm trong từng mảnh trước khi hợp.
+
+---
+
 ## Bốn tín hiệu cho biết đã đến lúc
 
 Sharding trở nên hợp lý khi **cả bốn** điều sau cùng đúng:
@@ -377,6 +451,7 @@ Trả lời trung thực. Bất kỳ câu "không" nào ở phần A đều là 
 
 - Bước đầu tiên **luôn là đo**: sharding chỉ giúp khi nút cổ chai là **CPU, RAM, đĩa hoặc tải ghi**. Nó **không** sửa được query tệ, index thiếu, pool sai, hay tranh chấp khoá.
 - Có **chín nấc thang** trước sharding, và **cả chín đều quay đầu được**. Nấc thứ mười thì không.
+- Có **trục thứ hai** vuông góc với cái thang: **giảm việc** (index, partition, cache) và **chia việc** (song song hoá, sharding). **Sharding nằm ở trục 2 — nó chia việc chứ không giảm việc.** Và trục 2 có ba mức: song song trong một máy (`max_parallel_workers_per_gather`) → worker ứng dụng chia khoảng → sharding. Hai mức đầu triển khai trong một buổi chiều.
 - Nấc bị bỏ qua nhiều nhất là nấc 5 — **mua máy lớn hơn**. Máy đám mây hiện nay có hàng trăm vCPU và hàng TB RAM; rất nhiều hệ tưởng cần sharding chỉ cần một máy lớn hơn.
 - Nấc nên thử **ngay trước** sharding là **tách theo chức năng** — vì nó giữ nguyên `JOIN` và transaction bên trong từng miền.
 - Bốn tín hiệu để shard, phải đúng **cả bốn**: đã leo hết thang · nút cổ chai là **ghi** · dữ liệu **nóng** vượt máy lớn nhất · có **shard key tự nhiên**.

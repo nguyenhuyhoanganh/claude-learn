@@ -202,6 +202,38 @@ Cái giá này nhỏ tới mức không đáng bàn:
 
 Đây là một trong những đánh đổi có tỉ lệ lợi/hại tốt nhất trong toàn bộ ngành khoa học máy tính, và là lý do **không hệ nào còn dùng B-Tree gốc cho index của bảng**.
 
+### Con trỏ giữa các lá là một LỰA CHỌN, không phải bắt buộc
+
+Chi tiết này ít được nhắc, và nó cho thấy cách người thiết kế database suy nghĩ.
+
+Danh sách liên kết ở tầng lá **cũng có giá**: mỗi lá phải lưu thêm hai con trỏ (trước và sau), và — quan trọng hơn — **mỗi lần tách page phải cập nhật con trỏ của hai lá hàng xóm**, tức là ba page bị sửa thay vì một.
+
+Vì vậy không phải hệ nào cũng giữ nó:
+
+| Hệ | Con trỏ giữa các lá | Vì sao |
+|---|---|---|
+| PostgreSQL, MySQL InnoDB, Oracle, SQL Server | **Có** | Truy vấn khoảng và `ORDER BY` là mẫu chính |
+| **WiredTiger** (MongoDB) | **Không** | Truy vấn chủ yếu theo khoá; quét khoảng hiếm |
+
+```text
+   QUYET DINH CUA WIREDTIGER:
+     "Ung dung MongoDB chu yeu tra theo _id hoac theo mot truong cu the.
+      Quet khoang lien tuc rat hiem.
+      → BO con tro la di, doi lay ghi nhanh hon va page gon hon."
+
+   HE QUA:
+     ✔ Tach page re hon (chi sua 1 page thay vi 3)
+     ✔ Moi la chua duoc nhieu khoa hon
+     ✘ Quet khoang phai LEO LAI CAY cho moi buoc
+       → dung nhu han che cua B-Tree goc o [bai 1](01-btree-co-ban.md)
+```
+
+Bài học vượt ra ngoài chuyện B+Tree:
+
+> **Người thiết kế database chỉ giữ lại những gì tải của họ thật sự cần.** Cùng một cấu trúc dữ liệu, hai hệ có thể cài khác nhau — và cả hai đều đúng, cho tải của họ.
+
+Đây cũng là lời nhắc khi đọc tài liệu: câu "B+Tree có con trỏ giữa các lá" đúng với **phần lớn** hệ, nhưng không phải **mọi** hệ.
+
 ---
 
 ## Lá của B+Tree chứa gì — hai kiến trúc
@@ -378,6 +410,7 @@ Và câu hỏi để tự chẩn đoán khi truy vấn khoảng chậm:
 - **Truy vấn khoảng biến từ leo cây thành đi bộ ngang**: lấy 10.000 dòng liên tiếp giảm từ ~35.000 I/O ngẫu nhiên xuống ~31 I/O gần tuần tự.
 - Với 1 tỷ dòng, **mọi tầng trừ lá chỉ chiếm ~43 MB** → nằm vĩnh viễn trong RAM → thực tế chỉ 1-2 lần chạm đĩa cho một lần tìm kiếm.
 - Cái giá là **khoá bị nhân đôi**, nhưng chỉ tốn thêm dưới **0,3%** dung lượng.
+- **Con trỏ giữa các lá là một lựa chọn, không phải bắt buộc.** WiredTiger (MongoDB) **bỏ hẳn nó** vì tải của MongoDB ít quét khoảng — đổi lấy tách page rẻ hơn và lá gọn hơn. Cùng một cấu trúc, hai hệ cài khác nhau, và cả hai đều đúng cho tải của họ.
 - **Lá chứa gì** là chỗ hai kiến trúc rẽ hướng: PostgreSQL để con trỏ `ctid`, InnoDB để **cả dòng** (clustered) và index phụ trỏ tới **primary key** — nên PK lớn làm phình mọi index phụ.
 - Ba cải tiến hiện đại: **khử trùng lặp** (PG13, có thể nhỏ hơn 4 lần), **xoá index từ dưới lên** (PG14), **nén tiền tố**.
 - B+Tree tối ưu cho đọc; tải ghi cực nặng thì **LSM Tree** hợp hơn — đó là lý do RocksDB, Cassandra tồn tại.

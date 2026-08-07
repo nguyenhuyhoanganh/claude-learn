@@ -75,6 +75,51 @@ Lý do thứ ba đáng nhấn mạnh: một truy vấn phân tích quét toàn b
 
 > **Cảnh báo quan trọng:** replica **không phải** bản sao lưu. Lệnh `DELETE FROM orders` nhầm sẽ được nhân bản sang mọi replica trong khoảng **200 mili-giây**. Sao lưu và replication giải quyết hai vấn đề khác nhau.
 
+### Lý do thứ tư đáng nói kỹ: giao thức database rất "nói nhiều"
+
+Đặt replica gần người dùng không chỉ là chuyện độ trễ mạng cộng thêm một lần. Giao thức database **chattier hơn HTTP rất nhiều**:
+
+```text
+   MOT LAN GOI API HTTP:  1 vong mang
+   MOT LAN CHAY TRUY VAN: nhieu hon the
+
+     mo ket noi   : bat tay TCP (1) + TLS (2) + xac thuc (2)  = 5 vong
+     chuan bi     : Parse → ParseComplete                     = 1 vong
+     chay         : Bind/Execute/Sync → ket qua                = 1 vong
+     ket qua lon  : chia thanh NHIEU goi TCP, MOI goi phai duoc xac nhan
+```
+
+```text
+   UNG DUNG O SINGAPORE, DATABASE O VIRGINIA (RTT ~230 ms)
+
+   Mot trang goi 10 truy van tuan tu:
+     10 × 230 ms = 2,3 GIAY  — chi rieng do tre mang
+     (chua tinh thoi gian database thuc su xu ly)
+
+   Cung ung dung, database o CUNG VUNG (RTT ~0,5 ms):
+     10 × 0,5 ms = 5 mili-giay
+                                 → NHANH HON 460 LAN
+```
+
+Ba hệ quả thực dụng:
+
+```text
+   1. "Dat ung dung gan nguoi dung, va dat DATABASE GAN HON NUA."
+      Ung dung ↔ database phai o CUNG VUNG. Khong co ngoai le.
+      Nguoi dung ↔ ung dung thi CDN va edge lo duoc.
+
+   2. Neu bat buoc phai goi xuyen vung → GOM TRUY VAN
+      10 truy van tuan tu → 1 truy van co JOIN, hoac 1 stored procedure
+      → tu 2,3 giay xuong 230 ms
+
+   3. Ket qua LON cang te hon
+      1 MB ket qua chia thanh ~700 goi TCP, moi goi phai duoc xac nhan
+      → do tre KHONG chi la mot RTT, ma la nhieu RTT chong len nhau
+      → day cung la ly do cau SQL DAI cham, xem [phase-14 bai 1]
+```
+
+Đây là lý do replica theo vùng có giá trị lớn hơn con số "giảm độ trễ" nghe qua: nó không tiết kiệm **một** vòng mạng, nó tiết kiệm **mọi** vòng mạng của mọi truy vấn.
+
 ---
 
 ## Hai kiến trúc
@@ -434,6 +479,7 @@ Patroni — công cụ phổ biến nhất cho PostgreSQL — dùng cả ba, v�
 
 - **Replication ≠ Sharding**: nhân bản là mọi máy giữ **toàn bộ, giống nhau**; sharding là mỗi máy giữ **một phần khác nhau**. Hai kỹ thuật kết hợp được.
 - **Replica không phải bản sao lưu** — lệnh xoá nhầm được nhân bản trong ~200 ms.
+- **Giao thức database rất "nói nhiều"**: một trang gọi 10 truy vấn tuần tự qua vùng khác (RTT 230 ms) mất **2,3 giây chỉ riêng độ trễ mạng**, so với 5 ms nếu cùng vùng — **nhanh hơn 460 lần**. Quy tắc: *"đặt ứng dụng gần người dùng, và đặt database gần hơn nữa"* — ứng dụng và database phải **cùng vùng**, không có ngoại lệ.
 - **Primary/Replica** phù hợp cho 99% hệ thống. **Multi-master** chỉ nên dùng khi các nơi ghi **không giẫm lên nhau**, vì không có cách giải quyết xung đột nào tự động mà đúng.
 - **Đồng bộ** không mất dữ liệu nhưng **replica chết thì primary ngừng nhận ghi** — luôn cấu hình `ANY 1 (r1, r2)` với ít nhất hai replica.
 - PostgreSQL có **năm mức** `synchronous_commit` và vặn được **theo từng transaction** — chuyển tiền dùng `remote_apply`, ghi log dùng `off`, trong cùng một database.
