@@ -1,289 +1,385 @@
-# Bài 2: B+Tree và Ứng dụng trong Database Systems
+# Bài 2: B+Tree — một thay đổi nhỏ sửa được cả ba hạn chế
 
-## B+Tree là gì?
+[Bài 1](01-btree-co-ban.md) kết thúc với ba hạn chế của B-Tree gốc:
 
-**B+Tree** là phiên bản cải tiến của B-Tree với một thay đổi quan trọng:
-- **Internal nodes** (bao gồm root): Chỉ lưu **keys** (không lưu values)
-- **Leaf nodes**: Lưu cả **keys và values** (data pointers)
-- **Leaf nodes** được **liên kết với nhau** (doubly linked list)
+1. Giá trị nằm ở mọi nút → chiếm chỗ → fan-out nhỏ → cây cao.
+2. Truy vấn khoảng phải leo lên leo xuống — 14 lần duyệt cho 6 giá trị liền kề.
+3. Nút trong phình to → khó nằm trọn trong RAM.
 
----
+**B+Tree sửa cả ba bằng đúng một thay đổi:**
 
-## Cấu trúc B+Tree
+> **Đẩy toàn bộ giá trị xuống tầng lá, và nối các lá lại thành một danh sách liên kết.**
 
-```
-B+Tree (degree 3, ví dụ nhỏ):
+Đơn giản đến mức khó tin. Bài này cho thấy vì sao nó đủ, và vì sao **mọi** database quan hệ thực tế đều dùng B+Tree chứ không dùng B-Tree.
 
-Internal nodes (chỉ lưu keys):
-              [5]
-             /   \
-          [3]    [7, 9]
+## So sánh trực tiếp
 
-Leaf nodes (lưu keys + values, được liên kết):
-[1,val1] ↔ [2,val2] ↔ [3,val3] ↔ [4,val4] ↔ [5,val5] ↔ [6,val6] ↔ ...
+```text
+   B-TREE GỐC — giá trị ở MỌI nút
+   ══════════════════════════════════════════════════════════
+                  ┌───────────────────┐
+                  │ 5│val │  8│val    │   ← nút trong CŨNG chứa giá trị
+                  └─┬──────┬────────┬─┘
+            ┌───────┘      │        └───────┐
+      ┌─────▼─────┐  ┌─────▼─────┐   ┌──────▼────┐
+      │1│val 3│val│  │6│val 7│val│   │9│val 11│val│
+      └───────────┘  └───────────┘   └───────────┘
+        (các lá KHÔNG nối với nhau)
 
-Lưu ý: Leaf nodes tạo thành một linked list có thứ tự!
-```
 
-### Ví dụ thực tế hơn
+   B+TREE — giá trị CHỈ ở lá, lá NỐI NHAU
+   ══════════════════════════════════════════════════════════
+                  ┌───────────────────┐
+                  │   5   │   8       │   ← CHỈ có khoá, không có giá trị
+                  └─┬──────┬────────┬─┘
+            ┌───────┘      │        └───────┐
+      ┌─────▼─────┐  ┌─────▼─────┐   ┌──────▼─────┐
+      │1│val 3│val│⇄│5│val 6│val 7│val│⇄│8│val 9│val 11│val│
+      └───────────┘  └────────────┘   └────────────┘
+         ▲              ▲                 ▲
+         └──────────────┴─────────────────┘
+            DANH SÁCH LIÊN KẾT HAI CHIỀU giữa các lá
 
-```
-Index trên column "grade" (0-100):
-
-Internal Node (root):
-  [50]                    ← Chỉ key, không có value
-
-Internal Nodes (level 2):
-  [25]  [75]              ← Chỉ keys
-
-Leaf Nodes (lưu key + pointer to heap row):
-[1→p1] [2→p2] ... [25→p25] ↔ [26→p26] ... [50→p50] ↔ [51→p51] ... [100→p100]
-   ↑                               ↑                          ↑
-   Linked!                         Linked!                    Linked!
-```
-
----
-
-## Tại sao B+Tree tốt hơn?
-
-### 1. Internal Nodes nhỏ gọn hơn → Fit trong memory
-
-```
-B-Tree node (lưu key + value):
-  [key=50, value=ptr_64bit] = 4+8 = 12 bytes per element
-  Elements per page = 8192 / 12 = 682 elements
-
-B+Tree internal node (chỉ lưu key):
-  [key=50] = 4 bytes per element
-  Elements per page = 8192 / 4 = 2048 elements!
-
-→ B+Tree internal nodes chứa nhiều keys hơn gấp 3 lần
-→ Tree ít sâu hơn → Cần ít I/O hơn
-→ Dễ fit internal nodes vào memory hơn
-```
-
-### 2. Range Queries siêu nhanh
-
-```
-B-Tree range query (id BETWEEN 4 AND 9):
-  Tìm 4: Root → Node A → 4 ✓ (lấy value)
-  Tìm 5: Root → Node B → 5 ✓ (lấy value)
-  Tìm 6: Root → Node B → 6 ✓ (lấy value)
-  Tìm 7: Root → Node C → 7 ✓ ...
-  → Phải traverse từ root cho MỖI key!
-
-B+Tree range query (id BETWEEN 4 AND 9):
-  Tìm 4: Root → Internal → Leaf[4] ✓
-  Sau đó: Đi theo linked list!
-  Leaf[4] → Leaf[5] → Leaf[6] → Leaf[7] → Leaf[8] → Leaf[9]
-  → Chỉ cần traverse từ root MỘT LẦN, còn lại follow linked list!
-```
-
-### 3. Ví dụ cụ thể: Tìm rows với id BETWEEN 4 và 9
-
-```
-B+Tree (degree 3, ví dụ):
-
-            [5]
-           /   \
-        [3, 4]  [7, 9]
-
-Leaf layer (linked):
-[1→p1] ↔ [2→p2] ↔ [3→p3] ↔ [4→p4] ↔ [5→p5] ↔ [6→p6] ↔ [7→p7] ↔ [8→p8] ↔ [9→p9]
-
-Query: WHERE id BETWEEN 4 AND 9
-
-Step 1: Traverse từ root, tìm id=4
-        Root[5]: 4<5 → đi trái → Node[3,4] → 4≥4 → đi phải → Leaf chứa 4
-Step 2: Tìm thấy id=4 trong leaf, lấy value (pointer đến heap)
-Step 3: Theo linked list sang phải: id=5, 6, 7, 8, 9
-Step 4: Khi gặp id=10 > 9, dừng lại
-
-Tất cả id 4-9 nằm liền kề trong leaf layer → 
-Có thể đọc trong 1-2 I/O operations!
+   Chú ý: khoá 5 và 8 xuất hiện HAI LẦN — một lần ở nút trong (dẫn đường),
+          một lần ở lá (kèm giá trị). Đây là cái giá, sẽ bàn ở dưới.
 ```
 
 ---
 
-## B+Tree trong Production Databases
+## Sửa hạn chế 1: fan-out tăng gấp đôi trở lên
 
-### PostgreSQL
+```text
+   MỘT PAGE 8 KB CỦA NÚT TRONG, khoá BIGINT 8 byte
 
-```
-PostgreSQL sử dụng B+Tree cho tất cả indexes (trừ GIST, GIN, Hash):
+   B-TREE:   mỗi mục = khoá 8B + GIÁ TRỊ 8B + con trỏ con 8B = 24 byte
+             8.192 / 24  ≈  341 nhánh
 
-Đặc điểm PostgreSQL B+Tree:
-  - Secondary indexes trỏ đến ctid (tuple id = page + offset)
-  - Leaf nodes chứa: key + ctid
-  - KHÔNG có clustered index (heap không được sort)
-  - Tất cả indexes đều là "secondary" trong PostgreSQL
-  
-Kết quả:
-  - UPDATE 1 row → Tất cả indexes phải cập nhật ctid mới
-  - Ít overhead hơn khi traverse (vì không phải maintain order của heap)
+   B+TREE:   mỗi mục = khoá 8B + con trỏ con 8B          = 16 byte
+             8.192 / 16  ≈  512 nhánh
+
+                          → FAN-OUT TĂNG 1,5 LẦN
 ```
 
-### MySQL (InnoDB)
+Với khoá dài thì khác biệt còn lớn hơn nhiều — vì phần "giá trị" là hằng số bị loại bỏ.
 
+Fan-out tăng thì sức chứa của mỗi tầng tăng theo luỹ thừa:
+
+```text
+   SỐ DÒNG CHỨA ĐƯỢC THEO CHIỀU CAO CÂY
+
+   Chiều cao   B-Tree (341)        B+Tree (512)
+   ─────────   ─────────────       ────────────
+   2 tầng          116.281            262.144
+   3 tầng       39.651.821        134.217.728
+   4 tầng   13.521.271.000     68.719.476.736
+
+   → 3 TẦNG: B+Tree chứa gấp 3,4 LẦN
+   → 4 TẦNG: B+Tree chứa 68 TỶ dòng
+
+   Nói cách khác: gần như MỌI bảng bạn từng gặp
+   đều nằm gọn trong một cây 3-4 tầng.
 ```
-InnoDB sử dụng B+Tree với Clustered Index:
 
-Primary Key Index (Clustered):
-  - Leaf nodes chứa: PK key + TOÀN BỘ ROW DATA
-  - Table được sort theo PK
-  - Index organized table (IOT)
-
-Secondary Key Index:
-  - Leaf nodes chứa: secondary_key + PRIMARY KEY value
-  - KHÔNG phải ctid, mà là PK value
-  - Để lấy full row: secondary index → PK → primary index (2 hops!)
-  
-Kết quả:
-  - PK lookup: siêu nhanh (data ở leaf của primary index)
-  - Secondary index: cần 2 traversals
-  - Nếu PK là UUID: tất cả secondary indexes chứa 16-byte UUID → Bloat!
-```
-
-### MongoDB (WiredTiger)
-
-```
-WiredTiger engine dùng B+Tree:
-  - Đặc biệt: KHÔNG có leaf pointer (linked list giữa leaf nodes)
-  - Thiết kế này vì MongoDB ít dùng range queries trên _id
-  - Tiết kiệm space và overhead của maintaining linked list
-```
+Đây là lời giải thích đầy đủ cho tiêu đề bài 1: **tìm 1 dòng trong 1 tỷ dòng chỉ tốn 4 lần đọc**.
 
 ---
 
-## So sánh: PostgreSQL vs MySQL cho Secondary Index
+## Sửa hạn chế 2: truy vấn khoảng thành đi bộ ngang
 
-```
-Ví dụ: Bảng orders với PK là UUID, index trên email
+Đây là cải tiến có tác động lớn nhất trong thực tế.
 
-PostgreSQL secondary index (email):
-  Leaf node: [email="john@..." → ctid=(page=123, row=4)]
-  ctid = 6 bytes → nhỏ, hiệu quả
+Cùng bài toán ở [bài 1](01-btree-co-ban.md): lấy mọi khoá từ 4 đến 9.
 
-MySQL (InnoDB) secondary index (email):
-  Leaf node: [email="john@..." → PK="a1b2c3d4-e5f6-7890-abcd-ef12"]
-  PK = 16 bytes (UUID) → lớn, bloat!
-  
-Với 10 secondary indexes trên bảng orders:
-  PostgreSQL: Mỗi secondary index leaf = email + 6 bytes
-  MySQL:      Mỗi secondary index leaf = email + 16 bytes (UUID)
-  
-→ MySQL secondary indexes lớn gấp 2-3x
-→ Không fit memory → Nhiều disk I/O hơn
-```
+```text
+   B-TREE GỐC — 14 lần duyệt
+   ══════════════════════════
+   Tìm 4 → gốc → nút trong → lá        3 I/O
+   Tìm 5 → LEO NGƯỢC LÊN GỐC → ...     1 I/O
+   Tìm 6 → LEO NGƯỢC LÊN GỐC → ...     3 I/O
+   Tìm 7 → LEO NGƯỢC LÊN GỐC → ...     2 I/O
+   Tìm 8 → LEO NGƯỢC LÊN GỐC → ...     3 I/O
+   Tìm 9 → LEO NGƯỢC LÊN GỐC → ...     2 I/O
+   ─────────────────────────────────────────
+                                      14 I/O
 
-**Đây là một trong những lý do Uber chuyển từ PostgreSQL sang MySQL** (counter-intuitive, nhưng Uber có workload đặc biệt).
 
----
-
-## Tác động của Key Type lên B+Tree Performance
-
-### Leaf Node kích thước
-
-```
-Index trên INTEGER (4 bytes):
-  Leaf element = 4 + 6 = 10 bytes
-  Elements per leaf page = 8192 / 10 ≈ 819 elements per page
-
-Index trên UUID (16 bytes):
-  Leaf element = 16 + 6 = 22 bytes
-  Elements per leaf page = 8192 / 22 ≈ 372 elements per page
-  
-→ UUID index cần nhiều pages hơn gấp 2.2x
-→ Tree sâu hơn → Nhiều I/O hơn → Chậm hơn
+   B+TREE — 4 lần duyệt
+   ═════════════════════
+   Tìm 4:  gốc → nút trong → lá                     3 I/O
+           ↓
+   [lá:  4  5  6 ] ⇄ [lá:  7  8  9 ] ⇄ [lá: 10 ...]
+     ▲───────────────────▶                          1 I/O
+     đi thẳng sang lá kế bên theo con trỏ liên kết
+   ─────────────────────────────────────────────────
+                                                     4 I/O
 ```
 
-### Internal Node kích thước (B+Tree vs B-Tree)
-
-```
-B-Tree internal node với UUID key:
-  Element = 16 (key) + 8 (value) = 24 bytes
-  Elements per internal page = 8192 / 24 = 341
-
-B+Tree internal node với UUID key:
-  Element = 16 (key only) = 16 bytes  
-  Elements per internal page = 8192 / 16 = 512
-  
-→ B+Tree vẫn tốt hơn 50% ngay cả với UUID keys
-→ Nhưng INTEGER vẫn là tốt nhất: 8192/4 = 2048 elements per page!
+```text
+   14 I/O  →  4 I/O      GIẢM 3,5 LẦN trên ví dụ tí hon này
 ```
 
----
+Và khoảng cách này **tăng theo kích thước khoảng**:
 
-## Best Practices dựa trên B+Tree
+```text
+   Lấy 10.000 dòng liên tiếp:
 
-### 1. Chọn key type phù hợp
+   B-TREE:  ~10.000 lần duyệt cây, mỗi lần 3-4 I/O
+            → ~35.000 I/O, hoàn toàn NGẪU NHIÊN
 
+   B+TREE:  3 I/O xuống lá đầu tiên
+            + đi ngang qua ~28 lá (365 khoá mỗi lá)
+            → 31 I/O, và gần như TUẦN TỰ
+
+                    → NHANH HƠN HƠN 1.000 LẦN
 ```
-Priority:
-  BEST: BIGINT SERIAL (8 bytes, sequential) → ~1024 keys/page
-  GOOD: INT SERIAL (4 bytes, sequential)    → ~2048 keys/page
-  BAD:  UUID v4 (16 bytes, random)          → ~512 keys/page + page splits
-  OK:   ULID/UUID v7 (16 bytes, ordered)    → ~512 keys/page, ít splits
-```
 
-### 2. MySQL: Đặc biệt cẩn thận với PK
+Điều này giải thích vì sao các mẫu truy vấn sau chạy nhanh đến vậy trên B+Tree:
 
 ```sql
--- ❌ Tệ cho MySQL InnoDB
-CREATE TABLE orders (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    ...
-);
--- → UUID bloat ảnh hưởng TẤT CẢ secondary indexes!
-
--- ✅ Tốt cho MySQL InnoDB
-CREATE TABLE orders (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    uuid CHAR(36) UNIQUE,  -- UUID cho external API
-    ...
-);
--- → PK là INT → Secondary indexes nhỏ gọn
+SELECT * FROM orders WHERE created_at BETWEEN '2026-01-01' AND '2026-01-31';
+SELECT * FROM users  WHERE id > 1000 ORDER BY id LIMIT 100;
+SELECT * FROM logs   ORDER BY ts DESC LIMIT 50;
 ```
 
-### 3. Hiểu range queries
-
-```sql
--- B+Tree rất giỏi range queries:
-SELECT * FROM orders WHERE created_at BETWEEN '2024-01-01' AND '2024-12-31';
--- → Traverse đến leaf chứa 2024-01-01, follow linked list đến 2024-12-31
-
--- Không hiệu quả nếu function trên key:
-SELECT * FROM orders WHERE YEAR(created_at) = 2024;
--- → YEAR() function → không dùng được B+Tree index!
--- → Full table scan
-
--- Fix:
-SELECT * FROM orders WHERE created_at >= '2024-01-01' AND created_at < '2025-01-01';
--- → Range query → B+Tree hiệu quả
-```
+Câu cuối đặc biệt thú vị: `ORDER BY ts DESC` đi **ngược** danh sách liên kết. Đó là lý do danh sách phải **hai chiều**, và cũng là lý do bạn thấy `Index Scan Backward` trong `EXPLAIN`.
 
 ---
 
-## Tóm tắt B-Tree vs B+Tree
+## Sửa hạn chế 3: các tầng trên nằm gọn trong RAM
 
-```
-┌─────────────────┬────────────────┬──────────────────┐
-│ Đặc điểm        │ B-Tree         │ B+Tree           │
-├─────────────────┼────────────────┼──────────────────┤
-│ Internal nodes  │ Keys + Values  │ Keys only        │
-│ Leaf nodes      │ Keys + Values  │ Keys + Values    │
-│ Leaf links      │ Không          │ Có (linked list) │
-│ Range queries   │ Chậm           │ Rất nhanh        │
-│ Internal node   │ Lớn (keys+val) │ Nhỏ (keys only)  │
-│ size            │                │                  │
-│ Fit memory      │ Khó hơn        │ Dễ hơn           │
-│ Dùng trong DB   │ Hiếm           │ Hầu hết DBMS     │
-└─────────────────┴────────────────┴──────────────────┘
+Vì nút trong chỉ chứa khoá, tổng dung lượng các tầng không phải lá rất nhỏ:
 
-Tất cả database hiện đại (PostgreSQL, MySQL, SQL Server, Oracle, MongoDB/WiredTiger)
-đều dùng B+Tree (hoặc biến thể của nó).
+```text
+   BẢNG 1 TỶ DÒNG, khoá BIGINT, B+Tree fan-out 512
+
+   Tầng lá     : 1.000.000.000 / 365 ≈ 2.740.000 page × 8 KB = 21,9 GB
+   Tầng 3      :     2.740.000 / 512 ≈     5.352 page × 8 KB = 42,8 MB
+   Tầng 2      :         5.352 / 512 ≈        11 page × 8 KB =  88 KB
+   Tầng 1 (gốc):                                1 page       =   8 KB
+                                                ──────────────────────
+   MỌI TẦNG TRỪ LÁ                                        ≈ 43 MB
 ```
+
+**43 megabyte.** Máy chủ nào cũng thừa sức giữ toàn bộ phần đó trong RAM vĩnh viễn.
+
+Hệ quả thực tế:
+
+```text
+   Tìm một dòng trong 1 tỷ dòng:
+      tầng 1 (gốc)      → RAM     ~100 ns
+      tầng 2            → RAM     ~100 ns
+      tầng 3            → RAM     ~100 ns
+      tầng lá           → có thể phải xuống đĩa   ~100 µs
+      nhảy vào heap     → có thể phải xuống đĩa   ~100 µs
+      ─────────────────────────────────────────────────────
+      → THỰC TẾ CHỈ 1-2 LẦN CHẠM ĐĨA, không phải 4
+```
+
+Đây là lý do các hệ thống lớn vẫn cho thời gian phản hồi dưới mili-giây trên bảng hàng tỷ dòng.
 
 ---
 
-**Tiếp theo:** Phase 6 - Database Partitioning →
+## Cái giá: khoá bị nhân đôi
+
+B+Tree không miễn phí. Khoá dùng để dẫn đường ở nút trong **cũng phải xuất hiện lại ở lá**, vì lá phải chứa đủ mọi khoá.
+
+```text
+   Nút trong:  [ 5 ][ 8 ]
+   Lá:         [1,3] [5,6,7] [8,9,11]
+                      ▲       ▲
+                khoá 5 và 8 lặp lại
+```
+
+Cái giá này nhỏ tới mức không đáng bàn:
+
+```text
+   Số khoá ở nút trong ≈ số lá ≈ (tổng số khoá) / 365
+                        ≈ 0,27% tổng số khoá
+
+   → Tốn thêm chưa tới 0,3% dung lượng
+   → Đổi lấy fan-out gấp 1,5 lần và truy vấn khoảng nhanh gấp 1.000 lần
+```
+
+Đây là một trong những đánh đổi có tỉ lệ lợi/hại tốt nhất trong toàn bộ ngành khoa học máy tính, và là lý do **không hệ nào còn dùng B-Tree gốc cho index của bảng**.
+
+---
+
+## Lá của B+Tree chứa gì — hai kiến trúc
+
+Đây là chỗ PostgreSQL và MySQL rẽ hai hướng, và nó ảnh hưởng tới mọi thứ.
+
+```text
+   POSTGRESQL — LÁ CHỨA CON TRỎ
+   ═════════════════════════════
+   Lá index primary key:
+      [ id=42 → ctid(1204, 7) ]  ← 8 byte khoá + 6 byte con trỏ
+                    │
+                    ▼
+   HEAP (bảng, rời rạc):
+      page 1204, khe 7:  [42 | 'Nguyen An' | '1990-01-02' | 15000]
+
+   → Mọi index đều cùng cấu trúc: khoá → ctid
+   → Bảng và index tách rời
+
+
+   MYSQL INNODB — LÁ CHỨA CẢ DÒNG (clustered index)
+   ═════════════════════════════════════════════════
+   Lá clustered index:
+      [ id=42 | 'Nguyen An' | '1990-01-02' | 15000 ]  ← CẢ DÒNG nằm đây
+                                                        BẢNG CHÍNH LÀ CÂY
+
+   Lá index phụ (trên name):
+      [ 'Nguyen An' → id=42 ]  ← trỏ tới PRIMARY KEY, không trỏ vị trí
+                       │
+                       ▼ phải tra clustered index lần nữa
+```
+
+Bảng hệ quả:
+
+| | PostgreSQL | MySQL InnoDB |
+|---|---|---|
+| Tra primary key | Index → heap: **2 chặng** | **1 chặng** — dòng nằm ngay ở lá |
+| Tra index phụ | Index → heap: **2 chặng** | Index phụ → PK → clustered: **3 chặng** |
+| Kích thước lá clustered | Nhỏ (chỉ khoá + con trỏ) | **Lớn** — chứa cả dòng |
+| Quét theo thứ tự PK | Ngẫu nhiên trên đĩa | **Tuần tự** — rất nhanh |
+| Index phụ phình theo PK | Không | **Có** — PK bị nhân bản vào mọi index phụ |
+| `UPDATE` một cột | Đổi `ctid` → **cập nhật mọi index** (trừ khi HOT) | Index phụ **không cần đổi** |
+
+Đọc bảng này xong sẽ hiểu vì sao không thể trả lời gọn câu "Postgres hay MySQL nhanh hơn". Chúng nhanh ở **những chỗ khác nhau**, và lựa chọn kiến trúc lá này là gốc rễ.
+
+### Vì sao trên InnoDB khoá chính lớn lại nguy hiểm
+
+Ghép hai dòng của bảng trên:
+
+```text
+   1. Index phụ trỏ tới PRIMARY KEY
+   2. Lá clustered chứa CẢ DÒNG
+
+   → BẢNG 100 TRIỆU DÒNG, 5 INDEX PHỤ
+
+   PK = BIGINT (8 byte):
+       phần PK trong index phụ = 100.000.000 × 8 × 5 = 4 GB
+
+   PK = UUID lưu CHAR(36):
+       phần PK trong index phụ = 100.000.000 × 36 × 5 = 18 GB
+                                                        ────────
+                                              THÊM 14 GB
+```
+
+14 GB đó tranh chỗ trực tiếp với dữ liệu nóng trong buffer pool. Đây chính là cơ chế đằng sau con số đo được ở [phase-4 bài 4](../phase-4/04-bloom-filter-va-uuid-performance.md).
+
+---
+
+## Ba cải tiến hiện đại của B+Tree trong PostgreSQL
+
+B+Tree không đứng yên từ 1970. Ba cải tiến gần đây đáng biết:
+
+### Khử trùng lặp (PostgreSQL 13)
+
+Trước đây, index trên cột có nhiều giá trị lặp lưu mỗi lần lặp một mục riêng:
+
+```text
+   TRƯỚC PG13                          TỪ PG13 (deduplication)
+   ══════════                          ═══════════════════════
+   'active' → ctid(1,1)                'active' → [ctid(1,1), ctid(1,2),
+   'active' → ctid(1,2)                            ctid(3,7), ...]
+   'active' → ctid(3,7)                           ▲ MỘT mục, danh sách con trỏ
+   ... × 1 triệu lần
+
+   Index: 1,2 GB                       Index: 280 MB     → NHỎ HƠN 4,3 LẦN
+```
+
+Bật mặc định. Hiệu quả nhất với cột lệch phân bố mạnh (trạng thái, loại, cờ boolean).
+
+Ý tưởng này chính là **dictionary encoding** của database cột, thu nhỏ và áp vào index — nối lại với [phase-3 bài 2](../phase-3/02-row-based-vs-column-based.md).
+
+### Xoá index từ dưới lên (PostgreSQL 14)
+
+Trước đây, mục index của dòng đã chết chỉ được dọn khi `VACUUM` chạy. Với bảng bị `UPDATE` liên tục, index phình nhanh hơn `VACUUM` dọn.
+
+Từ PG14, khi một page lá sắp đầy, PostgreSQL **kiểm tra ngay tại chỗ** xem có mục nào trỏ tới dòng đã chết không, và dọn chúng trước khi quyết định tách page.
+
+```text
+   → Tránh được phần lớn các lần tách page vô ích
+   → Index của bảng UPDATE nhiều ổn định hơn hẳn
+```
+
+### Nén tiền tố ở nút trong
+
+Nút trong không cần lưu trọn khoá — chỉ cần đủ để phân biệt hướng rẽ. Với khoá chuỗi dài, cắt bớt phần đuôi làm tăng fan-out đáng kể.
+
+---
+
+## Khi nào B+Tree KHÔNG phải lựa chọn đúng
+
+B+Tree tối ưu cho **đọc**. Với tải ghi cực nặng, nó có điểm yếu cố hữu:
+
+```text
+   MỖI LẦN CHÈN VÀO B+TREE:
+      • đọc page lá đích (I/O ngẫu nhiên nếu chưa trong RAM)
+      • có thể tách page → thêm I/O, sửa nút cha
+      • ghi WAL cho mọi page bị đổi
+      • với full_page_writes: có thể ghi cả page 8 KB vào WAL
+```
+
+Cấu trúc thay thế là **LSM Tree** (*Log-Structured Merge Tree*):
+
+| | B+Tree | LSM Tree |
+|---|---|---|
+| Ghi | Ghi ngẫu nhiên tại chỗ | **Ghi tuần tự, nối thêm** |
+| Đọc điểm | **Nhanh** — 3-4 I/O | Chậm hơn — phải tra nhiều tầng |
+| Đọc khoảng | **Rất nhanh** — đi ngang lá | Phải trộn nhiều tầng |
+| Khuếch đại ghi | Cao | Thấp hơn (nhưng có compaction) |
+| Dung lượng | Chuẩn | **Nén tốt hơn** |
+| Dùng ở | PostgreSQL, MySQL, Oracle, SQL Server | RocksDB, LevelDB, Cassandra, HBase |
+
+Đây là lý do các hệ thống ghi cực nhiều (nhật ký, đo lường, chuỗi thời gian) hay chọn engine LSM. Chi tiết ở [phase-11 bài 3](../phase-11/03-leveldb-rocksdb-va-demo.md).
+
+## Ứng dụng thực tế: đọc `EXPLAIN` bằng con mắt B+Tree
+
+Bây giờ các dòng trong `EXPLAIN` có nghĩa cụ thể:
+
+| Dòng trong `EXPLAIN` | Chuyện gì đang xảy ra trong cây |
+|---|---|
+| `Index Scan using idx_x` | Đi từ gốc xuống lá, rồi với mỗi mục thì nhảy vào heap |
+| `Index Scan Backward` | Đi **ngược** danh sách liên kết ở tầng lá — chỉ B+Tree làm được |
+| `Index Only Scan` | Đi xuống lá rồi **dừng ở đó** — mọi thứ cần đã có trong lá |
+| `Bitmap Index Scan` | Quét lá thu thập con trỏ, chưa nhảy vào heap |
+| `Index Cond: (x > 5)` | Điều kiện được dùng để **chọn điểm bắt đầu** trên cây |
+| `Filter: (y = 3)` | Điều kiện **không** dùng để chọn điểm bắt đầu — chỉ lọc sau |
+
+Và câu hỏi để tự chẩn đoán khi truy vấn khoảng chậm:
+
+```text
+   "Truy vấn của tôi có đi ngang được ở tầng lá không,
+    hay nó phải leo lại cây cho mỗi giá trị?"
+
+   → Nếu điều kiện khớp TIỀN TỐ TRÁI của index → đi ngang được  ✔
+   → Nếu không                                  → leo lại       ✘
+```
+
+Đây chính là quy tắc tiền tố trái ở [phase-4 bài 3](../phase-4/03-composite-index-va-optimizer.md), nhìn từ tầng cấu trúc dữ liệu.
+
+## Bẫy thường gặp
+
+| Bẫy | Vì sao sai | Cách đúng |
+|---|---|---|
+| Nói "database dùng B-Tree" | Thực tế là **B+Tree** — khác nhau ở chỗ then chốt | Nói đúng tên, và nói được khác biệt khi phỏng vấn |
+| Khoá chính lớn trên InnoDB | Bị nhân bản vào **mọi** index phụ | `BIGINT`, hoặc UUID lưu 16 byte nhị phân |
+| Tưởng `ORDER BY DESC` chậm hơn `ASC` | Lá nối hai chiều — đi ngược tốn như đi xuôi | Cả hai đều dùng được index |
+| Tưởng index trên cột ít giá trị là vô dụng | Từ PG13 có khử trùng lặp, và partial index vẫn rất hiệu quả | Đo trước khi kết luận |
+| Chọn engine LSM cho tải đọc khoảng nhiều | LSM phải trộn nhiều tầng khi đọc khoảng | B+Tree cho OLTP có nhiều truy vấn khoảng |
+| Bỏ qua `Index Scan Backward` khi đọc `EXPLAIN` | Nó cho biết index **đang** phục vụ `ORDER BY` | Đọc kỹ để biết index có bỏ được bước sắp xếp không |
+
+## Tóm tắt bài 2
+
+- B+Tree sửa cả ba hạn chế của B-Tree bằng **một thay đổi**: giá trị chỉ ở lá, và các lá nối nhau thành danh sách liên kết hai chiều.
+- **Fan-out tăng 1,5 lần trở lên** → cây 4 tầng chứa được **68 tỷ dòng**. Gần như mọi bảng bạn từng gặp đều nằm trong cây 3-4 tầng.
+- **Truy vấn khoảng biến từ leo cây thành đi bộ ngang**: lấy 10.000 dòng liên tiếp giảm từ ~35.000 I/O ngẫu nhiên xuống ~31 I/O gần tuần tự.
+- Với 1 tỷ dòng, **mọi tầng trừ lá chỉ chiếm ~43 MB** → nằm vĩnh viễn trong RAM → thực tế chỉ 1-2 lần chạm đĩa cho một lần tìm kiếm.
+- Cái giá là **khoá bị nhân đôi**, nhưng chỉ tốn thêm dưới **0,3%** dung lượng.
+- **Lá chứa gì** là chỗ hai kiến trúc rẽ hướng: PostgreSQL để con trỏ `ctid`, InnoDB để **cả dòng** (clustered) và index phụ trỏ tới **primary key** — nên PK lớn làm phình mọi index phụ.
+- Ba cải tiến hiện đại: **khử trùng lặp** (PG13, có thể nhỏ hơn 4 lần), **xoá index từ dưới lên** (PG14), **nén tiền tố**.
+- B+Tree tối ưu cho đọc; tải ghi cực nặng thì **LSM Tree** hợp hơn — đó là lý do RocksDB, Cassandra tồn tại.
+
+**Bài kế tiếp** → [Phase 6 — Bài 1: Database Partitioning là gì](../phase-6/01-database-partitioning-la-gi.md)
