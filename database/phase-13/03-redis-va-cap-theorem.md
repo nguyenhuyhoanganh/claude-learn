@@ -1,410 +1,425 @@
-# Bài 3: Redis Internals và CAP Theorem
+# Bài 3: Redis Internals và định lý CAP
 
-## Redis là gì?
+Bài này nhìn Redis từ góc **nội tại lưu trữ** — vì sao nó nhanh, nó đánh đổi gì — rồi mở rộng sang định lý CAP, khung tư duy để hiểu **mọi** hệ phân tán.
 
-**Redis** = Remote Dictionary Server - In-memory key-value store, đồng thời là cache, database và message broker.
+> Khoá [redis](../../redis/README.md) trong workspace này đi sâu vào cách **dùng** Redis: các kiểu dữ liệu, lệnh, mẫu thiết kế. Bài này bổ sung góc nhìn khác: Redis **hoạt động thế nào bên trong** và nó nằm ở đâu trên bản đồ hệ phân tán.
 
-```
-Bộ ba tính năng làm Redis nổi bật:
+## Vì sao Redis nhanh
 
-1. In-memory Database:
-   → Latency < 1ms (submillisecond)
-   → Tốc độ nhanh hơn disk-based DB 100-1000x
+Bốn lý do, và lý do thứ tư là lý do phản trực giác nhất:
 
-2. Optional Persistence:
-   → Dữ liệu không mất khi restart
-   → RDB snapshots hoặc AOF journaling
+```text
+   1. TOAN BO DU LIEU TRONG RAM
+      → khong bao gio cham dia trong duong doc/ghi
+      → ~100 nanogiay thay vi ~100 microgiay
 
-3. Pub/Sub Message Broker:
-   → Channels, publish/subscribe
-   → Thay thế lightweight cho Kafka/RabbitMQ
+   2. CAU TRUC DU LIEU TOI UU SAN
+      → khong phai phan tich SQL, khong lap ke hoach, khong toi uu
+      → GET la mot lan tra bang bam: O(1)
 
-Redis là #1 database trên AWS (2020): 28% market share!
-(MySQL: 23%, PostgreSQL: 20%)
-```
+   3. GIAO THUC RESP CUC GON
+      → phan tich rat nhanh, khong co dong goi nang ne
 
----
-
-## Single-Threaded Architecture
-
-```
-Redis là single-threaded cho mọi operations chính:
-
-  ┌────────────────────────────────────────────┐
-  │              Event Loop (1 thread)          │
-  │                                             │
-  │  Accept connections → Process commands      │
-  │  → Return responses → Accept connections... │
-  └────────────────────────────────────────────┘
-  
-  Background threads:
-  - AOF/RDB persistence (1 thread)
-  - Key expiry (1 thread)
-
-Tại sao single-threaded vẫn nhanh?
-  → Không có lock contention (không cần locks!)
-  → Context switching overhead = 0
-  → In-memory → CPU thường là bottleneck, không phải I/O
-  → 1 beefy core > nhiều shared-state threads
+   4. MOT LUONG CHO LENH   ← phan truc giac
+      → khong co khoa
+      → khong co chuyen ngu canh
+      → khong co dieu kien tranh chap
+      → moi lenh la NGUYEN TU MIEN PHI
 ```
 
----
+Điểm 4 xứng đáng nói kỹ. Trực giác nói "nhiều luồng thì nhanh hơn", nhưng với thao tác chỉ mất **vài trăm nanogiây**, chi phí lấy khoá và chuyển ngữ cảnh **lớn hơn chính công việc**.
 
-## Data Types của Redis
+```text
+   THAO TAC MAT 200 ns
+   ═══════════════════
+   Lay/tra khoa mutex   : ~20-100 ns    → 10-50% chi phi thuan tuy
+   Chuyen ngu canh      : ~1.000-3.000 ns → GAP 5-15 LAN cong viec
 
-```
-Redis hỗ trợ nhiều kiểu dữ liệu phong phú:
-
-String:    SET key "value"       → Simple values, counters
-List:      LPUSH list item       → Queue, stack
-Set:       SADD set member       → Unique values, tags
-Hash:      HSET hash field val   → Object-like structure
-ZSet:      ZADD zset score mem   → Sorted set, leaderboard
-Bitmap:    SETBIT key offset 1   → Efficient boolean arrays
-HyperLog:  PFADD hll item        → Cardinality estimation
-Stream:    XADD stream * k v     → Event sourcing, log
-Geo:       GEOADD geo lng lat m  → Geospatial data
+   → Voi thao tac cuc ngan, MOT LUONG THANG.
 ```
 
----
+Từ Redis 6.0 có **I/O đa luồng** — nhưng chỉ cho việc **đọc/ghi socket và phân tích giao thức**. Việc **thực thi lệnh vẫn một luồng**, và đó là chủ đích.
 
-## Persistence: Durability Options
+### Hệ quả: một lệnh chậm chặn tất cả
 
-### 1. AOF - Append Only File
+```text
+   KEYS *              trên 10 triệu khoá  →  ~2 giây
+   FLUSHALL            trên database lớn   →  vài giây
+   SMEMBERS            trên set 5 triệu    →  ~1 giây
+   Script Lua vòng lặp dài                 →  bao lâu tuỳ script
 
-```
-Cách hoạt động:
-  Mỗi write command → Append vào AOF file trên disk
-  
-  AOF file:
-  *3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
-  *2\r\n$3\r\nDEL\r\n$3\r\nbaz\r\n
-  ...
-
-Flush options:
-  appendfsync always    → Flush to disk mỗi command (slow, safe)
-  appendfsync everysec  → Flush mỗi giây (balance)
-  appendfsync no        → OS quyết định (fast, risky)
-
-Recovery: Replay AOF file khi restart
-
-Trade-off:
-  ✅ Ít mất data nhất (tối đa 1 giây với everysec)
-  ❌ File lớn hơn RDB
-  ❌ Restart chậm hơn (phải replay tất cả commands)
+   → TRONG SUOT THOI GIAN DO, MOI CLIENT KHAC BI CHAN.
+   → Do tre p99 tang vot, va khong co canh bao nao truoc.
 ```
 
-### 2. RDB - Redis Database Snapshot
+Đây là nguyên nhân sự cố Redis phổ biến nhất. Cách phòng:
 
-```
-Cách hoạt động:
-  Mỗi N giây (hoặc M writes) → Fork process → Snapshot memory → Write to disk
-  
-  RDB file = Binary snapshot của toàn bộ dataset
-  
-  Fork + Copy-on-Write:
-    Parent process tiếp tục serve requests
-    Child process ghi snapshot vào disk
-    Nếu parent modify data → Copy-on-write (không ảnh hưởng snapshot)
-
-Trade-off:
-  ✅ File nhỏ gọn (compressed binary)
-  ✅ Restart nhanh (load binary file)
-  ✅ Tốt cho backups
-  ❌ Có thể mất data (nếu crash giữa 2 snapshots)
-  
-Default config:
-  save 900 1   → Snapshot nếu 1 change trong 900s
-  save 300 10  → Snapshot nếu 10 changes trong 300s
-  save 60 10000 → Snapshot nếu 10000 changes trong 60s
-```
-
----
-
-## Pub/Sub Model
-
-```
-Redis pub/sub hoạt động trên raw TCP connections:
-
-  Publisher → [PUBLISH channel "message"] → Redis server
-                                                 │
-                                                 ▼
-  Subscriber 1 ← [message pushed] ─────────────┘
-  Subscriber 2 ← [message pushed] ─────────────┘
-
-Khi subscribe, connection chuyển sang "push mode":
-  - Client không thể gửi thêm commands (chỉ nhận messages)
-  - Redis sẽ push messages đến client (không polling)
-  - Connection phải maintained (stateful)
+```bash
+# Vo hieu hoa cac lenh nguy hiem trong san pham that
+rename-command KEYS ""
+rename-command FLUSHALL ""
+rename-command FLUSHDB ""
 ```
 
 ```bash
-# Terminal 1 - Subscriber
-redis-cli SUBSCRIBE new_videos
-# → 1) "subscribe"
-# → 2) "new_videos"
-# → 3) (integer) 1
-# → (waiting for messages...)
+# Theo doi lenh cham
+redis-cli CONFIG SET slowlog-log-slower-than 10000    # 10 ms
+redis-cli SLOWLOG GET 10
+```
 
-# Terminal 2 - Publisher
-redis-cli PUBLISH new_videos "Redis Crash Course uploaded"
-# → (integer) 1  ← Số subscribers nhận được
+Và luôn dùng `SCAN` thay `KEYS`:
 
-# Terminal 1 nhận được:
-# → 1) "message"
-# → 2) "new_videos"
-# → 3) "Redis Crash Course uploaded"
+```text
+   KEYS pattern   →  O(n), CHAN toan bo server
+   SCAN cursor    →  lap dan, moi lan tra ve mot phan, KHONG chan
 ```
 
 ---
 
-## Replication và Clustering
+## Mã hoá — cùng kiểu dữ liệu, nhiều cách lưu
 
-### Replication
+Đây là phần nội tại thú vị nhất và có tác động lớn nhất tới bộ nhớ.
 
-```
-Redis replication: Master-Replica model
+```text
+   MOT KIEU DU LIEU (vi du: Hash) CO NHIEU MA HOA BEN TRONG
 
-  Master (Writes + Reads)
-     │
-     ├─→ Replica 1 (Reads only)
-     ├─→ Replica 2 (Reads only)
-     └─→ Replica 3 (Reads only)
-
-  - Asynchronous replication (eventual consistency)
-  - Replicas pull changes từ master
-  - Clients read từ replicas để scale reads
+   Nho  →  listpack   : mang phang, quet tuyen tinh O(n)
+                        → RAT gon, tot voi it phan tu
+   Lon  →  hashtable  : bang bam that, O(1)
+                        → ton hon nhieu, nhung nhanh voi nhieu phan tu
 ```
 
-### Clustering (Redis Cluster)
-
-```
-Redis Cluster = Horizontal sharding + Replication
-
-  Cluster có 16,384 hash slots:
-  
-  Node A: slots 0-5460
-    ├─ Replica A1
-    └─ Replica A2
-    
-  Node B: slots 5461-10922
-    ├─ Replica B1
-    └─ Replica B2
-    
-  Node C: slots 10923-16383
-    ├─ Replica C1
-    └─ Replica C2
-
-  key "foo" → hash → slot 7638 → Node B
-  key "bar" → hash → slot 2198 → Node A
-```
-
----
-
-## Demo: Redis với Docker
+Ngưỡng chuyển đổi:
 
 ```bash
-# Khởi động Redis container
-docker run --name redis-demo -p 6379:6379 -d redis
+redis-cli CONFIG GET hash-max-listpack-entries    # 128
+redis-cli CONFIG GET hash-max-listpack-value      # 64
+```
 
-# Connect bằng Redis CLI
-docker exec -it redis-demo redis-cli
+```text
+   Hash co <= 128 truong VA moi gia tri <= 64 byte  →  listpack
+   Vuot MOT trong hai nguong                        →  hashtable
+```
 
-# Basic operations
-SET name "Hussein"    → OK
-GET name              → "Hussein"
+Kiểm tra mã hoá thật:
 
-# Set với expiry (10 giây)
-SET temp_key "value" EX 10  → OK
-GET temp_key                 → "value"
-# (10 giây sau...)
-GET temp_key                 → (nil)
+```bash
+redis-cli HSET h1 f1 v1 f2 v2
+redis-cli OBJECT ENCODING h1
+```
 
-# Check if exists
-EXISTS name      → (integer) 1
-EXISTS unknown   → (integer) 0
-
-# Delete
-DEL name         → (integer) 1
-EXISTS name      → (integer) 0
-
-# Append
-SET name "Hussein"
-APPEND name " Nasser"   → (integer) 14
-GET name                 → "Hussein Nasser"
+```text
+"listpack"
 ```
 
 ```bash
-# Pub/Sub demo
-# Terminal 1:
-SUBSCRIBE my-channel
-# → waiting...
+redis-cli HSET h1 f3 $(python3 -c "print('x'*100)")
+redis-cli OBJECT ENCODING h1
+```
 
-# Terminal 2:
-PUBLISH my-channel "Hello!"
-# → (integer) 1
+```text
+"hashtable"
+```
 
-# Terminal 1 receives:
-# → 1) "message"
-# → 2) "my-channel"
-# → 3) "Hello!"
+### Chuyển đổi là MỘT CHIỀU
+
+Đây là chi tiết rất quan trọng và rất hay bị bỏ sót:
+
+```bash
+redis-cli HDEL h1 f3                    # xoa truong dai di
+redis-cli OBJECT ENCODING h1
+```
+
+```text
+"hashtable"        ← VAN LA hashtable, KHONG quay ve listpack
+```
+
+```text
+   → Chi MOT lan vuot nguong la ma hoa doi VINH VIEN
+   → Bo nho khong bao gio quay lai muc cu
+   → Muon quay ve: phai XOA khoa va tao lai
+```
+
+Tác động thực tế có thể rất lớn:
+
+```text
+   1 TRIEU hash, moi cai 10 truong nho
+     listpack  :  ~104 byte/hash  →  104 MB
+     hashtable :  ~400 byte/hash  →  400 MB
+
+   → Chi vi MOT truong vuot 64 byte trong moi hash,
+     bo nho tang GAP 4 LAN.
+```
+
+Bảng ngưỡng cho các kiểu:
+
+| Kiểu | Mã hoá nhỏ | Ngưỡng |
+|---|---|---|
+| Hash | `listpack` | `hash-max-listpack-entries` 128, `-value` 64 |
+| List | `listpack` → `quicklist` | `list-max-listpack-size` 128 |
+| Set (số nguyên) | `intset` | `set-max-intset-entries` 512 |
+| Set (khác) | `listpack` | `set-max-listpack-entries` 128 |
+| Sorted set | `listpack` → `skiplist` | `zset-max-listpack-entries` 128 |
+| String | `int` / `embstr` / `raw` | `embstr` nếu ≤ **44 byte** |
+
+Ngưỡng 44 byte của `embstr` cũng đáng nhớ: chuỗi ≤ 44 byte được lưu **cùng một khối bộ nhớ** với đối tượng, tiết kiệm một lần cấp phát.
+
+### Điều tra bộ nhớ
+
+```bash
+redis-cli --bigkeys          # tim khoa lon nhat moi kieu
+redis-cli --memkeys          # tim khoa ton bo nho nhat
+redis-cli MEMORY USAGE khoa  # bo nho THAT cua mot khoa
+redis-cli MEMORY DOCTOR      # goi y tu Redis
+redis-cli INFO memory
+```
+
+Chú ý phân biệt hai lệnh hay bị nhầm:
+
+```text
+   OBJECT ENCODING khoa   →  tra ve TEN MA HOA ("listpack", "hashtable")
+   MEMORY USAGE khoa      →  tra ve SO BYTE
+                             (co tuy chon SAMPLES n de lay mau)
 ```
 
 ---
 
-## CAP Theorem
+## Độ bền — Redis chọn được mức
 
-### Ba thuộc tính
+Redis **không** phải cache thuần tuý; nó lưu xuống đĩa được, và cho bạn chọn mức đảm bảo:
 
-```
-C - Consistency (Tính nhất quán khi đọc):
-  "Nếu tôi vừa write, mọi read tiếp theo phải thấy giá trị mới"
-  
-  Ví dụ nhất quán:
-    Write balance = 1000 → Read balance từ bất kỳ node → 1000 ✅
-  
-  Ví dụ không nhất quán:
-    Write balance = 1000 → Read từ replica cũ → 900 ❌
-
-A - Availability (Tính sẵn sàng):
-  "Mọi request đều nhận được response (dù kết quả có thể cũ)"
-  
-  Hệ thống có cache: Luôn trả về kết quả (dù có thể stale) ✅
-  Hệ thống fail 503: Không có response ❌
-
-P - Partition Tolerance (Chịu lỗi mạng):
-  "Hệ thống tiếp tục hoạt động dù có network failures"
-  
-  Network partition = Các nodes không communicate được với nhau
-  
-  Single node: P = N/A (không có network giữa nodes)
-  Distributed: P luôn phải được tolerate (mạng luôn có thể lỗi)
+```text
+   RDB (anh chup)                     AOF (nhat ky nhung lenh ghi)
+   ═════════════                      ════════════════════════════
+   Dinh ky luu toan bo trang thai     Ghi lai MOI lenh thay doi du lieu
+   → file nho, khoi phuc nhanh        → file lon, khoi phuc cham hon
+   → MAT du lieu giua hai lan chup    → mat toi da theo appendfsync
+   → fork() tao ban sao → dung        → ghi lai dinh ky de gon lai
+     bo nho tam thoi tang vot
 ```
 
-### Định lý CAP
-
-```
-"Với hệ thống distributed (P), bạn chỉ có thể chọn C hoặc A, không thể cả hai"
-
-┌─────────────────────────────────────────────────────┐
-│                                                     │
-│    C ────── Impossible ──────── A                  │
-│    │           zone             │                   │
-│    │                            │                   │
-│    └──────────── P ─────────────┘                  │
-│                                                     │
-│  CA: Consistent + Available (single node, no dist) │
-│  CP: Consistent + Partition-tolerant               │
-│  AP: Available + Partition-tolerant                │
-└─────────────────────────────────────────────────────┘
+```bash
+# appendfsync — nut van do ben
+appendfsync always     # fsync moi lenh — khong mat gi, cham nhat
+appendfsync everysec   # fsync moi giay — mat toi da 1 giay  (MAC DINH)
+appendfsync no         # de he dieu hanh quyet — co the mat ~30 giay
 ```
 
-### Ví dụ: Master + 2 Replicas
+Đây là ví dụ đẹp cho nguyên tắc ở [phase-2 bài 2](../phase-2/02-atomicity-va-durability.md): **độ bền là nút vặn, không phải công tắc**. Redis công khai điều đó thay vì giấu đi.
 
-```
-Scenario: Write vào master, sau đó replica có thể read
+### Cái bẫy của `fork()`
 
-AP System (Asynchronous replication):
-  Client → Write to master → Master commits → "Success" → Client
-                                   │
-                     (Background: propagate to replicas)
-  
-  Nếu client đọc ngay từ replica:
-    → Có thể thấy data cũ (inconsistent)
-    → Nhưng read luôn succeed (available)
-  
-  Nếu network fail:
-    → Master vẫn available
-    → Replicas vẫn available (serve stale data)
-  
-  → Chọn: Available, nhưng không Consistent
+```text
+   Ca RDB lan viec ghi lai AOF deu dung fork().
 
-CP System (Synchronous replication):
-  Client → Write to master → Sync replicas → All reply "done" → Commit → "Success"
-  
-  Nếu replica không reply:
-    → Transaction fail (hoặc timeout)
-    → Client nhận lỗi (unavailable!)
-    → Nhưng data luôn consistent khi succeed
-  
-  → Chọn: Consistent, nhưng không Available khi có failures
+   Linh vuc copy-on-write: ban sao ban dau khong ton bo nho.
+   NHUNG neu ung dung dang ghi nhieu trong luc fork chay:
+     → cac page bi sua phai duoc SAO CHEP THAT
+     → bo nho co the tang toi GAP DOI trong thoi gian ngan
+     → neu may khong du RAM → OOM killer giet Redis
 ```
 
-### Ví dụ thực tế
+Phòng thủ:
 
-```
-AP Systems (Available + Partition tolerant):
-  - Cassandra (eventual consistency)
-  - DynamoDB (default: eventual)
-  - CouchDB
-  - Memcached (stale cache)
-  
-  Use cases: Shopping cart, social media feeds, DNS
-  "Tôi chấp nhận data có thể cũ, miễn là luôn có response"
-
-CP Systems (Consistent + Partition tolerant):
-  - HBase
-  - Zookeeper
-  - MongoDB (với write concern majority)
-  - Redis Cluster (trong một số configurations)
-  
-  Use cases: Banking, inventory, distributed locks
-  "Tôi cần đúng 100%, chấp nhận có lúc không available"
-
-CA Systems (Consistent + Available):
-  - PostgreSQL (single node)
-  - MySQL (single node)
-  - SQLite
-  
-  Use cases: Bất kỳ nơi nào không cần distributed
-  "Single node, không partition tolerance"
+```bash
+# Cho phep cap phat vuot muc — BAT BUOC voi Redis
+sysctl vm.overcommit_memory=1
 ```
 
-### Consistency trong CAP vs ACID
+Không đặt tham số này là nguyên nhân số một khiến Redis bị giết lúc lưu ảnh chụp.
 
+---
+
+## Redis Cluster
+
+```text
+   16.384 KHE BAM (hash slot) chia cho cac nut
+
+   slot = CRC16(khoa) mod 16384
+
+   Nut A: khe     0 - 5460
+   Nut B: khe  5461 - 10922
+   Nut C: khe 10923 - 16383
 ```
-CẢNH BÁO: Đây là 2 khái niệm khác nhau!
 
-Consistency trong ACID:
-  → Dữ liệu luôn hợp lệ theo business rules
-  → Ví dụ: Unique constraint, Foreign key, Check constraint
-  → "Tôi không có orphan records"
-  → "Sum của transactions = account balance"
+Con số 16.384 là cố định, không đổi được — nó đủ nhỏ để bảng khe vừa trong gói tin trao đổi giữa các nút, và đủ lớn để chia mịn cho hàng trăm nút.
 
-Consistency trong CAP:
-  → Read luôn thấy write mới nhất
-  → "Nếu tôi write lúc 12:00:00, mọi read sau đó thấy giá trị mới"
-  → Về reads, không phải về data validity
+### Giới hạn: thao tác nhiều khoá
 
-Ví dụ:
-  ACID consistent: Account balance = tổng transactions ✅
-  CAP consistent: Read từ replica thấy write vừa xong ✅/❌
-  
-  Một hệ thống có thể ACID consistent nhưng CAP inconsistent
-  (write đến master, read từ replica chưa sync)
+```bash
+redis-cli -c MSET user:1 a user:2 b
+```
+
+```text
+(error) CROSSSLOT Keys in request don't hash to the same slot
+```
+
+Lời giải là **hash tag** — phần trong ngoặc nhọn quyết định khe:
+
+```bash
+redis-cli -c MSET "user:{42}:name" An "user:{42}:email" an@x.com
+```
+
+```text
+   Ca hai khoa deu bam theo "42"
+   → cung mot khe → cung mot nut → thao tac nhieu khoa CHAY DUOC
+```
+
+Đây chính là kỹ thuật **nhóm cùng vị trí** ở [phase-7 bài 1](../phase-7/01-database-sharding-la-gi.md), áp cho Redis.
+
+### Cluster không đảm bảo nhất quán mạnh
+
+```text
+   Redis Cluster dung nhan ban BAT DONG BO.
+
+   1. Client ghi vao primary → primary tra ve OK NGAY
+   2. Primary chet TRUOC KHI kip nhan ban
+   3. Replica duoc thang cap
+   → LENH GHI DO BIEN MAT
+```
+
+Redis ghi rõ điều này trong tài liệu. Nếu cần đảm bảo mạnh hơn:
+
+```bash
+WAIT 1 1000     # cho it nhat 1 replica xac nhan, toi da 1000 ms
+```
+
+Nhưng `WAIT` **không phải** commit hai pha — nó chỉ giảm cửa sổ mất dữ liệu, không loại bỏ hoàn toàn.
+
+---
+
+## Định lý CAP
+
+Bây giờ tới khung tư duy tổng quát cho **mọi** hệ phân tán.
+
+```text
+   Trong mot he PHAN TAN, khi mang bi CHIA CAT (partition),
+   ban phai chon giua:
+
+        C — Consistency  (nhat quan): moi nut tra ve du lieu MOI NHAT
+        A — Availability (kha dung) : moi yeu cau deu duoc tra loi
+        P — Partition tolerance     : he van chay khi mang dut
+
+   → P KHONG PHAI LUA CHON. Mang SE dut.
+   → Nen thuc te chi la: chon C hay chon A khi P xay ra.
+```
+
+### Diễn bằng ví dụ
+
+```text
+   BINH THUONG                        MANG DUT
+   ═══════════                        ════════
+   ┌─────┐  ◀──▶  ┌─────┐             ┌─────┐   ✂   ┌─────┐
+   │ NUT A│        │ NUT B│            │ NUT A│      │ NUT B│
+   │ x=5  │        │ x=5  │            │ x=5  │      │ x=5  │
+   └─────┘        └─────┘             └─────┘      └─────┘
+                                          ▲            ▲
+                                     ghi x=9      doc x = ?
+
+   CHON C (nhat quan):  nut B TU CHOI tra loi
+                        → "toi khong chac minh co du lieu moi nhat"
+                        → he KHONG KHA DUNG voi B
+
+   CHON A (kha dung) :  nut B tra ve x=5 (du lieu CU)
+                        → he van chay, nhung KHONG NHAT QUAN
+```
+
+### Bản đồ các hệ
+
+| Hệ | Thiên về | Ghi chú |
+|---|---|---|
+| **PostgreSQL** (một nút) | Không áp dụng | Không phân tán thì không có P |
+| **PostgreSQL** + nhân bản đồng bộ | **CP** | Replica chết → ghi bị chặn |
+| **PostgreSQL** + nhân bản bất đồng bộ | **AP** | Replica trả dữ liệu cũ |
+| **MongoDB** (`w: majority`) | **CP** | Không đủ đa số → từ chối ghi |
+| **MongoDB** (`w: 1`) | Thiên AP | Có thể mất ghi khi chuyển đổi |
+| **Redis Cluster** | **AP** | Nhân bản bất đồng bộ, có thể mất ghi |
+| **Cassandra** | **AP** (cấu hình được) | Điều chỉnh qua mức nhất quán |
+| **etcd / ZooKeeper / Consul** | **CP** | Dựa trên Raft/Paxos, mất đa số → dừng |
+| **CockroachDB / Spanner** | **CP** | Ưu tiên đúng đắn tuyệt đối |
+| **DynamoDB** | Cấu hình được | Đọc nhất quán mạnh hoặc cuối cùng |
+
+Dòng đầu tiên đáng chú ý: **CAP chỉ áp dụng cho hệ phân tán**. Một PostgreSQL đơn lẻ không "chọn CP" — nó đơn giản không nằm trong bài toán.
+
+### PACELC — mở rộng thực dụng hơn
+
+CAP chỉ nói về lúc mạng đứt. Nhưng mạng đứt là chuyện **hiếm**. PACELC bổ sung phần còn lại:
+
+```text
+   NEU (P) mang dut  →  chon giua (A) kha dung va (C) nhat quan
+   NGUOC LAI (E)     →  chon giua (L) do tre thap va (C) nhat quan
+```
+
+```text
+   Vi du:
+     PostgreSQL dong bo : PC / EC   — luon uu tien nhat quan
+     Cassandra          : PA / EL   — luon uu tien kha dung va do tre
+     MongoDB            : PC / EC   — nhung dieu chinh duoc
+     DynamoDB           : PA / EL   — mac dinh
+```
+
+PACELC hữu dụng hơn CAP trong thực tế, vì phần "EL" — đánh đổi giữa **độ trễ** và **nhất quán** khi mạng **bình thường** — mới là thứ bạn đối mặt hàng ngày.
+
+Đây chính xác là đánh đổi đã gặp ở [phase-9 bài 1](../phase-9/01-database-replication-la-gi.md): `synchronous_commit = remote_apply` chọn C và trả giá bằng L; `off` chọn L và trả giá bằng C.
+
+### Ba hiểu lầm phổ biến về CAP
+
+```text
+   ❌ "Chon 2 trong 3"
+   ✔  P khong phai lua chon. Chi chon C hay A KHI P xay ra.
+
+   ❌ "NoSQL la AP, SQL la CP"
+   ✔  Phu thuoc CAU HINH, khong phu thuoc loai san pham.
+      PostgreSQL bat dong bo la AP. MongoDB w:majority la CP.
+
+   ❌ "He AP thi khong dang tin"
+   ✔  Rat nhieu nghiep vu chap nhan duoc du lieu tre vai tram ms.
+      Dem luot thich, goi y san pham, thong ke — deu on voi AP.
+      Chi tien bac, ton kho, cho ngoi moi thuc su can C.
 ```
 
 ---
 
-## Tóm tắt: Chọn gì cho use case nào?
+## Chọn mức nhất quán theo nghiệp vụ
 
-```
-┌─────────────────────┬────────────────────────────────────────┐
-│ Use Case            │ Recommendation                         │
-├─────────────────────┼────────────────────────────────────────┤
-│ Session storage     │ Redis (AP, fast, auto-expiry)          │
-│ Rate limiting       │ Redis (atomic INCR, fast)              │
-│ Leaderboard         │ Redis ZSet (sorted set)                │
-│ Message queue       │ Redis Pub/Sub hoặc Redis Streams       │
-│ Cache (simple)      │ Memcached (lighter weight)             │
-│ Cache (advanced)    │ Redis (persistence, rich types)        │
-│ Distributed lock    │ Redis RedLock (CP)                     │
-│ Banking, inventory  │ PostgreSQL/MySQL (ACID + CA)           │
-│ Social feed         │ Cassandra/DynamoDB (AP + scale)        │
-│ Config/consensus    │ Zookeeper/etcd (CP)                    │
-└─────────────────────┴────────────────────────────────────────┘
-```
+Cách áp dụng CAP vào quyết định thật:
 
----
+| Loại dữ liệu | Cần | Vì sao |
+|---|---|---|
+| Số dư tài khoản | **C tuyệt đối** | Sai một đồng là sai |
+| Tồn kho khi đặt hàng | **C** | Bán quá số lượng là mất tiền |
+| Chỗ ngồi, vé | **C** | Đặt trùng là sự cố |
+| Đếm lượt thích | **A** | Lệch vài trăm mili-giây không ai biết |
+| Gợi ý sản phẩm | **A** | Cũ vài phút cũng không sao |
+| Thống kê, báo cáo | **A** | Vốn đã là dữ liệu quá khứ |
+| Phiên đăng nhập | **A** kèm dính phiên | Ưu tiên độ trễ |
+| Cấu hình, cờ tính năng | **A** kèm TTL ngắn | Đọc rất nhiều, đổi rất ít |
 
-**Tiếp theo:** Phase 14 - Database Security →
+Bảng này quan trọng hơn việc thuộc định nghĩa CAP: **một hệ thống thật thường cần cả hai mức, cho các loại dữ liệu khác nhau**.
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Chạy `KEYS *` trên production | Chặn toàn bộ server nhiều giây | `SCAN`; và `rename-command KEYS ""` |
+| Bỏ qua chuyển đổi mã hoá một chiều | Bộ nhớ tăng gấp 4 lần vĩnh viễn | Giữ giá trị dưới ngưỡng; theo dõi `OBJECT ENCODING` |
+| Không đặt `vm.overcommit_memory=1` | Redis bị OOM killer giết lúc lưu ảnh chụp | `sysctl vm.overcommit_memory=1` |
+| Dùng Redis Cluster mà không dùng hash tag | Thao tác nhiều khoá báo `CROSSSLOT` | `{...}` để nhóm khoá liên quan |
+| Coi Redis Cluster là nhất quán mạnh | Mất lệnh ghi khi chuyển đổi | `WAIT`, hoặc dùng hệ CP cho dữ liệu quan trọng |
+| Nghĩ CAP là "chọn 2 trong 3" | Hiểu sai bản chất đánh đổi | P bắt buộc; chỉ chọn C hay A khi P xảy ra |
+| Áp một mức nhất quán cho toàn hệ thống | Vừa chậm vừa không cần thiết | Chọn theo **từng loại dữ liệu** |
+| Bỏ qua `appendfsync` mặc định | Mất tối đa 1 giây dữ liệu mà không biết | Biết mức mình đang chạy, và có ý thức về nó |
+
+## Tóm tắt bài 3
+
+- Redis nhanh nhờ bốn lý do, trong đó **một luồng** là lý do phản trực giác nhất: với thao tác chỉ mất ~200 ns, **chi phí khoá và chuyển ngữ cảnh lớn hơn chính công việc**.
+- Hệ quả: **một lệnh chậm chặn tất cả**. `KEYS *` trên 10 triệu khoá làm treo server 2 giây. Luôn dùng `SCAN`, và vô hiệu hoá các lệnh nguy hiểm.
+- **Mã hoá bên trong** quyết định bộ nhớ: `listpack` gọn nhưng O(n), `hashtable` tốn nhưng O(1). **Chuyển đổi là một chiều** — vượt ngưỡng một lần là đổi vĩnh viễn, và bộ nhớ có thể tăng **gấp 4 lần**.
+- Phân biệt `OBJECT ENCODING` (trả về **tên mã hoá**) với `MEMORY USAGE` (trả về **số byte**).
+- **Độ bền của Redis là nút vặn** (`appendfsync always/everysec/no`), và Redis công khai điều đó thay vì giấu. `fork()` cho RDB/AOF có thể làm bộ nhớ tăng gấp đôi — bắt buộc đặt `vm.overcommit_memory=1`.
+- **Redis Cluster** chia 16.384 khe; thao tác nhiều khoá cần **hash tag** `{...}` — chính là nhóm cùng vị trí của sharding. Và nó **nhân bản bất đồng bộ**, nên có thể mất lệnh ghi khi chuyển đổi.
+- **CAP không phải "chọn 2 trong 3"**: P là bắt buộc, bạn chỉ chọn C hay A **khi** P xảy ra. Và lựa chọn phụ thuộc **cấu hình**, không phụ thuộc loại sản phẩm.
+- **PACELC** thực dụng hơn: nó thêm phần "khi mạng bình thường, chọn giữa **độ trễ** và **nhất quán**" — đó mới là đánh đổi bạn đối mặt hàng ngày.
+- Một hệ thống thật thường cần **cả hai mức**, cho các loại dữ liệu khác nhau: tiền bạc cần C, lượt thích chỉ cần A.
+
+**Bài kế tiếp** → [Phase 14 — Bài 1: Bảo mật kết nối Database với TLS/SSL](../phase-14/01-bao-mat-ket-noi-database-tls.md)
