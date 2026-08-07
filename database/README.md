@@ -12,18 +12,19 @@ Khoá về **nội tại database engine**: ACID và từng thuộc tính, page/
 
 | Bài | Nội dung |
 |---|---|
-| [01](phase-1/01-gioi-thieu-khoa-hoc.md) | Bài 1: Giới thiệu khóa học Database Engines Crash Course |
+| [00](phase-1/00-tu-dien-thuat-ngu-database-cho-nguoi-moi.md) | Bài 0: Từ điển thuật ngữ Database cho người mới |
+| [01](phase-1/01-gioi-thieu-khoa-hoc.md) | Bài 1: Vì sao phải đi xuống dưới lớp SQL |
 | [02](phase-1/02-lo-trinh-hoc-database.md) | Bài 2: Lộ trình học Database Engineering |
 
 ### Phase 2
 
 | Bài | Nội dung |
 |---|---|
-| [01](phase-2/01-acid-va-transaction.md) | Bài 1: ACID và Transaction là gì? |
-| [02](phase-2/02-atomicity-va-durability.md) | Bài 2: Atomicity và Durability |
-| [03](phase-2/03-isolation-va-read-phenomena.md) | Bài 3: Isolation và Read Phenomena |
-| [04](phase-2/04-consistency-va-eventual-consistency.md) | Bài 4: Consistency và Eventual Consistency |
-| [05](phase-2/05-acid-thuc-hanh-voi-postgres.md) | Bài 5: ACID Thực hành với PostgreSQL |
+| [01](phase-2/01-acid-va-transaction.md) | Bài 1: ACID và Transaction — 100 nghìn đồng bốc hơi thế nào |
+| [02](phase-2/02-atomicity-va-durability.md) | Bài 2: Atomicity và Durability — cỗ máy chống mất dữ liệu |
+| [03](phase-2/03-isolation-va-read-phenomena.md) | Bài 3: Isolation và bốn hiện tượng đọc bất thường |
+| [04](phase-2/04-consistency-va-eventual-consistency.md) | Bài 4: Consistency — hai loại nhất quán mà ai cũng nhầm thành một |
+| [05](phase-2/05-acid-thuc-hanh-voi-postgres.md) | Bài 5: ACID thực hành — nhìn thấy bốn chữ cái bằng mắt |
 
 ### Phase 3
 
