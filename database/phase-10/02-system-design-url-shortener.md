@@ -1,384 +1,556 @@
-# Bài 2: System Design - URL Shortener
+# Bài 2: System Design — URL Shortener
 
-## Bài toán
+Bài toán nghe đơn giản nhất trong mọi bài system design:
 
-Xây dựng hệ thống rút gọn URL:
-- **Write**: Nhận URL dài → Tạo và lưu URL ngắn
-- **Read**: Nhận URL ngắn → Trả về URL gốc (redirect)
+```text
+   POST /shorten   { "url": "https://example.com/rat/dai/..." }
+   →  { "short": "https://sho.rt/9aX3kP" }
 
-Ví dụ: `https://wikipedia.org/wiki/Database_sharding` → `mydomain.com/abc12`
+   GET  /9aX3kP    →  chuyển hướng 301/302 tới URL dài
+```
+
+Chính vì đơn giản nên nó là bài kiểm tra tốt: mọi quyết định đều lộ ra rõ ràng, và mỗi lựa chọn đều có đánh đổi đo được.
+
+## Đặc điểm quyết định toàn bộ thiết kế
+
+```text
+   TỈ LỆ ĐỌC/GHI ≈ 100:1 tới 1000:1
+
+   Một URL được rút gọn MỘT LẦN, nhưng được bấm HÀNG NGHÌN LẦN.
+   → Mọi tối ưu phải dồn cho ĐƯỜNG ĐỌC.
+   → Đường ghi có chậm hơn chút cũng không sao.
+```
+
+Ước lượng để có con số cụ thể:
+
+```text
+   100 triệu URL mới mỗi tháng
+     →  100.000.000 / (30 × 86.400)  ≈  39 lần ghi/giây
+
+   Tỉ lệ đọc/ghi 100:1
+     →  ≈ 3.900 lần đọc/giây  (đỉnh ×3 ≈ 12.000)
+
+   Dung lượng: mỗi bản ghi ~500 byte (URL dài + metadata)
+     →  100 triệu × 500 byte     =  50 GB/tháng
+     →  giữ 5 năm                =  3 TB
+```
+
+3 TB là con số quan trọng: nó nằm trong tầm **một máy chủ**. Bài này không cần sharding — và nói được điều đó là một điểm cộng.
 
 ---
 
-## Design 1: Sequential ID (Đơn giản nhất)
-
-### Database Schema
+## Thiết kế 1 — ID tự tăng chuyển sang base62
 
 ```sql
 CREATE TABLE urls (
-    id   BIGSERIAL PRIMARY KEY,  -- Auto-increment 64-bit
-    url  TEXT NOT NULL           -- Long URL
+    id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    long_url TEXT        NOT NULL,
+    created  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- index trên id là tự động (PRIMARY KEY)
 ```
 
-### Cách hoạt động
+```text
+   GHI:  INSERT ... RETURNING id     →  id = 125
+         ma_ngan = base62(125)       →  "27"
+         tra ve  https://sho.rt/27
 
-```
-Write (Rút gọn URL):
-  POST /shorten
-  Body: { "url": "https://wikipedia.org/..." }
-  
-  → INSERT INTO urls (url) VALUES ($1) RETURNING id
-  → Database tự tạo id = 12345
-  → Short URL = domain.com/12345
-  → Trả về { "shortUrl": "domain.com/12345" }
-
-Read (Mở rộng URL):
-  GET /12345
-  
-  → SELECT url FROM urls WHERE id = 12345
-  → id là PRIMARY KEY → Index tự động
-  → B+Tree lookup: O(log N) nhưng rất nhanh với integer key
-  → 302 Redirect đến URL gốc
+   DOC:  GET /27
+         id = base62_nguoc("27")     →  125
+         SELECT long_url WHERE id = 125
+         → 301 Redirect
 ```
 
-### Performance Analysis
+Chuyển đổi base62 (dùng `0-9a-zA-Z`):
 
-```
-Write performance:
-  ✅ INSERT + auto-increment = KHÔNG cần check duplicate
-  ✅ id luôn unique theo definition
-  ✅ B+Tree insert: Vẫn nhanh nhưng chậm dần theo thời gian
-  
-  Nếu dùng B+Tree engine (PostgreSQL mặc định):
-    → Rebalancing tree khi insert nhiều
-    → Vẫn nhanh vì insert luôn ở cuối (sequential)
-    
-  Nếu dùng LSM-tree (Cassandra, RocksDB/MyRocks):
-    → Writes cực nhanh (append-only)
-    → Tốt hơn nếu write-heavy
+```python
+BANG = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-Read performance:
-  ✅ id là integer (64-bit) → Index nhỏ gọn
-  ✅ Index lookup với integer: Cực kỳ nhanh
-  ✅ B+Tree với integer key: ~512-2048 keys/page → Tree nông
-  ✅ 1 tỷ rows → Chỉ cần 3-4 I/O hops!
+def sang_base62(n):
+    if n == 0:
+        return BANG[0]
+    s = []
+    while n:
+        n, du = divmod(n, 62)
+        s.append(BANG[du])
+    return ''.join(reversed(s))
+
+def tu_base62(s):
+    n = 0
+    for c in s:
+        n = n * 62 + BANG.index(c)
+    return n
 ```
 
-### Nhược điểm
+### Vì sao base62 và cần bao nhiêu ký tự
 
+```text
+   HỆ CƠ SỐ         KÝ TỰ DÙNG              7 KÝ TỰ CHỨA ĐƯỢC
+   ────────         ──────────              ─────────────────
+   base10           0-9                     10⁷  = 10 triệu
+   base16           0-9a-f                  16⁷  = 268 triệu
+   base62           0-9a-zA-Z               62⁷  = 3.521 TỶ
+   base64           thêm + /                cần mã hoá URL → tránh
+
+   → 7 KÝ TỰ BASE62 = 3,5 NGHÌN TỶ URL.
+     Với 100 triệu URL/tháng thì đủ dùng ~2.900 NĂM.
 ```
-❌ Predictable (Dễ đoán):
-  Domain.com/1, /2, /3, /4...
-  → Attacker có thể scan toàn bộ database
-  → Loop i = 1 to 1_000_000 → Thu thập tất cả URLs
-  
-❌ Không hỗ trợ Custom URL:
-  User không thể chọn "domain.com/my-presentation"
+
+Nếu chỉ cần 10 năm (12 tỷ URL) thì **6 ký tự** (`62⁶ ≈ 56 tỷ`) đã đủ.
+
+### Ưu điểm
+
+```text
+   • Ghi CỰC nhanh: chỉ INSERT, KHÔNG cần kiểm tra trùng
+     → database tự đảm bảo id duy nhất
+     → không có vòng lặp "thử lại nếu trùng"
+   • Đọc CỰC nhanh: tra khoá chính, index nhỏ (chỉ số nguyên 8 byte)
+   • Không lãng phí: mã ngắn nhất có thể
 ```
+
+Điểm "không cần kiểm tra trùng" đáng nhấn mạnh: nó nghĩa là đường ghi chỉ có **một** lần chạm database, không có vòng lặp, không có điều kiện tranh chấp.
+
+### Ba vấn đề
+
+**Vấn đề 1 — đoán được và duyệt được**
+
+```text
+   /27 tồn tại  →  thử /28, /29, /2a ...
+   → duyệt được TOÀN BỘ URL trong hệ thống
+   → lộ dữ liệu riêng tư của người dùng khác
+```
+
+**Vấn đề 2 — lộ quy mô kinh doanh**
+
+```text
+   Tạo hai URL cách nhau một ngày:
+     hôm nay   →  /4Xj9k  →  giải mã = 1.245.883.221
+     hôm qua   →  /4Xh2p  →  giải mã = 1.242.118.004
+     hiệu      =  3.765.217
+
+   → Đối thủ biết chính xác bạn xử lý 3,7 triệu URL/ngày.
+   → Đây là "bài toán xe tăng Đức" áp dụng cho kinh doanh.
+```
+
+**Vấn đề 3 — điểm nghẽn khi có nhiều máy sinh ID**
+
+Nếu sau này shard, `BIGSERIAL` của các shard sẽ đụng nhau.
 
 ---
 
-## Design 2: Hash-based (Custom URL Support)
-
-### Database Schema
+## Thiết kế 2 — Mã ngẫu nhiên
 
 ```sql
 CREATE TABLE urls (
-    short_url  CHAR(8) PRIMARY KEY,  -- 8-char hash (custom or auto)
-    long_url   TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
+    id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    code     TEXT        NOT NULL UNIQUE,       -- ← ma ngan ngau nhien
+    long_url TEXT        NOT NULL,
+    created  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- PRIMARY KEY tự tạo index trên short_url
--- Không cần index riêng
+CREATE UNIQUE INDEX idx_urls_code ON urls (code);
 ```
 
-### Tạo Short URL ngẫu nhiên
+```python
+import secrets
 
-```javascript
-const crypto = require('crypto');
+BANG = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-function generateShortUrl(longUrl) {
-    // SHA-256 hash → Base64 encoding
-    const hash = crypto
-        .createHash('sha256')
-        .update(longUrl + Date.now())  // Salt = timestamp để tránh collision
-        .digest('base64url');          // base64url = safe cho URL
-    
-    return hash.substring(0, 8);  // Lấy 8 ký tự đầu
-}
+def sinh_ma(do_dai=7):
+    return ''.join(secrets.choice(BANG) for _ in range(do_dai))
 
-// Ví dụ output: 'aB3xY7mK'
-// Base64url alphabet: A-Z, a-z, 0-9, -, _
-// 8 ký tự: 64^8 = ~281 tỷ combinations
+def rut_gon(long_url, so_lan_thu=5):
+    for _ in range(so_lan_thu):
+        ma = sinh_ma()
+        try:
+            cur.execute("INSERT INTO urls (code, long_url) VALUES (%s, %s)",
+                        (ma, long_url))
+            return ma
+        except errors.UniqueViolation:
+            continue                     # trung → sinh ma khac
+    raise RuntimeError("Khong sinh duoc ma sau 5 lan thu")
 ```
 
-### Write với Collision Handling
+Chú ý: dùng `secrets` chứ không phải `random`. `random` dùng bộ sinh giả ngẫu nhiên **đoán được** — quan sát vài mã là suy ra được trạng thái nội bộ và dự đoán mã tiếp theo.
 
-```javascript
-async function shortenUrl(longUrl, customUrl = null) {
-    const pool = getDbPool();
-    
-    if (customUrl) {
-        // Custom URL: User tự chọn
-        try {
-            await pool.query(
-                'INSERT INTO urls (short_url, long_url) VALUES ($1, $2)',
-                [customUrl, longUrl]
-            );
-            return customUrl;
-        } catch (err) {
-            if (err.code === '23505') {  // Unique constraint violation
-                throw new Error('Custom URL already taken');
-            }
-            throw err;
-        }
-    }
-    
-    // Auto-generated URL
-    let retries = 0;
-    while (retries < 5) {
-        const shortUrl = generateShortUrl(longUrl);
-        
-        try {
-            await pool.query(
-                'INSERT INTO urls (short_url, long_url) VALUES ($1, $2)',
-                [shortUrl, longUrl]
-            );
-            return shortUrl;
-        } catch (err) {
-            if (err.code === '23505') {  // Collision: Try lại với hash khác
-                retries++;
-                continue;
-            }
-            throw err;
-        }
-    }
-    
-    throw new Error('Failed to generate unique short URL');
-}
+### Xác suất trùng — nghịch lý ngày sinh
+
+```text
+   Khong gian 7 ky tu base62 = 62⁷ ≈ 3,52 × 10¹²
+
+   Xac suat co IT NHAT MOT lan trung khi da co n ma:
+      P ≈ 1 − e^(−n²/2N)
+
+   n = 1 trieu       →  P ≈ 0,000014%   (gan nhu khong)
+   n = 100 trieu     →  P ≈ 0,14%
+   n = 1 ty          →  P ≈ 13%
+   n = 2,2 ty        →  P ≈ 50%
 ```
 
-```
-Collision Handling Logic:
-  1. Hash URL → 8 chars
-  2. INSERT (không SELECT trước!)
-  3. Nếu succeed: Done!
-  4. Nếu duplicate key error: Retry với salt mới
-  5. Tối đa 5 retries
-  
-Tại sao không SELECT trước?
-  → INSERT + check DB error: 1 round-trip
-  → SELECT + INSERT: 2 round-trips
-  → Collision rate với 8 chars: Cực kỳ thấp (< 0.001%)
-  → Retries hầu như không xảy ra trong thực tế
-```
+Điểm quan trọng: xác suất trên là **có ít nhất một lần trùng trong toàn bộ lịch sử**, và mỗi lần trùng chỉ khiến **một** lần chèn phải thử lại. Với `UNIQUE` bảo vệ, trùng **không bao giờ gây sai dữ liệu**.
 
-### Read
+Nhưng khi bảng gần đầy, tỉ lệ phải thử lại tăng dần và đường ghi chậm đi.
 
-```javascript
-async function expandUrl(shortUrl) {
-    const pool = getDbPool();
-    
-    // Sanitize input (tránh SQL injection)
-    if (!/^[A-Za-z0-9_-]{1,50}$/.test(shortUrl)) {
-        return null;  // Invalid format
-    }
-    
-    const result = await pool.query(
-        'SELECT long_url FROM urls WHERE short_url = $1',
-        [shortUrl]
-    );
-    
-    if (result.rowCount === 0) return null;
-    return result.rows[0].long_url;
-}
+### Ưu và nhược
 
-// Express endpoint
-app.get('/:shortUrl', async (req, res) => {
-    const longUrl = await expandUrl(req.params.shortUrl);
-    
-    if (!longUrl) {
-        return res.status(404).send('URL not found');
-    }
-    
-    // 301: Permanent redirect (browser caches → Giảm load)
-    // 302: Temporary redirect (không cache → Tốt cho analytics)
-    res.redirect(302, longUrl);
-});
-```
-
-### Performance Comparison
-
-```
-Design 1 (Sequential ID):   Design 2 (Hash-based):
-Write: ✅✅✅ Very fast      Write: ✅✅ Fast (với retries hiếm gặp)
-Read:  ✅✅✅ Very fast      Read:  ✅✅ Fast (string index lớn hơn)
-Security: ❌ Predictable    Security: ✅ Unpredictable
-Custom: ❌ Not supported    Custom: ✅ Supported
-
-Index size comparison:
-  BIGINT (8 bytes): ~1024 keys/page
-  CHAR(8) (8 bytes): ~1024 keys/page  ← Tương đương!
-  
-→ Performance gần giống nhau cho reads!
-```
+| Ưu | Nhược |
+|---|---|
+| **Không đoán được** — không duyệt được | Ghi cần **kiểm tra trùng** → thêm một lần chạm database |
+| **Không lộ quy mô** | Có thể phải thử lại nhiều lần khi gần đầy |
+| Sinh được ở nhiều máy không cần phối hợp | Index trên chuỗi lớn hơn index trên số nguyên |
 
 ---
 
-## Scaling URL Shortener
+## Thiết kế 3 — Băm URL dài
 
-### Phase 1: Single Server (0 → ~100M URLs)
+```python
+import hashlib, base64
 
-```
-Client → Web Server → PostgreSQL
-```
-
-### Phase 2: Read Replicas (100M → 1B URLs)
-
-```
-Reads >> Writes (99%+ workload là reads)
-→ Scale reads với replicas!
-
-Client → Load Balancer
-              │
-     ┌────────┴────────┐
-     │                 │
- Web Server 1    Web Server 2
-     │                 │
-     └────────┬────────┘
-              │
-   ┌──────────┼──────────┐
-   │          │          │
-Master    Replica 1   Replica 2
-(Writes)  (US Reads) (EU Reads)
+def sinh_ma(long_url):
+    h = hashlib.sha256(long_url.encode()).digest()
+    return base64.urlsafe_b64encode(h)[:7].decode()
 ```
 
-### Phase 3: Caching (Khi I/O là bottleneck)
+```text
+   ƯU:
+     • CÙNG một URL luôn cho CÙNG một mã → tự khử trùng lặp
+     • Không cần bảng tra để kiểm tra "URL này đã rút gọn chưa"
 
-```javascript
-// Redis cache cho popular URLs
-const redis = require('redis');
-const redisClient = redis.createClient();
-
-async function expandUrlWithCache(shortUrl) {
-    // Check cache first
-    const cached = await redisClient.get(`url:${shortUrl}`);
-    if (cached) {
-        return cached;  // Cache hit!
-    }
-    
-    // Cache miss: Query DB
-    const longUrl = await expandUrlFromDB(shortUrl);
-    
-    if (longUrl) {
-        // Cache for 1 hour
-        await redisClient.setEx(`url:${shortUrl}`, 3600, longUrl);
-    }
-    
-    return longUrl;
-}
+   NHƯỢC:
+     • Vẫn phải xử lý va chạm băm (hai URL khác nhau ra cùng mã)
+     • KHÔNG tạo được hai mã khác nhau cho cùng một URL
+       → nếu hai người dùng muốn thống kê riêng thì bó tay
+     • Vẫn đoán được: biết URL dài là tính ra được mã ngắn
 ```
 
-```
-Cache strategy:
-  - TTL: 1 hour (URLs không thường xuyên thay đổi)
-  - Eviction: LRU (Least Recently Used)
-  - Cache hit rate ~90%: → 90% requests không cần DB!
-```
+Nhược điểm thứ hai là lý do thiết kế này ít được dùng trong sản phẩm thật: người dùng thường muốn **theo dõi riêng** chiến dịch của mình, và cần các mã khác nhau cho cùng một đích đến.
 
-### Phase 4: Database Partitioning
+---
+
+## Thiết kế 4 — Kho mã sinh sẵn
+
+Cách các hệ lớn dùng, vì nó gộp được ưu điểm của cả hai:
+
+```text
+   ┌──────────────────────────────────────────────────────────┐
+   │  TIẾN TRÌNH NỀN                                          │
+   │  Sinh sẵn hàng triệu mã ngẫu nhiên, đã kiểm tra duy nhất │
+   │  Đổ vào bảng `code_pool` (status = 'free')               │
+   └────────────────────────┬─────────────────────────────────┘
+                            ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │  KHI CÓ YÊU CẦU RÚT GỌN                                  │
+   │  Lấy MỘT mã từ kho, đánh dấu đã dùng                     │
+   │  → KHÔNG cần sinh, KHÔNG cần kiểm tra trùng              │
+   │  → một thao tác database duy nhất                        │
+   └──────────────────────────────────────────────────────────┘
+```
 
 ```sql
--- Partition theo short_url prefix (Hash partitioning)
-CREATE TABLE urls PARTITION BY HASH(short_url);
+CREATE TABLE code_pool (
+    code   TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'free'
+);
+CREATE INDEX idx_pool_free ON code_pool (code) WHERE status = 'free';
+```
 
-CREATE TABLE urls_p0 PARTITION OF urls
-    FOR VALUES WITH (MODULUS 4, REMAINDER 0);
-    
-CREATE TABLE urls_p1 PARTITION OF urls
-    FOR VALUES WITH (MODULUS 4, REMAINDER 1);
-    
--- ... etc
+```sql
+-- Lay mot ma, an toan voi nhieu worker chay song song
+WITH lay AS (
+    SELECT code FROM code_pool
+     WHERE status = 'free'
+     LIMIT 1
+     FOR UPDATE SKIP LOCKED           -- ← chia khoa cua ca thiet ke nay
+)
+UPDATE code_pool p SET status = 'used'
+  FROM lay WHERE p.code = lay.code
+RETURNING p.code;
+```
+
+`FOR UPDATE SKIP LOCKED` ([phase-8 bài 1](../phase-8/01-shared-lock-va-exclusive-lock.md)) cho phép hàng chục worker cùng lấy mã mà **không ai chờ ai và không ai lấy trùng**.
+
+Index bộ phận `WHERE status = 'free'` giữ cho việc tìm mã rảnh luôn nhanh, kể cả khi bảng có hàng tỷ mã đã dùng — kỹ thuật ở [phase-4 bài 1](../phase-4/01-co-ban-ve-indexing.md).
+
+Cảnh báo cần đặt:
+
+```sql
+SELECT count(*) FROM code_pool WHERE status = 'free';
+-- Duoi 1 trieu → chay tien trinh sinh them
 ```
 
 ---
 
-## So sánh hai Design
+## So sánh bốn thiết kế
 
-```
-┌──────────────────┬───────────────────┬──────────────────────┐
-│ Tiêu chí         │ Design 1 (ID)     │ Design 2 (Hash)      │
-├──────────────────┼───────────────────┼──────────────────────┤
-│ URL format       │ /12345 (numbers)  │ /aB3xY7mK (chars)   │
-│ Predictability   │ ❌ Dễ scan        │ ✅ Khó đoán          │
-│ Custom URL       │ ❌ Không          │ ✅ Có                 │
-│ Write speed      │ ✅✅✅ Nhanh nhất │ ✅✅ Nhanh (ít retry) │
-│ Read speed       │ ✅✅✅ Nhanh nhất │ ✅✅ Nhanh            │
-│ Collision risk   │ ❌ 0%             │ ~0.001% (OK)         │
-│ Index size       │ Small (8 bytes)   │ Small (8 bytes)      │
-│ Use case         │ Internal systems  │ Public URL shorteners│
-└──────────────────┴───────────────────┴──────────────────────┘
+| | ID tự tăng | Ngẫu nhiên | Băm URL | Kho sinh sẵn |
+|---|---|---|---|---|
+| Ghi | **1 lần chạm DB** | 1-N lần (thử lại) | 1-N lần | **1 lần chạm DB** |
+| Đoán được | **Có** ✘ | Không ✔ | Có ✘ | Không ✔ |
+| Lộ quy mô | **Có** ✘ | Không ✔ | Không ✔ | Không ✔ |
+| Khử trùng URL | Không | Không | **Có** | Không |
+| Nhiều mã cho một URL | Có | Có | **Không** ✘ | Có |
+| Độ phức tạp | **Thấp nhất** | Thấp | Thấp | Cao |
+| Sinh được ở nhiều máy | Khó | **Dễ** | Dễ | Dễ |
 
-Chọn Design 1 nếu:
-  - Internal system (Twitter tự động shorten links)
-  - User không bao giờ thấy short URL trực tiếp
-  - Maximun write performance cần thiết
+Khuyến nghị thực dụng:
 
-Chọn Design 2 nếu:
-  - Public URL shortener (Bitly, TinyURL)
-  - User cần custom URL
-  - Security/privacy quan trọng
+```text
+   Dự án nhỏ, nội bộ         →  ID tự tăng (đơn giản nhất)
+   Sản phẩm công khai        →  Ngẫu nhiên (cân bằng tốt nhất)
+   Quy mô rất lớn            →  Kho sinh sẵn
 ```
 
 ---
 
-## SQL Injection Prevention
+## Đường đọc — nơi 99% lưu lượng đi qua
 
-```javascript
-// ❌ NGUY HIỂM: String interpolation
-const query = `SELECT * FROM urls WHERE short_url = '${userInput}'`;
-// Input: "'; DROP TABLE urls; --"
-// → Xóa toàn bộ bảng!
+### Truy vấn cơ bản
 
-// ✅ AN TOÀN: Parameterized query
-const query = 'SELECT * FROM urls WHERE short_url = $1';
-const result = await pool.query(query, [userInput]);
-// → userInput luôn được escape, không thể inject SQL
+```sql
+SELECT long_url FROM urls WHERE code = '9aX3kP';
+```
 
-// ✅ AN TOÀN: Input validation
-const SHORT_URL_REGEX = /^[A-Za-z0-9_-]{1,50}$/;
-if (!SHORT_URL_REGEX.test(userInput)) {
-    return res.status(400).send('Invalid URL format');
-}
+Với index duy nhất trên `code`, đây là **index scan trả về 1 dòng**: khoảng 0,1-0,3 ms. Nhưng với 12.000 lượt/giây thì vẫn nên có cache.
+
+### Cache
+
+```python
+def mo_rong(ma):
+    url = redis.get(f"u:{ma}")
+    if url:
+        return url                            # ~0,2 ms
+
+    cur.execute("SELECT long_url FROM urls WHERE code = %s", (ma,))
+    row = cur.fetchone()
+    if not row:
+        redis.setex(f"u:{ma}", 60, "__KHONG_TON_TAI__")   # cache ca ket qua RONG
+        return None
+
+    redis.setex(f"u:{ma}", 86400, row[0])     # TTL 1 ngay
+    return row[0]
+```
+
+Hai chi tiết quan trọng:
+
+| Chi tiết | Vì sao |
+|---|---|
+| **Cache cả kết quả rỗng** | Không có nó, kẻ tấn công gửi hàng loạt mã không tồn tại sẽ dồn hết vào database (*cache penetration*) |
+| **TTL dài (1 ngày)** | Ánh xạ mã → URL gần như không bao giờ đổi. TTL dài cho tỉ lệ trúng rất cao |
+
+Dữ liệu này gần như **bất biến**, nên cache ở đây hiệu quả bất thường:
+
+```text
+   Ti le trung cache thuc te: > 98%
+   → chi ~240 truy van/giay xuong database thay vi 12.000
+   → mot may Postgres binh thuong thua suc
+```
+
+### 301 hay 302 — quyết định ảnh hưởng tới thống kê
+
+```text
+   301 MOVED PERMANENTLY              302 FOUND (tam thoi)
+   ═════════════════════              ════════════════════
+   Trinh duyet CACHE VINH VIEN        Trinh duyet KHONG cache
+   → lan sau KHONG goi server nua     → moi lan deu goi server
+
+   ✔ giam tai server rat nhieu        ✔ dem duoc MOI lan bam
+   ✘ MAT hoan toan thong ke           ✘ server chiu tai day du
+   ✘ KHONG doi duoc dich den          ✔ doi duoc dich den bat cu luc nao
+```
+
+Gần như mọi dịch vụ rút gọn URL thương mại dùng **302**, vì thống kê lượt bấm chính là sản phẩm của họ.
+
+Nếu không cần thống kê chi tiết, dùng **301 kèm `Cache-Control: max-age=86400`** cho phép trình duyệt cache có thời hạn — gộp được cả hai lợi ích.
+
+### Ghi thống kê mà không làm chậm chuyển hướng
+
+```text
+   ❌ SAI: ghi thẳng vào database trước khi chuyển hướng
+      → thêm 5-20 ms vào MỌI lần bấm
+      → và bảng click_events sẽ là điểm nóng ghi
+
+   ✔ ĐÚNG: chuyển hướng NGAY, đẩy sự kiện vào hàng đợi
+```
+
+```python
+def xu_ly_chuyen_huong(ma):
+    url = mo_rong(ma)
+    if not url:
+        return 404
+
+    # Khong cho — day vao hang doi roi tra ve ngay
+    hang_doi.push({"ma": ma, "luc": time.time(), "ip": request.ip,
+                   "ua": request.user_agent})
+    return redirect(url, code=302)
+```
+
+Worker gộp lô rồi ghi:
+
+```sql
+-- Ghi theo lo 1000 su kien thay vi tung cai
+INSERT INTO click_events (code, clicked_at, ip, user_agent)
+SELECT * FROM unnest(:codes, :times, :ips, :uas);
+
+-- Va cap nhat bo dem tong hop theo lo
+INSERT INTO click_counts (code, ngay, cnt)
+SELECT code, date(clicked_at), count(*)
+FROM ... GROUP BY 1, 2
+ON CONFLICT (code, ngay) DO UPDATE SET cnt = click_counts.cnt + EXCLUDED.cnt;
 ```
 
 ---
 
-## HTTP 301 vs 302 Redirect
+## Các tính năng phát sinh
 
+### Bí danh tuỳ chọn
+
+```sql
+ALTER TABLE urls ADD COLUMN is_custom BOOLEAN NOT NULL DEFAULT false;
 ```
-301 Permanent Redirect:
-  → Browser cache: "URL này luôn redirect đến X"
-  → Subsequent requests: Browser không gọi server nữa
-  ✅ Giảm load trên server
-  ❌ Analytics không chính xác (không đếm được clicks)
-  ❌ Nếu target URL thay đổi: Users đã cache sẽ không biết
 
-302 Temporary Redirect:
-  → Browser KHÔNG cache
-  → Mỗi click đều gọi server
-  ✅ Analytics chính xác (đếm được mỗi click)
-  ✅ Có thể thay đổi target URL bất cứ lúc nào
-  ❌ More server load
+```text
+   Người dùng muốn:  sho.rt/my-brand
 
-Bitly và TinyURL dùng: 301 (tiết kiệm bandwidth)
-Nếu cần analytics: 302
+   Phải xử lý:
+     • Va chạm với mã tự sinh
+       → giải: mã tự sinh luôn ĐÚNG 7 ký tự,
+               bí danh tuỳ chọn phải ≠ 7 ký tự (hoặc dùng tiền tố riêng)
+     • Danh sách từ cấm (tên thương hiệu, từ tục)
+     • Có cho đổi/xoá bí danh không → nếu có thì link cũ gãy
 ```
+
+Mẹo "mã tự sinh luôn đúng 7 ký tự" rất gọn: nó biến bài toán va chạm thành **không thể xảy ra** thay vì phải kiểm tra.
+
+### Hết hạn
+
+```sql
+ALTER TABLE urls ADD COLUMN expires_at TIMESTAMPTZ;
+CREATE INDEX idx_urls_expires ON urls (expires_at) WHERE expires_at IS NOT NULL;
+```
+
+```sql
+SELECT long_url FROM urls
+ WHERE code = :ma AND (expires_at IS NULL OR expires_at > now());
+```
+
+Chú ý điều kiện hết hạn nằm **trong chính truy vấn** — link hết hạn tự động ngừng hoạt động mà không cần job dọn dẹp chạy đúng giờ. Job dọn vẫn nên có, nhưng chỉ để thu hồi dung lượng.
+
+### Chống lạm dụng
+
+```text
+   • Giới hạn tần suất theo IP và theo tài khoản
+   • Kiểm tra URL đích với danh sách đen (Google Safe Browsing)
+   • Chặn tự trỏ về chính miền của mình (vòng lặp chuyển hướng)
+   • Chặn giao thức không phải http/https (javascript:, data:)
+```
+
+Mục cuối là lỗ hổng bảo mật thật: cho phép `javascript:...` biến dịch vụ rút gọn URL thành công cụ tấn công XSS.
 
 ---
 
-**Tiếp theo:** Phase 11 - Database Engines →
+## Mô hình dữ liệu cuối cùng
+
+```sql
+CREATE TABLE urls (
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    code       TEXT        NOT NULL,
+    long_url   TEXT        NOT NULL,
+    user_id    BIGINT      REFERENCES users(id),
+    is_custom  BOOLEAN     NOT NULL DEFAULT false,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX idx_urls_code ON urls (code);
+CREATE INDEX idx_urls_user ON urls (user_id, created_at DESC);
+CREATE INDEX idx_urls_expires ON urls (expires_at) WHERE expires_at IS NOT NULL;
+
+-- Su kien bam: PHAN MANH theo thang, chi giu 90 ngay
+CREATE TABLE click_events (
+    code       TEXT        NOT NULL,
+    clicked_at TIMESTAMPTZ NOT NULL,
+    ip         INET,
+    user_agent TEXT,
+    referer    TEXT
+) PARTITION BY RANGE (clicked_at);
+
+-- Bang tong hop san cho bao cao
+CREATE TABLE click_counts (
+    code TEXT   NOT NULL,
+    ngay DATE   NOT NULL,
+    cnt  BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (code, ngay)
+);
+```
+
+Ba quyết định trong mô hình này:
+
+| Quyết định | Vì sao |
+|---|---|
+| `click_events` **phân mảnh theo tháng** | Xoá dữ liệu quá 90 ngày bằng `DROP` mảnh — mili-giây thay vì hàng giờ ([phase-6](../phase-6/01-database-partitioning-la-gi.md)) |
+| Có bảng `click_counts` tổng hợp | Báo cáo đọc bảng nhỏ này, không quét bảng sự kiện hàng tỷ dòng |
+| `idx_urls_expires` là **index bộ phận** | Chỉ đánh index các dòng thật sự có hạn — thường là thiểu số |
+
+---
+
+## Kiến trúc đầy đủ
+
+```text
+                       ┌──────────────┐
+                       │     CDN      │  ← chan phan lon luu luong doc
+                       └──────┬───────┘
+                              ▼
+                       ┌──────────────┐
+                       │ CAN BANG TAI │
+                       └──────┬───────┘
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+        ┌──────────┐    ┌──────────┐    ┌──────────┐
+        │ APP 1    │    │ APP 2    │    │ APP N    │  (khong trang thai)
+        └────┬─────┘    └────┬─────┘    └────┬─────┘
+             └───────────────┼───────────────┘
+                  ┌──────────┴──────────┐
+                  ▼                     ▼
+          ┌──────────────┐      ┌──────────────┐
+          │    REDIS     │      │  HANG DOI    │
+          │  (98% trung) │      │ (su kien bam)│
+          └──────┬───────┘      └──────┬───────┘
+                 │ 2% truot            │
+                 ▼                     ▼
+          ┌──────────────┐      ┌──────────────┐
+          │  POSTGRES    │      │   WORKER     │
+          │  primary     │◀─────┤ (ghi theo lo)│
+          └──────┬───────┘      └──────────────┘
+                 │
+          ┌──────▼───────┐
+          │   REPLICA    │  ← truy van phan tich, sao luu
+          └──────────────┘
+```
+
+Điểm đáng nói: **không có sharding**. Với 3 TB dữ liệu và 98% trúng cache, một máy PostgreSQL với vài replica là đủ. Nhận ra điều này là một điểm cộng lớn trong phỏng vấn — nhiều ứng viên vẽ ngay sharding vì tưởng "hệ thống lớn thì phải shard".
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Dùng ID tự tăng cho dịch vụ công khai | Duyệt được toàn bộ URL, lộ quy mô kinh doanh | Mã ngẫu nhiên hoặc kho sinh sẵn |
+| Dùng `random` thay vì `secrets` | Mã đoán được từ vài mẫu quan sát | Luôn dùng bộ sinh an toàn mật mã |
+| Không cache kết quả rỗng | Kẻ tấn công gửi mã giả dồn hết vào database | Cache cả `__KHONG_TON_TAI__` với TTL ngắn |
+| Dùng 301 rồi muốn thống kê | Trình duyệt cache vĩnh viễn, mất hoàn toàn thống kê | 302, hoặc 301 kèm `Cache-Control` có hạn |
+| Ghi sự kiện bấm đồng bộ | Thêm 5-20 ms vào mọi lần chuyển hướng | Hàng đợi + ghi theo lô |
+| Bảng sự kiện bấm không phân mảnh | Xoá dữ liệu cũ mất hàng giờ và làm phình bảng | Phân mảnh theo tháng, `DROP` mảnh |
+| Không chặn giao thức `javascript:` | Lỗ hổng XSS qua dịch vụ của bạn | Chỉ cho phép `http`/`https` |
+| Vẽ sharding ngay từ đầu | Phức tạp không cần thiết cho 3 TB | Tính dung lượng trước; một máy thường là đủ |
+| Bí danh tuỳ chọn va chạm mã tự sinh | Ghi đè link của người khác | Mã tự sinh cố định 7 ký tự, bí danh phải khác độ dài |
+
+## Tóm tắt bài 2
+
+- Đặc điểm quyết định mọi thứ: **tỉ lệ đọc/ghi 100:1 tới 1000:1** — dồn toàn bộ tối ưu cho đường đọc.
+- **7 ký tự base62 = 3,5 nghìn tỷ mã**, đủ dùng ~2.900 năm với tốc độ 100 triệu URL/tháng.
+- Bốn thiết kế sinh mã: **ID tự tăng** (đơn giản nhất nhưng đoán được và lộ quy mô) · **ngẫu nhiên** (cân bằng tốt nhất) · **băm URL** (khử trùng nhưng không tạo được hai mã cho một URL) · **kho sinh sẵn** (dùng `FOR UPDATE SKIP LOCKED`, một lần chạm database).
+- Xác suất trùng theo nghịch lý ngày sinh: **1 tỷ mã → 13%** khả năng có ít nhất một lần trùng — nhưng `UNIQUE` khiến nó chỉ tốn một lần thử lại, không bao giờ gây sai dữ liệu.
+- **Cache cả kết quả rỗng** để chặn tấn công xuyên cache. Với TTL dài, tỉ lệ trúng > 98% — chỉ ~240 truy vấn/giây xuống database thay vì 12.000.
+- **301 làm mất thống kê vĩnh viễn** vì trình duyệt cache; dịch vụ thương mại dùng **302**.
+- Ghi sự kiện bấm phải **bất đồng bộ qua hàng đợi và theo lô** — không bao giờ chèn thêm độ trễ vào đường chuyển hướng.
+- Bảng sự kiện bấm phải **phân mảnh theo tháng**, và phải có bảng tổng hợp sẵn cho báo cáo.
+- Với 3 TB và 98% trúng cache, **một máy PostgreSQL với vài replica là đủ** — nhận ra rằng không cần sharding là một điểm cộng, không phải thiếu sót.
+
+**Bài kế tiếp** → [Phase 11 — Bài 1: Database Engine là gì](../phase-11/01-database-engine-la-gi.md)
