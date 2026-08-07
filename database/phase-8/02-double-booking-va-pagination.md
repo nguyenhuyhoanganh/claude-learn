@@ -1,438 +1,528 @@
-# Bài 2: Giải quyết Double Booking và Pagination
+# Bài 2: Double Booking và Pagination — hai bài toán kinh điển
 
-## Phần 1: Vấn đề Double Booking
+Hai bài toán trong bài này xuất hiện ở gần như mọi ứng dụng, và cả hai đều có một điểm chung: **giải pháp trực giác nhất là giải pháp sai**.
 
-### Double Booking là gì?
-
-**Double booking** xảy ra khi 2 users cùng book một seat/resource tại cùng thời điểm, và cả hai đều nghĩ mình đã thành công.
-
-```
-Timeline (Race Condition):
-
-T1 (User Alice):  [SELECT seat=15: available] ────────────────── [UPDATE booked=1] [COMMIT]
-T2 (User Bob):    [SELECT seat=15: available] [UPDATE booked=1] [COMMIT]
-
-Kết quả:
-  seat 15 = booked by Bob (last write wins)
-  Alice đã nhận email "Booking successful!" nhưng seat thuộc về Bob!
-```
+- **Đặt trùng chỗ**: `SELECT` kiểm tra rồi `UPDATE` — nghe hợp lý, nhưng hai người vẫn nhận cùng một ghế.
+- **Phân trang**: `LIMIT 10 OFFSET 100000` — nghe hợp lý, nhưng chạy 620 mili-giây thay vì 0,2.
 
 ---
 
-### Giải pháp Sai: Chỉ Check Rồi Update
+# Phần I — Đặt trùng chỗ (Double Booking)
 
-```javascript
-// ❌ CẦU TRÚC NGUY HIỂM - Race condition!
-async function bookSeat(seatId, userName) {
-    const client = await pool.connect();
-    
-    try {
-        await client.query('BEGIN');
-        
-        // Step 1: Kiểm tra seat có available không
-        const result = await client.query(
-            'SELECT * FROM seats WHERE id = $1 AND is_booked = 0',
-            [seatId]
-        );
-        
-        if (result.rowCount === 0) {
-            throw new Error('Seat already booked');
-        }
-        
-        // ← NGUY HIỂM: Khoảng hở giữa check và update!
-        //   Transaction khác có thể chen vào đây
-        
-        // Step 2: Book seat
-        await client.query(
-            'UPDATE seats SET is_booked = 1, name = $1 WHERE id = $2',
-            [userName, seatId]
-        );
-        
-        await client.query('COMMIT');
-        return 'Booking successful';
-    } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-    } finally {
-        client.release();
-    }
-}
+## Tái hiện lỗi
+
+```sql
+CREATE TABLE seats (
+    id        INT PRIMARY KEY,
+    is_booked BOOLEAN NOT NULL DEFAULT false,
+    name      TEXT
+);
+INSERT INTO seats SELECT i, false, NULL FROM generate_series(1, 20) AS i;
 ```
 
-```
-Vấn đề: Check và Update không atomic!
+Mở hai phiên psql:
 
-T1 passes check → Switch to T2 → T2 passes check → T2 updates
-→ T1 resumes → T1 updates (double booking!)
+| Bước | Phiên A (Hùng) | Phiên B (Minh) |
+|---|---|---|
+| 1 | `BEGIN;` | `BEGIN;` |
+| 2 | `SELECT * FROM seats WHERE id=13;` → `is_booked = false` ✔ | |
+| 3 | | `SELECT * FROM seats WHERE id=13;` → `is_booked = false` ✔ |
+| 4 | `UPDATE seats SET is_booked=true, name='Hung' WHERE id=13;` | |
+| 5 | | `UPDATE seats SET is_booked=true, name='Minh' WHERE id=13;` *(treo, chờ A)* |
+| 6 | `COMMIT;` | |
+| 7 | | *(hết chờ, ghi đè thành công)* `COMMIT;` |
+
+```sql
+SELECT * FROM seats WHERE id = 13;
 ```
+
+```text
+ id | is_booked | name
+----+-----------+------
+ 13 | t         | Minh
+```
+
+**Hùng đã trả tiền, đã nhận email xác nhận, nhưng ghế thuộc về Minh.**
+
+Điểm mấu chốt nằm ở **khe hở giữa bước 2 và bước 4**:
+
+```text
+   t2          t3          t4          t5
+   │           │           │           │
+   A: ĐỌC ─────────────────▶ GHI
+              B: ĐỌC ─────────────────▶ GHI
+              ▲
+        KHE HỞ: giữa lúc A đọc và lúc A ghi,
+        B đã kịp đọc giá trị cũ.
+        Quyết định của B dựa trên dữ liệu ĐÃ LỖI THỜI.
+```
+
+Đây chính là hiện tượng **lost update** ở [phase-2 bài 3](../phase-2/03-isolation-va-read-phenomena.md), nhìn từ góc nghiệp vụ.
+
+## Bốn cách chữa
+
+### Cách 1 — Khoá bi quan: `SELECT ... FOR UPDATE`
+
+Đóng khe hở bằng cách khoá dòng **ngay khi đọc**:
+
+| Bước | Phiên A | Phiên B |
+|---|---|---|
+| 1 | `BEGIN;` | `BEGIN;` |
+| 2 | `SELECT * FROM seats WHERE id=14 FOR UPDATE;` → 🔒 | |
+| 3 | | `SELECT * FROM seats WHERE id=14 FOR UPDATE;` *(treo ngay)* |
+| 4 | `UPDATE ... name='Hung' WHERE id=14;` | |
+| 5 | `COMMIT;` → 🔓 | |
+| 6 | | *(hết chờ)* đọc lại → `is_booked = true` → **từ chối** |
+
+Code ứng dụng:
+
+```python
+with conn:
+    cur.execute("SELECT is_booked FROM seats WHERE id = %s FOR UPDATE", (seat_id,))
+    (da_dat,) = cur.fetchone()
+    if da_dat:
+        raise GheDaCoNguoi()                      # B roi vao day
+    cur.execute("UPDATE seats SET is_booked=true, name=%s WHERE id=%s",
+                (ten, seat_id))
+```
+
+Đây là **khoá hai pha** ở [bài 1](01-shared-lock-va-exclusive-lock.md): pha mở rộng ở bước 2, pha thu hẹp ở `COMMIT`.
+
+| Ưu | Nhược |
+|---|---|
+| Đơn giản, dễ hiểu, dễ đúng | Người thứ hai **phải chờ** |
+| Không cần thử lại | Với ghế "hot", hàng đợi chờ có thể rất dài |
+| | Nếu quên `FOR UPDATE` ở một chỗ là lỗ hổng quay lại |
+
+### Cách 2 — Cập nhật có điều kiện (một câu lệnh)
+
+Không đọc trước, để chính câu `UPDATE` làm luôn việc kiểm tra:
+
+```sql
+UPDATE seats
+   SET is_booked = true, name = 'Hung'
+ WHERE id = 13
+   AND is_booked = false            -- ← DIEU KIEN NAM TRONG CHINH CAU LENH
+RETURNING id;
+```
+
+```python
+cur.execute("""UPDATE seats SET is_booked=true, name=%s
+               WHERE id=%s AND is_booked=false RETURNING id""",
+            (ten, seat_id))
+if cur.rowcount == 0:
+    raise GheDaCoNguoi()
+```
+
+Vì sao an toàn: câu `UPDATE` **tự khoá dòng và tự đọc giá trị mới nhất**. Không có khe hở nào giữa đọc và ghi — chúng là **một** thao tác.
+
+```text
+   A: UPDATE ... WHERE is_booked=false   → khoa dong, thay false → ghi → 1 dong
+   B: UPDATE ... WHERE is_booked=false   → CHO A
+                                          → sau khi A commit, doc lai: true
+                                          → dieu kien KHONG khop → 0 dong
+```
+
+| Ưu | Nhược |
+|---|---|
+| **Một lần gọi mạng** thay vì hai | Không kiểm tra được logic nghiệp vụ phức tạp |
+| Nhanh nhất trong bốn cách | Phải nhớ kiểm tra `rowcount` |
+| Không thể quên khoá | |
+
+Đây là cách **nên dùng mặc định** cho các trường hợp đơn giản.
+
+### Cách 3 — Khoá lạc quan bằng cột phiên bản
+
+```sql
+ALTER TABLE seats ADD COLUMN version INT NOT NULL DEFAULT 0;
+```
+
+```python
+# Doc
+cur.execute("SELECT is_booked, version FROM seats WHERE id=%s", (seat_id,))
+da_dat, phien_ban = cur.fetchone()
+if da_dat:
+    raise GheDaCoNguoi()
+
+# ... co the co logic nghiep vu phuc tap o day, khong giu khoa nao ...
+
+# Ghi: chi thanh cong neu KHONG AI sua trong luc do
+cur.execute("""UPDATE seats SET is_booked=true, name=%s, version=version+1
+               WHERE id=%s AND version=%s""", (ten, seat_id, phien_ban))
+if cur.rowcount == 0:
+    raise XungDotPhienBan()      # → thu lai tu dau
+```
+
+| Ưu | Nhược |
+|---|---|
+| **Không ai phải chờ** | Phải viết vòng lặp thử lại |
+| Cho phép logic nghiệp vụ dài giữa đọc và ghi | Tệ khi tranh chấp cao (làm lại quá nhiều) |
+| Mở rộng tốt khi tranh chấp thấp | Thêm một cột và phải nhớ tăng nó |
+
+### Cách 4 — Để ràng buộc database làm việc
+
+Đôi khi có thể đổi mô hình để chính database từ chối:
+
+```sql
+CREATE TABLE bookings (
+    seat_id INT PRIMARY KEY REFERENCES seats(id),   -- ← MOT ghe = MOT booking
+    name    TEXT NOT NULL,
+    created TIMESTAMPTZ DEFAULT now()
+);
+```
+
+```python
+try:
+    cur.execute("INSERT INTO bookings (seat_id, name) VALUES (%s, %s)",
+                (seat_id, ten))
+except errors.UniqueViolation:
+    raise GheDaCoNguoi()
+```
+
+| Ưu | Nhược |
+|---|---|
+| **Không thể sai** — ràng buộc ở tầng database | Phải đổi mô hình dữ liệu |
+| Đúng kể cả khi có bug ở ứng dụng | Xử lý huỷ đặt phức tạp hơn (phải `DELETE`) |
+| Đúng kể cả với nhiều ứng dụng cùng ghi | |
+
+Với dữ liệu quan trọng (tiền, chỗ ngồi, tồn kho), cách này là **lớp phòng thủ cuối cùng** và nên có **song song** với một trong ba cách trên.
+
+### Bảng chọn
+
+| Tình huống | Cách nên dùng |
+|---|---|
+| Kiểm tra đơn giản, một điều kiện | **Cách 2** — cập nhật có điều kiện |
+| Cần logic nghiệp vụ phức tạp, tranh chấp thấp | **Cách 3** — khoá lạc quan |
+| Cần logic phức tạp, tranh chấp cao | **Cách 1** — `FOR UPDATE` |
+| Dữ liệu tiền bạc, phải tuyệt đối đúng | **Cách 4** + một trong ba cách trên |
+
+### Trường hợp mở rộng: giữ chỗ tạm
+
+Thực tế đặt vé không chỉ có "đặt" và "trống" — còn có "đang giữ chỗ trong 10 phút để thanh toán":
+
+```sql
+ALTER TABLE seats ADD COLUMN giu_boi TEXT, ADD COLUMN giu_den TIMESTAMPTZ;
+
+-- Giu cho: thanh cong neu ghe trong HOAC lan giu truoc DA HET HAN
+UPDATE seats
+   SET giu_boi = %s, giu_den = now() + interval '10 minutes'
+ WHERE id = %s
+   AND is_booked = false
+   AND (giu_den IS NULL OR giu_den < now())        -- ← tu het han
+RETURNING id;
+```
+
+Mẹo hay ở đây: **không cần job dọn dẹp**. Lần giữ chỗ hết hạn tự động bị bỏ qua nhờ điều kiện `giu_den < now()`. Một job dọn có thể chạy nền cho gọn, nhưng nó không cần thiết cho tính đúng đắn.
 
 ---
 
-### Giải pháp Đúng: SELECT FOR UPDATE
+# Phần II — Phân trang bằng `OFFSET` rất chậm
 
-```javascript
-// ✅ AN TOÀN: Row-level exclusive lock
-async function bookSeat(seatId, userName) {
-    const client = await pool.connect();
-    
-    try {
-        await client.query('BEGIN');
-        
-        // SELECT FOR UPDATE: Acquire exclusive lock NGAY KHI SELECT
-        // Transaction khác sẽ phải CHỜ nếu cũng cố SELECT FOR UPDATE row này
-        const result = await client.query(
-            'SELECT * FROM seats WHERE id = $1 AND is_booked = 0 FOR UPDATE',
-            [seatId]
-        );
-        
-        if (result.rowCount === 0) {
-            // Seat đã booked (hoặc không tồn tại)
-            await client.query('ROLLBACK');
-            return { success: false, message: 'Seat already booked' };
-        }
-        
-        // Bây giờ ta có exclusive lock, an toàn để update
-        await client.query(
-            'UPDATE seats SET is_booked = 1, name = $1 WHERE id = $2',
-            [userName, seatId]
-        );
-        
-        await client.query('COMMIT');  // ← Đây mới release lock
-        return { success: true, message: 'Booking successful' };
-    } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-    } finally {
-        client.release();
-    }
-}
-```
-
-### Luồng khi có 2 users cùng book:
-
-```
-T1 (Alice books seat 15):
-  BEGIN
-  SELECT seat=15 FOR UPDATE → Acquire X-Lock
-  seat available → OK
-  UPDATE seat=15, name='Alice'
-  COMMIT → Release lock
-
-T2 (Bob books seat 15):
-  BEGIN
-  SELECT seat=15 FOR UPDATE → BLOCK! (T1 có X-Lock)
-  [Waiting...]
-  [T1 COMMIT → Lock released]
-  [T2 unblocked]
-  SELECT seat=15 → is_booked=1 (đã booked bởi Alice)
-  rowCount = 0 → Seat already booked!
-  ROLLBACK
-  
-→ Bob nhận thông báo "Seat already booked"
-→ KHÔNG có double booking!
-```
-
----
-
-### Giải pháp Alternative: UPDATE trực tiếp + kiểm tra affected rows
+## `OFFSET` thật sự làm gì
 
 ```sql
--- Alternative: Chỉ update nếu seat chưa booked
-UPDATE seats 
-SET is_booked = 1, name = $1 
-WHERE id = $2 AND is_booked = 0;  -- ← Điều kiện bảo vệ
-
--- Kiểm tra số rows bị affected
--- affected_rows = 1: booking thành công
--- affected_rows = 0: seat đã booked rồi
-```
-
-```javascript
-async function bookSeatAlternative(seatId, userName) {
-    const client = await pool.connect();
-    
-    try {
-        await client.query('BEGIN');
-        
-        const result = await client.query(
-            `UPDATE seats 
-             SET is_booked = 1, name = $1 
-             WHERE id = $2 AND is_booked = 0`,
-            [userName, seatId]
-        );
-        
-        if (result.rowCount === 0) {
-            await client.query('ROLLBACK');
-            return { success: false, message: 'Seat already booked' };
-        }
-        
-        await client.query('COMMIT');
-        return { success: true, message: 'Booking successful' };
-    } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-    } finally {
-        client.release();
-    }
-}
-```
-
-**Tại sao cách này cũng hoạt động:**
-
-```
-Khi T1 và T2 cùng chạy UPDATE:
-  1. T1 update thành công → Implicit X-Lock trên row
-  2. T2 muốn update row → Phải chờ T1 release (implicit 2PL)
-  3. T1 commit → Release lock
-  4. T2 unblock → Re-evaluate WHERE clause với data mới committed
-  5. is_booked = 1 → WHERE fails → affected_rows = 0 → Booking failed
-
-PostgreSQL semantics: Sau khi unblock, query được "re-evaluated"
-với committed values (READ COMMITTED behavior)
-```
-
-**So sánh 2 giải pháp:**
-
-```
-SELECT FOR UPDATE:
-  ✅ Explicit, rõ ràng về intent
-  ✅ Nhiều business logic có thể thực hiện an toàn trong transaction
-  ✅ Consistent behavior trên mọi database
-  ❌ Thêm 1 round-trip (SELECT + UPDATE)
-
-UPDATE + check affected_rows:
-  ✅ Ít round-trip hơn (chỉ 1 UPDATE)
-  ✅ Đơn giản hơn
-  ❌ Behavior phụ thuộc vào database và isolation level
-  ❌ Khó mở rộng khi cần multi-step business logic
-```
-
-**Khuyến nghị:** Dùng `SELECT FOR UPDATE` khi cần rõ ràng và kiểm soát.
-
----
-
-## Phần 2: SQL Pagination - Offset là Vấn đề
-
-### Cách Pagination Phổ Biến (Và Sai)
-
-```sql
--- Pagination thông thường với OFFSET
-SELECT title FROM news
-ORDER BY id DESC
-LIMIT 10 OFFSET 0;    -- Page 1
-
-SELECT title FROM news
-ORDER BY id DESC
-LIMIT 10 OFFSET 10;   -- Page 2
-
-SELECT title FROM news
-ORDER BY id DESC
-LIMIT 10 OFFSET 100;  -- Page 11
-
-SELECT title FROM news
-ORDER BY id DESC
-LIMIT 10 OFFSET 1000; -- Page 101
-```
-
-### Tại sao OFFSET Chậm?
-
-```
-OFFSET N = Fetch N rows rồi... Vứt đi!
-
-OFFSET 100:   Fetch 110 rows → Giữ 10     (1.1x work)
-OFFSET 1000:  Fetch 1010 rows → Giữ 10    (101x work)
-OFFSET 10000: Fetch 10010 rows → Giữ 10   (1001x work)
-OFFSET 100000: Fetch 100010 rows → Giữ 10 (10001x work)
-
-→ Thời gian tăng tuyến tính với offset!
-```
-
-### EXPLAIN ANALYZE cho thấy vấn đề
-
-```sql
--- Page 1 (OFFSET 0)
-EXPLAIN ANALYZE
-SELECT title FROM news ORDER BY id DESC LIMIT 10 OFFSET 0;
-```
-
-```
-Index Scan Backward on news
-  Rows fetched: 10
-  Time: 0.2ms   ← Nhanh!
-```
-
-```sql
--- Page 10001 (OFFSET 100000)
-EXPLAIN ANALYZE
 SELECT title FROM news ORDER BY id DESC LIMIT 10 OFFSET 100000;
 ```
 
+Trực giác: *"nhảy tới dòng thứ 100.000 rồi lấy 10 dòng."*
+
+Thực tế:
+
+```text
+   OFFSET nghia la: LAY ROI VUT BO n dong dau tien.
+
+   Database phai:
+     1. Doc dong thu 1     → vut
+     2. Doc dong thu 2     → vut
+     ...
+     100.000. Doc dong 100.000  → vut
+     100.001-100.010: doc va TRA VE
+
+   → Doc 100.010 dong de tra ve 10 dong.
+   → Va cang sang trang sau thi cang cham.
 ```
-Index Scan Backward on news
-  Rows fetched: 100010   ← Fetch 100,010 rows!
-  Rows returned: 10      ← Nhưng chỉ giữ 10
-  Time: 620ms            ← Chậm hơn 3000x!
+
+## Đo trên máy thật
+
+```sql
+CREATE TABLE news (id BIGSERIAL PRIMARY KEY, title TEXT, created TIMESTAMPTZ DEFAULT now());
+INSERT INTO news (title) SELECT 'Tin so ' || i FROM generate_series(1, 5000000) AS i;
+VACUUM ANALYZE news;
 ```
 
-### Vấn đề Thứ 2: Duplicate Records
-
+```sql
+EXPLAIN ANALYZE SELECT title FROM news ORDER BY id DESC LIMIT 10 OFFSET 0;
 ```
-User đang ở page 11 (offset 100), đọc được rows 101-110
 
-Trong khi đó: Ai đó INSERT 1 row mới vào bảng
-
-User request page 12 (offset 110):
-→ Row cũ số 111 bây giờ bị đẩy xuống vị trí 112
-→ Query trả về: rows 111-120 (nhưng user đã thấy row 111!)
-→ DUPLICATE ROW xuất hiện!
-
-Ngược lại, nếu có row bị DELETE:
-→ Một row có thể bị BỎ QUA (skipped)
+```text
+Limit  (actual time=0.028..0.032 rows=10 loops=1)
+  ->  Index Scan Backward using news_pkey on news  (actual ... rows=10 loops=1)
+Execution Time: 0.061 ms
 ```
+
+```sql
+EXPLAIN ANALYZE SELECT title FROM news ORDER BY id DESC LIMIT 10 OFFSET 1000;
+```
+
+```text
+Limit  (actual time=0.842..0.851 rows=10 loops=1)
+  ->  Index Scan Backward using news_pkey on news  (actual ... rows=1010 loops=1)
+                                                                    ▲ 1010 dong
+Execution Time: 0.882 ms
+```
+
+```sql
+EXPLAIN ANALYZE SELECT title FROM news ORDER BY id DESC LIMIT 10 OFFSET 100000;
+```
+
+```text
+Limit  (actual time=78.118..78.126 rows=10 loops=1)
+  ->  Index Scan Backward using news_pkey on news  (actual ... rows=100010 loops=1)
+                                                                    ▲ 100.010 dong
+Execution Time: 78.442 ms
+```
+
+```sql
+EXPLAIN ANALYZE SELECT title FROM news ORDER BY id DESC LIMIT 10 OFFSET 1000000;
+```
+
+```text
+Limit  (actual time=618.884..618.892 rows=10 loops=1)
+  ->  Index Scan Backward using news_pkey on news  (actual ... rows=1000010 loops=1)
+Execution Time: 619.226 ms
+```
+
+```text
+   OFFSET         DONG PHAI DOC       THOI GIAN
+   ─────────      ──────────────      ─────────
+         0                    10        0,06 ms
+     1.000                 1.010        0,88 ms
+   100.000               100.010          78 ms
+ 1.000.000             1.000.010         619 ms
+
+   → TUYEN TINH theo OFFSET. Trang cang sau cang cham.
+   → Va do la voi cache NONG. Lan chay dau tien co the cham gap 10 lan.
+```
+
+## Vấn đề thứ hai: dòng trùng và dòng bị bỏ sót
+
+Chậm chưa phải điều tệ nhất. `OFFSET` còn cho **kết quả sai** khi dữ liệu thay đổi giữa các trang:
+
+```text
+   BAN GHI HIEN TAI (sap xep id giam dan):
+      id 105, 104, 103, 102, 101, 100, 99, 98, ...
+
+   NGUOI DUNG XEM TRANG 1:  LIMIT 3 OFFSET 0
+      → 105, 104, 103
+
+   ⟵ AI DO CHEN BAN GHI MOI id=106
+
+   DANH SACH BAY GIO:
+      id 106, 105, 104, 103, 102, 101, ...
+
+   NGUOI DUNG XEM TRANG 2:  LIMIT 3 OFFSET 3
+      → 103, 102, 101
+          ▲ ID 103 XUAT HIEN LAI — nguoi dung thay TRUNG
+```
+
+Và ngược lại, nếu có bản ghi bị **xoá** thì một bản ghi sẽ **biến mất** khỏi kết quả mà không ai biết.
+
+```text
+   OFFSET dem theo VI TRI, ma vi tri thi THAY DOI khi du lieu thay doi.
+```
+
+Với cuộn vô hạn (infinite scroll), lỗi này rất dễ nhận ra và rất khó chịu.
 
 ---
 
-### Giải Pháp: Keyset Pagination (Cursor Pagination)
+## Lời giải: phân trang theo con trỏ (keyset pagination)
 
-**Ý tưởng:** Thay vì "bỏ qua N rows", hãy dùng index để tìm điểm bắt đầu.
+Thay vì "bỏ qua 100.000 dòng", hãy nói **"lấy các dòng sau giá trị này"**:
 
 ```sql
--- Keyset Pagination
--- Page 1: Lấy 10 items đầu tiên
-SELECT id, title FROM news
-ORDER BY id DESC
-LIMIT 10;
--- → Returns: [id=1000, id=999, ..., id=991]
--- → Client lưu lại last_id = 991
+-- Trang dau
+SELECT id, title FROM news ORDER BY id DESC LIMIT 10;
+-- → tra ve, dong cuoi cung co id = 4999991
 
--- Page 2: Lấy 10 items SAU id=991
+-- Trang tiep theo: dung id cua dong cuoi lam moc
 SELECT id, title FROM news
-WHERE id < 991      -- ← Sử dụng last_id từ page trước
-ORDER BY id DESC
-LIMIT 10;
--- → Returns: [id=990, id=989, ..., id=981]
--- → Client lưu lại last_id = 981
-
--- Page N: Cứ thế tiếp tục...
-SELECT id, title FROM news
-WHERE id < :last_id
-ORDER BY id DESC
-LIMIT 10;
+ WHERE id < 4999991                    -- ← DIEU KIEN, khong phai OFFSET
+ ORDER BY id DESC LIMIT 10;
 ```
 
-### EXPLAIN ANALYZE: Keyset vs Offset
-
 ```sql
--- Keyset Pagination (rất nhanh ngay cả ở page 1000)
 EXPLAIN ANALYZE
-SELECT id, title FROM news
-WHERE id < 500 
-ORDER BY id DESC
-LIMIT 10;
+SELECT id, title FROM news WHERE id < 4000000 ORDER BY id DESC LIMIT 10;
 ```
 
-```
-Index Scan Backward on news
-  Index Cond: (id < 500)
-  Rows fetched: 10     ← Chỉ fetch đúng 10 rows!
-  Rows returned: 10
-  Time: 0.1ms          ← Nhanh như page 1!
-```
-
-### Implementation trong API
-
-```javascript
-// REST API với Keyset Pagination
-app.get('/news', async (req, res) => {
-    const { cursor, limit = 10 } = req.query;
-    
-    let query;
-    let params;
-    
-    if (cursor) {
-        // Có cursor: lấy từ sau cursor
-        query = `
-            SELECT id, title, created_at 
-            FROM news 
-            WHERE id < $1
-            ORDER BY id DESC 
-            LIMIT $2
-        `;
-        params = [cursor, limit];
-    } else {
-        // Không có cursor: lấy từ đầu
-        query = `
-            SELECT id, title, created_at 
-            FROM news 
-            ORDER BY id DESC 
-            LIMIT $1
-        `;
-        params = [limit];
-    }
-    
-    const result = await pool.query(query, params);
-    const rows = result.rows;
-    
-    // Cursor tiếp theo = id của item cuối cùng
-    const nextCursor = rows.length > 0 ? rows[rows.length - 1].id : null;
-    
-    res.json({
-        data: rows,
-        nextCursor,        // Client dùng để lấy page tiếp theo
-        hasMore: rows.length === limit
-    });
-});
+```text
+Limit  (actual time=0.041..0.048 rows=10 loops=1)
+  ->  Index Scan Backward using news_pkey on news  (actual ... rows=10 loops=1)
+        Index Cond: (id < 4000000)                          ▲ CHI 10 DONG
+Execution Time: 0.078 ms
 ```
 
+```text
+   OFFSET 1.000.000 :  619,00 ms,  doc 1.000.010 dong
+   Keyset           :    0,08 ms,  doc         10 dong
+
+                       → NHANH HON ~7.700 LAN
+                       → VA THOI GIAN KHONG DOI du o trang nao
 ```
-Request: GET /news
-Response: {
-    data: [{id: 1000, title: "..."}, ...],
-    nextCursor: 991,
-    hasMore: true
+
+Dòng cuối là điểm quan trọng nhất: **trang thứ 1 và trang thứ 100.000 mất thời gian như nhau**.
+
+### Vì sao nó nhanh: điều kiện chui được vào index
+
+```text
+   OFFSET                              KEYSET
+   ══════                              ══════
+   Index Scan Backward                 Index Scan Backward
+     (khong co Index Cond)               Index Cond: (id < 4000000)
+     → di tu dau, dem tung dong          → NHAY THANG toi vi tri id=4000000
+     → vut bo 1 trieu dong               → doc 10 dong ke tiep tren la
+     → LIMIT ap o TREN CUNG              → dung
+```
+
+Nó tận dụng đúng thứ B+Tree giỏi nhất: **nhảy tới một điểm rồi đi ngang trên tầng lá** — như đã phân tích ở [phase-5 bài 2](../phase-5/02-btree-plus-va-ung-dung-thuc-te.md).
+
+### Sắp xếp theo cột không duy nhất
+
+Nếu sắp xếp theo `created` (có thể trùng nhau), chỉ dùng `WHERE created < X` là **sai** — các dòng cùng thời điểm sẽ bị bỏ sót hoặc lặp lại.
+
+Cách đúng: dùng **so sánh bộ giá trị** (*row value comparison*):
+
+```sql
+-- SAI: bo sot cac dong cung `created`
+SELECT * FROM news WHERE created < '2026-08-01 10:00:00' ORDER BY created DESC LIMIT 10;
+
+-- DUNG: them mot cot DUY NHAT lam tie-breaker
+SELECT * FROM news
+ WHERE (created, id) < ('2026-08-01 10:00:00', 4999991)
+ ORDER BY created DESC, id DESC
+ LIMIT 10;
+```
+
+Cú pháp `(a, b) < (x, y)` là so sánh từ điển: `a < x`, hoặc (`a = x` **và** `b < y`). PostgreSQL và MySQL 8 đều hỗ trợ, và quan trọng là nó **dùng được index composite `(created, id)`**.
+
+```sql
+CREATE INDEX idx_news_created_id ON news (created DESC, id DESC);
+```
+
+### Con trỏ mờ — không lộ cấu trúc ra ngoài
+
+Truyền `id` thật ra API làm lộ cấu trúc nội bộ. Gói lại thành một chuỗi mờ:
+
+```python
+import base64, json
+
+def tao_con_tro(created, row_id):
+    return base64.urlsafe_b64encode(
+        json.dumps({"c": created.isoformat(), "i": row_id}).encode()
+    ).decode()
+
+def doc_con_tro(cursor_str):
+    d = json.loads(base64.urlsafe_b64decode(cursor_str))
+    return d["c"], d["i"]
+```
+
+```json
+{
+  "items": [ ... ],
+  "next_cursor": "eyJjIjoiMjAyNi0wOC0wMVQxMDowMDowMCIsImkiOjQ5OTk5OTF9"
 }
-
-Request: GET /news?cursor=991
-Response: {
-    data: [{id: 990, title: "..."}, ...],
-    nextCursor: 981,
-    hasMore: true
-}
 ```
 
-### So sánh OFFSET vs Keyset
-
-```
-┌──────────────────┬──────────────────┬──────────────────┐
-│ Tiêu chí         │ OFFSET           │ Keyset           │
-├──────────────────┼──────────────────┼──────────────────┤
-│ Performance      │ O(N) - chậm dần  │ O(1) - hằng số   │
-│ Page 1000        │ ~seconds         │ ~ms              │
-│ Duplicate risk   │ Có               │ Không            │
-│ Skip risk        │ Có (nếu delete)  │ Không            │
-│ Jump to page N   │ Dễ (OFFSET=N*10) │ Khó              │
-│ Implementation   │ Đơn giản         │ Cần lưu cursor   │
-│ Use case         │ Admin panels     │ Infinite scroll  │
-│                  │ (low traffic)    │ APIs (high perf) │
-└──────────────────┴──────────────────┴──────────────────┘
-```
-
-### Khi nào dùng OFFSET?
-
-```
-OFFSET vẫn OK khi:
-  ✅ Dataset nhỏ (< 10,000 rows)
-  ✅ Cần "Jump to page N" (admin interface, reports)
-  ✅ Traffic thấp
-  ✅ Không cần real-time consistency
-
-Keyset tốt hơn khi:
-  ✅ Dataset lớn (100K+ rows)
-  ✅ Infinite scroll / Load more
-  ✅ High traffic APIs
-  ✅ Cần stable pagination (không duplicate/skip)
-```
+Đây chính là cách GitHub, Slack, Stripe và Twitter phân trang API của họ.
 
 ---
 
-**Tiếp theo:** 03-connection-pooling.md →
+## Khi nào `OFFSET` vẫn chấp nhận được
+
+Keyset không phải lúc nào cũng dùng được:
+
+| Tình huống | Dùng được keyset? |
+|---|---|
+| Cuộn vô hạn, "tải thêm" | **Có** — hoàn hảo |
+| Nút "Trang sau / Trang trước" | **Có** |
+| Nhảy thẳng tới **trang 500** | **Không** — keyset không biết trang 500 bắt đầu ở đâu |
+| Bảng quản trị có số trang 1..N | Khó — cần tổng số dòng |
+| Sắp xếp theo cột người dùng tự chọn | Được, nhưng cần index cho từng cột |
+
+Ba cách xử lý khi bắt buộc phải có "nhảy tới trang N":
+
+```text
+   1. GIOI HAN so trang
+      → chi cho nhay toi trang 100, sau do bat buoc dung tim kiem/loc
+      → Google cung lam vay: khong the nhay toi trang 1000 ket qua
+
+   2. OFFSET NUA VOI
+      → dung keyset toi trang gan nhat da biet, roi OFFSET mot doan NGAN
+      → WHERE id < <moc> ORDER BY id DESC LIMIT 10 OFFSET 40
+
+   3. BANG MOC TRANG tinh san
+      → dinh ky tinh "trang 100 bat dau tu id = X" va luu lai
+      → hop voi du lieu it thay doi
+```
+
+### Và `COUNT(*)` cũng là một cái bẫy
+
+Giao diện phân trang thường cần "hiển thị 1-10 trong 5.000.000 kết quả". Câu đếm đó cũng đắt:
+
+```sql
+EXPLAIN ANALYZE SELECT count(*) FROM news;
+```
+
+```text
+Finalize Aggregate  (actual time=442.118..448.226 rows=1 loops=1)
+Execution Time: 448.882 ms
+```
+
+Ba cách giảm nhẹ:
+
+```sql
+-- 1. Uoc luong tu thong ke (rat nhanh, sai so vai phan tram)
+SELECT reltuples::BIGINT AS uoc_luong FROM pg_class WHERE relname = 'news';
+```
+
+```text
+ uoc_luong
+-----------
+   4998112
+```
+
+```sql
+-- 2. Dem co GIOI HAN: "hon 1000 ket qua" thay vi con so chinh xac
+SELECT count(*) FROM (SELECT 1 FROM news WHERE ... LIMIT 1001) t;
+
+-- 3. Khong dem gi ca: chi hoi "co trang sau khong?"
+SELECT ... LIMIT 11;    -- lay 11, hien 10, con 1 dong nghia la con trang sau
+```
+
+Cách 3 là cách các API hiện đại dùng, và nó rẻ nhất.
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| `SELECT` kiểm tra rồi `UPDATE` không khoá | Đặt trùng chỗ, trừ kho hai lần | `FOR UPDATE`, hoặc điều kiện nằm trong chính câu `UPDATE` |
+| Quên kiểm tra `rowcount` sau cập nhật có điều kiện | Tưởng thành công trong khi 0 dòng bị đổi | Luôn kiểm tra `rowcount`/`RETURNING` |
+| Chỉ dựa vào ứng dụng, không có ràng buộc database | Một bug ở một chỗ là hỏng dữ liệu | Thêm `UNIQUE`/`CHECK` làm lớp cuối |
+| `LIMIT n OFFSET lớn` | Chậm tuyến tính, và cho kết quả trùng/sót | Keyset pagination |
+| Keyset trên cột không duy nhất | Bỏ sót hoặc lặp dòng cùng giá trị | So sánh bộ `(cột, id)` + index composite |
+| Truyền `id` thật ra API công khai | Lộ cấu trúc và quy mô dữ liệu | Con trỏ mã hoá base64 |
+| `COUNT(*)` cho mọi lần tải trang | Vài trăm mili-giây mỗi lần | `reltuples`, đếm có giới hạn, hoặc `LIMIT n+1` |
+| Cho nhảy tới trang bất kỳ trên bảng lớn | Bắt buộc phải dùng `OFFSET` | Giới hạn số trang, hoặc bảng mốc trang |
+
+## Tóm tắt bài 2
+
+- **Đặt trùng chỗ** sinh ra từ **khe hở giữa `SELECT` và `UPDATE`** — chính là *lost update* nhìn từ góc nghiệp vụ.
+- Bốn cách chữa: `FOR UPDATE` (đơn giản, phải chờ) · **cập nhật có điều kiện** (nhanh nhất, nên dùng mặc định) · khoá lạc quan bằng `version` (không ai chờ, phải thử lại) · **ràng buộc database** (không thể sai, nên có song song với các cách trên).
+- Mẹo giữ chỗ tạm: điều kiện `giu_den < now()` khiến lần giữ hết hạn **tự động bị bỏ qua** — không cần job dọn dẹp cho tính đúng đắn.
+- **`OFFSET` nghĩa là "lấy rồi vứt bỏ n dòng đầu"**, không phải "nhảy tới". Đo thật: `OFFSET 1.000.000` mất **619 ms** và đọc **1.000.010 dòng**.
+- `OFFSET` còn cho **kết quả sai**: dữ liệu chèn/xoá giữa các trang làm dòng bị trùng hoặc bị bỏ sót.
+- **Keyset pagination** nhanh hơn **~7.700 lần** và — quan trọng hơn — **thời gian không đổi ở mọi trang**, vì điều kiện chui được vào `Index Cond`.
+- Sắp xếp theo cột không duy nhất phải dùng **so sánh bộ `(cột, id)`** cộng index composite, nếu không sẽ bỏ sót dòng trùng giá trị.
+- `COUNT(*)` cũng là bẫy: dùng `reltuples`, đếm có giới hạn, hoặc chỉ lấy **`LIMIT n+1`** để biết còn trang sau hay không.
+
+**Bài kế tiếp** → [Bài 3: Database Connection Pooling](03-connection-pooling.md)
