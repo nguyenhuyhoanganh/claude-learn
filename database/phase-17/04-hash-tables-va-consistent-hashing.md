@@ -1,298 +1,388 @@
-# Bài 4: Hash Tables và Consistent Hashing
+# Bài 5: Hash Tables và Consistent Hashing
 
-## Phần 1: Hash Tables - Cấu trúc nền tảng
+Bảng băm là cấu trúc dữ liệu cơ bản nhất trong khoa học máy tính, và cũng là cấu trúc bị hiểu nông nhất. Bài này đi từ cách nó hoạt động bên trong, qua chỗ nó được dùng trong database, tới **băm nhất quán** — biến thể giải quyết bài toán mà bảng băm thường bó tay.
 
-### Array - Nền tảng của Hash Table
+## Bảng băm hoạt động thế nào
 
-```
-Array trong RAM (consecutive memory slots):
-  Index:  [0]  [1]  [2]  [3]  [4]
-  Value:  [7]  [23] [15] [42] [8]
-  Addr:   0x00 0x04 0x08 0x0C 0x10
+```text
+   Ham bam h(khoa) → mot so → chia lay du cho so o → vi tri
 
-  Truy cập array[3]:
-    CPU: address = base_addr + 3 × sizeof(int)
-       = 0x00 + 3 × 4 = 0x0C
-    → Fetch từ 0x0C → return 42
-    
-  Cost: O(1) - constant time!
-  
-  Vấn đề: Key phải là integer index (0, 1, 2, ...)
-  → Không dùng được key như "user_id=ABC123"
+   h("user:42")  = 8842119  →  8842119 % 8 = 7  →  o 7
+   h("user:88")  = 1204883  →  1204883 % 8 = 3  →  o 3
+
+   ┌───┬───┬───┬─────────┬───┬───┬───┬─────────┐
+   │ 0 │ 1 │ 2 │  user:88│ 4 │ 5 │ 6 │  user:42│
+   └───┴───┴───┴─────────┴───┴───┴───┴─────────┘
+
+   → Tra cuu: O(1) — mot phep bam, mot lan truy cap
 ```
 
-### Hash Table = Glorified Array
+### Va chạm — điều luôn xảy ra
 
-```
-Bài toán: Tìm tên sinh viên theo student_id
+Hai khoá khác nhau cho cùng một ô. Điều này **không tránh được** (nguyên lý chuồng bồ câu), chỉ có cách xử lý:
 
-student_id: 10045738 → name: "Nguyen Van A"
-student_id: 29483721 → name: "Tran Thi B"
+```text
+   PHUONG PHAP 1 — NOI CHUOI (chaining)
+   ┌───┬───┬─────────────────────────┐
+   │ 0 │ 1 │ user:42 → user:99 → ... │  ← danh sach lien ket trong mot o
+   └───┴───┴─────────────────────────┘
+   ✔ Don gian, xoa de
+   ✘ Con tro tan mat → kem thanh thoi CPU cache
 
-Cách Hash Table giải quyết:
-  1. Lấy key: 10045738
-  2. Hash: hash(10045738) = 3894729384
-  3. Modulo: 3894729384 % 10 = 4 (array size = 10)
-  4. Store name tại index 4
-
-  array[4] = "Nguyen Van A"
-
-Lookup:
-  hash(10045738) % 10 = 4 → array[4] → "Nguyen Van A"
-  Cost: O(1)!
-```
-
-### Collision - Khi hai keys cùng index
-
-```
-Collision xảy ra khi:
-  hash(key_A) % size == hash(key_B) % size
-
-Ví dụ:
-  hash(10045738) % 10 = 4  ← student A
-  hash(29483724) % 10 = 4  ← student B → COLLISION!
-
-Giải pháp phổ biến: Chaining
-  array[4] → [student_A] → [student_B] → null
-  
-Giải pháp khác: Open Addressing (tìm slot kế tiếp)
+   PHUONG PHAP 2 — DIA CHI MO (open addressing)
+   o day roi → thu o ke tiep
+   ┌───┬─────────┬─────────┬───┐
+   │ 0 │ user:42 │ user:99 │ 3 │  ← user:99 le ra o o 1, bi day sang o 2
+   └───┴─────────┴─────────┴───┘
+   ✔ Du lieu lien tuc → CPU cache rat tot
+   ✘ Xoa phuc tap (phai danh dau "bia mo")
+   ✘ Xuong cap nhanh khi bang gan day
 ```
 
-### Use Case: Hash Join trong Database
+Java `HashMap` dùng nối chuỗi (và chuyển sang cây đỏ-đen khi chuỗi quá dài); Python `dict` và Go `map` dùng biến thể của địa chỉ mở.
 
-```
-Query: SELECT e.name, c.company_name
-       FROM employees e JOIN companies c ON e.company_id = c.id
+### Hệ số tải và việc mở rộng
 
-Bước 1: Build phase (table nhỏ hơn = companies)
-  Quét bảng companies, tạo hash table trong RAM:
-    hash(company_id=1) % 1000 = 347 → "Apple"
-    hash(company_id=2) % 1000 = 892 → "Google"
-    hash(company_id=3) % 1000 = 123 → "Meta"
+```text
+   he_so_tai = so_phan_tu / so_o
 
-Bước 2: Probe phase (table lớn hơn = employees)
-  Quét bảng employees:
-    employee: company_id=1
-    → hash(1) % 1000 = 347
-    → array[347] = "Apple" → match!
-    
-Cost:
-  Build: O(n) - quét bảng nhỏ 1 lần
-  Probe: O(1) per row - lookup hash table
-  
-Vì sao chọn bảng nhỏ để build?
-  → Hash table phải FIT vào RAM
-  → RAM có giới hạn!
+   0,5  →  it va cham, nhanh, ton bo nho
+   0,75 →  can bang (mac dinh cua Java HashMap)
+   0,9  →  tiet kiem bo nho, nhieu va cham
+   1,0+ →  voi dia chi mo: XUONG CAP THAM HAI
+
+   Vuot nguong → PHONG TO: cap bang moi GAP DOI, BAM LAI MOI PHAN TU
+   → O(n), va gay KHUNG dot ngot
 ```
 
-### Giới hạn của Hash Tables
+Đây là lý do các hệ nhạy cảm với độ trễ dùng **phóng to tăng dần** (rehash dần dần qua nhiều thao tác) thay vì phóng to một lần — Redis làm đúng như vậy.
 
-```
-Giới hạn 1: PHẢI fit vào RAM
-  ❌ Hash table 1 tỷ rows × 100 bytes = 100GB RAM
-  → Không thể!
-  
-  Workaround: Partition data
-    Chia nhỏ thành chunks → hash từng chunk
-    
-Giới hạn 2: Chi phí tạo hash table
-  Phải scan toàn bộ table để build
-  O(n) - tốn thời gian với table lớn
+## Bảng băm trong database
 
-Giới hạn 3: RESIZE rất đắt
-  array size = 10 → hash % 10
-  Thêm 1 element → array size = 11 → hash % 11
-  
-  Tất cả keys thay đổi vị trí! Phải remap toàn bộ!
-  
-  key=10045738: hash % 10 = 4  ← index cũ
-  key=10045738: hash % 11 = 7  ← index mới (khác!)
-  
-  → Vấn đề này dẫn đến Distributed Hashing...
+### Hash Join
+
+```sql
+EXPLAIN SELECT * FROM orders o JOIN users u ON u.id = o.user_id;
 ```
+
+```text
+Hash Join  (cost=3854.00..28471.11 rows=1000000 width=48)
+  Hash Cond: (o.user_id = u.id)
+  ->  Seq Scan on orders o
+  ->  Hash  (cost=1834.00..1834.00 rows=100000 width=24)
+        Buckets: 131072  Batches: 1  Memory Usage: 6242kB
+        ->  Seq Scan on users u
+```
+
+```text
+   CACH LAM:
+     1. Quet bang NHO HON (users) → dung BANG BAM trong RAM
+     2. Quet bang LON HON (orders) → moi dong, tra bang bam
+   → O(n + m) thay vi O(n × m)
+```
+
+Ba dòng cần đọc trong kế hoạch:
+
+```text
+   Buckets: 131072       → so o cua bang bam
+   Batches: 1            → CHI MOT lo → vua trong work_mem  ✔
+   Memory Usage: 6242kB  → bang bam chiem 6 MB
+```
+
+Khi `Batches > 1` thì có vấn đề:
+
+```text
+Batches: 16  Memory Usage: 4096kB
+        ▲
+   work_mem KHONG DU → phai chia 16 lo, GHI RA DIA roi doc lai
+   → cham hon nhieu
+```
+
+Chữa: tăng `work_mem` **cho truy vấn đó** (`SET LOCAL`), không phải toàn cục — nhớ bẫy ở [phase-17 bài 2](01-luu-tru-du-lieu-va-kien-truc-postgres.md).
+
+### Hash Index
+
+```sql
+CREATE INDEX idx_hash ON users USING HASH (email);
+```
+
+| | Hash Index | B-Tree Index |
+|---|---|---|
+| `=` | **Nhanh, O(1)** | O(log n) |
+| `<`, `>`, `BETWEEN` | **Không hỗ trợ** | Hỗ trợ |
+| `ORDER BY` | **Không** | Hỗ trợ |
+| `LIKE 'abc%'` | **Không** | Hỗ trợ |
+| Kích thước | Nhỏ hơn với khoá dài | Chuẩn |
+| Trước PG10 | **Không ghi WAL** — mất sau sự cố | An toàn |
+
+Thực tế: **B-Tree gần như luôn là lựa chọn đúng**. Hash index chỉ hơn khi khoá rất dài (URL, chuỗi băm) và chỉ bao giờ dùng `=`.
+
+Với khoá rất dài, có cách tốt hơn cả hai:
+
+```sql
+-- Danh index tren BAM cua cot, thay vi tren chinh cot
+CREATE INDEX idx_url_hash ON pages (md5(url));
+SELECT * FROM pages WHERE md5(url) = md5('https://rat/dai/...');
+```
+
+Index này nhỏ hơn nhiều (32 byte thay vì có thể hàng nghìn byte), và vẫn dùng được B-Tree.
+
+### Hash Partitioning và Hash Aggregate
+
+```sql
+CREATE TABLE users (...) PARTITION BY HASH (user_id);
+```
+
+```sql
+EXPLAIN SELECT status, count(*) FROM orders GROUP BY status;
+```
+
+```text
+HashAggregate  (cost=22709.00..22709.03 rows=3 width=16)
+  Group Key: status
+```
+
+`HashAggregate` gom nhóm bằng bảng băm — nhanh hơn `GroupAggregate` (phải sắp xếp trước) khi số nhóm nhỏ.
 
 ---
 
-## Phần 2: Consistent Hashing - Giải pháp cho Distributed Systems
+# Băm nhất quán
 
-### Vấn đề: Sharding với Naive Hashing
+## Vấn đề mà `% N` gây ra
 
-```
-Setup: 4 database shards
-  S0, S1, S2, S3
+```text
+   3 MAY:  vi_tri = hash(khoa) % 3
 
-Routing: hash(key) % 4
+   key='a' → 100 % 3 = 1  →  MAY 1
+   key='b' → 101 % 3 = 2  →  MAY 2
 
-  key=4:   hash → 4 % 4 = 0 → Server S0
-  key=5:   hash → 5 % 4 = 1 → Server S1
-  key=6:   hash → 6 % 4 = 2 → Server S2
-  key=7:   hash → 7 % 4 = 3 → Server S3
-  key=8:   hash → 8 % 4 = 0 → Server S0
-```
+   THEM MOT MAY → hash(khoa) % 4
 
-### Vấn đề khi thêm Server
+   key='a' → 100 % 4 = 0  →  MAY 0   DOI CHO ✘
+   key='b' → 101 % 4 = 1  →  MAY 1   DOI CHO ✘
 
-```
-Thêm S4 → 5 servers → hash(key) % 5
-
-  key=4:   hash → 4 % 5 = 4 → Server S4  ← ĐÃ THAY ĐỔI! (was S0)
-  key=5:   hash → 5 % 5 = 0 → Server S0  ← ĐÃ THAY ĐỔI! (was S1)
-  key=6:   hash → 6 % 5 = 1 → Server S1  ← ĐÃ THAY ĐỔI! (was S2)
-  key=7:   hash → 7 % 5 = 2 → Server S2  ← ĐÃ THAY ĐỔI! (was S3)
-  key=8:   hash → 8 % 5 = 3 → Server S3  ← ĐÃ THAY ĐỔI! (was S0)
-
-Kết quả: TẤT CẢ keys đổi server!
-  → Phải move data từ tất cả servers
-  → Toàn bộ cluster bị ảnh hưởng
-  → Cực kỳ tốn kém!
+   → Di tu N len N+1 may: khoang N/(N+1) du lieu PHAI DI CHUYEN
+      3 →  4 may:  75%
+      9 → 10 may:  90%
 ```
 
-### Consistent Hashing - Ý tưởng cốt lõi
+Với 2 TB dữ liệu, chuyển 90% nghĩa là **1,8 TB đi qua mạng** trong khi hệ thống vẫn phải phục vụ. Với cache, nó nghĩa là **mất gần hết cache cùng lúc** — và database bên dưới lãnh trọn cú sốc.
 
-```
-Thay vì map key → server index,
-map key → VỊ TRÍ TRÊN VÒNG TRÒN (ring)
+## Vòng băm
 
-Ring = circle với giá trị 0 → 360 độ
+```text
+                        0 / 2³²
+                    ┌──────●──────┐
+              ┌─────┘             └─────┐
+         MAY A                          │
+           ●                            │
+          ┌┘                            └┐
+          │        VONG BAM              │  ● MAY B
+          │      (0 → 2³² − 1)           │
+          └┐                            ┌┘
+           │        ● MAY C             │
+           └─────┐             ┌────────┘
+                 └─────────────┘
 
-Bước 1: Đặt servers lên ring
-  hash(S0_ip) % 360 = 0   → S0 ở vị trí 0°
-  hash(S1_ip) % 360 = 90  → S1 ở vị trí 90°
-  hash(S2_ip) % 360 = 180 → S2 ở vị trí 180°
-  hash(S3_ip) % 360 = 270 → S3 ở vị trí 270°
-
-Ring:
-          S1 (90°)
-    ┌─────┴─────┐
-    │           │
-S0(0°)         S2(180°)
-    │           │
-    └─────┬─────┘
-          S3(270°)
-```
-
-### Routing trong Consistent Hashing
-
-```
-Bước 2: Map keys lên ring
-
-  key=1500: hash → 1500 % 360 = 60°
-  → 60° nằm giữa S0(0°) và S1(90°)
-  → Chọn server TIẾP THEO theo chiều kim đồng hồ = S1
-
-  key=2000: hash → 2000 % 360 = 200°
-  → 200° nằm giữa S2(180°) và S3(270°)
-  → Chọn server tiếp theo = S3
-
-  key=3000: hash → 3000 % 360 = 120°
-  → 120° nằm giữa S1(90°) và S2(180°)
-  → Chọn server tiếp theo = S2
-
-  key=20000: hash → 20000 % 360 = 280°
-  → 280° > 270° (S3), không còn server sau S3
-  → Quay vòng → S0 (0°)
-
-Ring với keys:
-          S1 (90°)
-     60°↗      ↘120°
-    ┌─────┴─────┐
-    │   1500    3000│
-S0(0°)   280°↙  S2(180°)
-   280°│         │200°
-    └─────┬─────┘
-          S3(270°)
-         (2000)
+   DINH TUYEN:
+     bam khoa → duoc mot diem tren vong
+     → di THEO CHIEU KIM DONG HO toi may DAU TIEN gap duoc
 ```
 
-### Thêm Server - Chỉ ảnh hưởng 1 neighbor
+Thêm một máy:
 
-```
-Thêm S4 tại vị trí 50°:
+```text
+   TRUOC                     SAU khi them MAY D
+   ─────                     ──────────────────
+     A                          A
+     ●                          ●
+                                     ● D   ← chen vao day
+     ● B                        ● B
+     ● C                        ● C
 
-Ring mới:
-          S1 (90°)
-       50°→S4     
-    ┌───┴──┴────┐
-    │           │
-S0(0°)         S2(180°)
+   Chi khoa nam GIUA C VA D phai chuyen sang D.
+   Moi khoa khac GIU NGUYEN.
 
-key=1500 (60°) → Trước: S1(90°) | Sau: S1(90°)  ← không đổi
-key cũ tại 60°: hash → 60° > 50° → vẫn đến S1
-
-Chỉ những keys trong khoảng (0°, 50°) cần move từ S1 → S4:
-  key=40° (ví dụ) → trước đến S1, nay đến S4
-  
-Thay đổi: CHỈ S1 bị ảnh hưởng (neighbor gần nhất)
-  → Di chuyển một phần data từ S1 sang S4
-  → Các servers khác KHÔNG bị ảnh hưởng!
+   → ~1/N du lieu di chuyen, thay vi N/(N+1)
 ```
 
-### Xóa Server
+## Nút ảo — chữa phân bố lệch
 
-```
-Xóa S1 (90°):
-  Tất cả keys của S1 (khoảng 0° - 90°) → chuyển sang S2 (180°)
-  
-  Chỉ S2 (neighbor tiếp theo) nhận data của S1
-  → Các servers khác không bị ảnh hưởng
-```
+```text
+   VAN DE: voi it may, chung co the roi vao vi tri lech
+        A ●●  B          → C phai ganh 80% vong
+             ↑
+        ● C
 
-### Vấn đề của Consistent Hashing
+   GIAI: moi may xuat hien 100-200 LAN tren vong,
+         o cac vi tri bam khac nhau
 
-```
-Vấn đề 1: Phân phối không đều (Hot Spot)
-  Nếu servers ngẫu nhiên nằm ở:
-    S0: 0°, S1: 5°, S2: 10°, S3: 355°
-  → S3 phải chứa 345° - 355° range = ÍT data
-  → S0 phải chứa 355° - 5° range... nhưng S0 = 0° và S3 = 355°
-  
-  Giải pháp: Virtual Nodes
-    Mỗi server có nhiều "virtual positions" trên ring
-    S0 → vị trí 0°, 120°, 240°
-    S1 → vị trí 40°, 160°, 280°
-    → Phân phối đều hơn
-
-Vấn đề 2: Di chuyển data vẫn tốn kém
-  Thêm/xóa server → phải copy data qua network
-  → I/O cao, latency cao trong thời gian migration
-
-Vấn đề 3: Server crash (không có thời gian migrate)
-  → Cần replication!
-  Mỗi key được lưu ở N servers tiếp theo trên ring
-  (Cassandra mặc định replication factor = 3)
+        A₁ B₃ C₂ A₇ C₉ B₁ A₄ C₅ B₈ ...
+   → phan bo xap xi deu
+   → khi them/bot may, phan chuyen cung duoc RAI DEU
 ```
 
-### Cassandra và Consistent Hashing
+Con số thực tế: **150-256 nút ảo mỗi máy vật lý** cho độ lệch dưới vài phần trăm.
 
+## Cài đặt và đo
+
+```python
+import hashlib, bisect
+
+class VongBam:
+    def __init__(self, so_nut_ao=150):
+        self.so_nut_ao = so_nut_ao
+        self.vong = {}          # vi_tri_bam -> ten_may
+        self.vi_tri = []        # danh sach vi tri DA SAP XEP
+
+    def _bam(self, s):
+        return int(hashlib.md5(s.encode()).hexdigest()[:8], 16)
+
+    def them_may(self, ten):
+        for i in range(self.so_nut_ao):
+            vt = self._bam(f"{ten}#{i}")
+            self.vong[vt] = ten
+            bisect.insort(self.vi_tri, vt)      # giu danh sach da sap
+
+    def xoa_may(self, ten):
+        for i in range(self.so_nut_ao):
+            vt = self._bam(f"{ten}#{i}")
+            del self.vong[vt]
+            self.vi_tri.remove(vt)
+
+    def tim_may(self, khoa):
+        if not self.vi_tri:
+            return None
+        h = self._bam(khoa)
+        idx = bisect.bisect_right(self.vi_tri, h)    # TIM NHI PHAN — O(log n)
+        if idx == len(self.vi_tri):
+            idx = 0                                  # vong lai dau
+        return self.vong[self.vi_tri[idx]]
 ```
-Cassandra dùng Consistent Hashing:
-  - Mỗi node có token range trên ring
-  - Replication factor = 3 (3 copies)
-  - Khi thêm node: chỉ adjacent nodes bị ảnh hưởng
 
-Ví dụ cluster 4 nodes, RF=3:
-  Key → Node1 (primary)
-      → Node2 (replica 1) 
-      → Node3 (replica 2)
-  
-  Nếu Node1 crash → Node2 hoặc Node3 serve request
+Chú ý `bisect` — tìm nhị phân trên mảng đã sắp. Với 10 máy × 150 nút ảo = 1.500 vị trí, duyệt tuyến tính cho mỗi lần tra là lãng phí rõ ràng.
 
-KHÔNG dùng Consistent Hashing khi:
-  ❌ Single database (dùng partitioning thay thế)
-  ❌ Data nhỏ vừa 1 server
-  ❌ Chưa cần phân tán
+```python
+# ĐO
+vong = VongBam(so_nut_ao=150)
+for m in ['may1', 'may2', 'may3']:
+    vong.them_may(m)
+
+khoa = [f"user:{i}" for i in range(100_000)]
+truoc = {k: vong.tim_may(k) for k in khoa}
+
+# Phan bo truoc khi them
+from collections import Counter
+print("Truoc:", Counter(truoc.values()))
+
+vong.them_may('may4')
+doi_cho = sum(1 for k in khoa if vong.tim_may(k) != truoc[k])
+print(f"Phai di chuyen: {doi_cho/len(khoa)*100:.1f}%")
+print("Sau  :", Counter(vong.tim_may(k) for k in khoa))
 ```
 
-### Hash Tables trong Database Internals
-
+```text
+Truoc: Counter({'may2': 34118, 'may1': 33442, 'may3': 32440})
+Phai di chuyen: 24.8%
+Sau  : Counter({'may2': 25883, 'may4': 24812, 'may1': 24771, 'may3': 24534})
 ```
-Databases dùng Hash Tables cho:
-  1. Hash Joins (đã nói)
-  2. Hash Indexes (lookup chính xác - không range query)
-  3. Buffer Pool (tìm page trong memory cache)
-  4. Lock Table (track rows đang bị lock)
 
-Postgres buffer pool:
-  hash(block_number) → slot trong shared_buffers
-  Cho phép O(1) lookup "page này đã cached chưa?"
+```text
+   `% N`        :  75,0% phai di chuyen
+   Vong bam     :  24,8% phai di chuyen     → IT HON 3 LAN
+   Do lech phan bo:  duoi 3%                → chap nhan duoc
 ```
+
+So sánh với `% N`:
+
+```python
+def modulo(khoa, n):
+    return int(hashlib.md5(khoa.encode()).hexdigest()[:8], 16) % n
+
+doi = sum(1 for k in khoa if modulo(k, 3) != modulo(k, 4))
+print(f"Modulo — phai di chuyen: {doi/len(khoa)*100:.1f}%")
+```
+
+```text
+Modulo — phai di chuyen: 74.9%
+```
+
+## Nó được dùng ở đâu
+
+| Hệ | Cách dùng |
+|---|---|
+| **Cassandra** | Vòng băm với 256 nút ảo mỗi nút (`num_tokens`) |
+| **DynamoDB** | Vòng băm (nền tảng từ bài báo Dynamo 2007) |
+| **Redis Cluster** | **16.384 khe** — biến thể rời rạc của cùng ý tưởng |
+| **Memcached** | Ở tầng **client**, thư viện tự cài |
+| **Nginx** | `hash $request_uri consistent;` |
+| **HAProxy** | `balance hash` với `hash-type consistent` |
+| **CDN** | Chọn máy chủ biên cho từng nội dung |
+
+### Redis Cluster — vì sao 16.384 khe
+
+```text
+   Thay vi vong lien tuc, Redis dung 16.384 KHE ROI RAC:
+     khe = CRC16(khoa) mod 16384
+
+   Vi sao con so nay?
+     • DU NHO de bang khe vua trong goi tin trao doi giua cac nut
+       (16.384 bit = 2 KB dang bitmap)
+     • DU LON de chia min cho hang tram nut
+
+   Uu diem so voi vong lien tuc:
+     → di chuyen theo TUNG KHE, kiem soat duoc tung buoc
+     → biet chinh xac dang di chuyen cai gi
+```
+
+### Cassandra — nút ảo
+
+```yaml
+# cassandra.yaml
+num_tokens: 256      # so nut ao moi nut vat ly
+```
+
+```text
+   256 nut ao cho phan bo rat deu,
+   va khi them nut moi, du lieu duoc keo ve TU NHIEU NUT CUNG LUC
+   → nhanh hon nhieu so voi keo tu mot nut
+```
+
+## Băm nhất quán có giới hạn ràng buộc
+
+Biến thể quan trọng: nếu chỉ dùng vòng băm thuần, một máy có thể bị dồn quá tải (khoá nóng). **Bounded-load consistent hashing** thêm một trần:
+
+```text
+   Neu may dich da vuot (1 + ε) × tai_trung_binh
+     → di tiep theo chieu kim dong ho toi may ke tiep
+
+   → dam bao khong may nao qua tai qua ε
+   → doi lai: mot so khoa khong o "dung" may cua no
+```
+
+Google dùng biến thể này trong hạ tầng cân bằng tải của họ.
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Dùng `hash % N` cho cache/shard | Thêm một máy = mất 75-90% cache cùng lúc → database lãnh cú sốc | Băm nhất quán |
+| Không dùng nút ảo | Phân bố lệch nghiêm trọng với ít máy | 150-256 nút ảo mỗi máy |
+| Duyệt tuyến tính vòng băm | Chậm với hàng nghìn nút ảo | Tìm nhị phân (`bisect`) trên mảng đã sắp |
+| Dùng hàm băm không đều (như `hash()` của Python) | Phân bố lệch; và Python còn ngẫu nhiên hoá theo phiên | MD5/SHA1/xxHash — nhất quán giữa các tiến trình |
+| Hash index cho truy vấn khoảng | Hash không hỗ trợ `<`, `>`, `ORDER BY` | B-Tree |
+| Bỏ qua `Batches > 1` trong Hash Join | Bảng băm tràn ra đĩa, chậm hơn nhiều | Tăng `work_mem` bằng `SET LOCAL` |
+| Không tính khoá nóng | Một máy quá tải dù phân bố khoá đều | Bounded-load, hoặc tách riêng khoá nóng |
+
+## Tóm tắt bài 5
+
+- Bảng băm cho tra cứu **O(1)** nhưng **va chạm luôn xảy ra**; hai cách xử lý là **nối chuỗi** (đơn giản, kém thân thiện với cache CPU) và **địa chỉ mở** (cache tốt, xoá phức tạp).
+- Vượt hệ số tải thì phải **phóng to và băm lại mọi phần tử** — O(n) và gây khựng đột ngột. Redis dùng **phóng to tăng dần** để tránh.
+- Trong database, bảng băm xuất hiện ở **Hash Join**, **Hash Index**, **Hash Partitioning**, **HashAggregate**. Dòng **`Batches > 1`** trong `EXPLAIN` là dấu hiệu `work_mem` không đủ.
+- **Hash index gần như luôn thua B-Tree.** Với khoá rất dài, cách tốt hơn cả hai là **index B-Tree trên `md5(cột)`**.
+- **`hash % N` gãy** vì đi từ N lên N+1 máy làm **75-90% dữ liệu phải di chuyển** — với cache, đó là mất gần hết cache cùng lúc.
+- **Vòng băm** giảm xuống còn **~1/N**, và **nút ảo** (150-256 mỗi máy) làm phân bố đều. Đo thật: 74,9% → **24,8%**, độ lệch dưới 3%.
+- **Redis Cluster dùng 16.384 khe rời rạc** thay vì vòng liên tục — đủ nhỏ để bảng khe vừa trong gói tin trao đổi, đủ lớn để chia mịn, và cho phép di chuyển từng khe có kiểm soát.
+- **Bounded-load consistent hashing** thêm trần tải để không máy nào quá tải vì khoá nóng.
+
+**Bài kế tiếp** → [Bài 6: Indexing - PostgreSQL vs MySQL](05-indexing-postgres-vs-mysql.md)

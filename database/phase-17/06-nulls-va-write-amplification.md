@@ -1,343 +1,436 @@
-# Bài 6: NULLs trong Database và Write Amplification
+# Bài 7: NULL và Write Amplification
 
-## Phần 1: NULLs - Hiểu đúng để dùng đúng
+Hai chủ đề không liên quan gì nhau về mặt khái niệm, nhưng chúng chung một tính chất: **cả hai đều là chi phí ẩn mà bạn không nhìn thấy cho tới khi đo**.
 
-### NULL là gì?
+---
 
-```
-NULL = "Không có giá trị" (absence of value)
-     ≠ 0
-     ≠ "" (empty string)
-     ≠ false
+# Phần I — NULL
 
-SQL Standard: NULL bukan VALUE - là trạng thái "missing"
+## `NULL` không phải một giá trị
 
-Ví dụ ý nghĩa:
-  birthday = NULL     → User chưa cung cấp ngày sinh
-  nickname = NULL     → User không có nickname
-  deleted_at = NULL   → Record chưa bị xóa
-  score = NULL        → Chưa được chấm điểm (khác với score = 0!)
+Đây là điểm khởi đầu, và hiểu sai nó là gốc của mọi bẫy sau:
+
+```text
+   NULL nghia la "KHONG BIET", khong phai "rong" hay "khong co gi".
+
+   → Moi phep so sanh voi NULL cho ra NULL, KHONG phai TRUE hay FALSE.
 ```
 
-### Cách Postgres lưu NULL
-
-```
-Postgres page structure (8KB):
-  ┌─────────────────────────────────────────┐
-  │ Page Header (24 bytes)                   │
-  ├─────────────────────────────────────────┤
-  │ Row Header + NULL BITMAP                 │
-  │  null_bitmap[0]: 0 1 0 0 1 0 0 0        │
-  │  ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓                       │
-  │  col1 col2 col3 col4 col5...             │
-  │  (1 = NULL, 0 = has value)              │
-  ├─────────────────────────────────────────┤
-  │ Column 1 value (32-bit int)             │
-  │ Column 3 value (32-bit int)             │
-  │ Column 6 value (VARCHAR...)             │
-  │  [col2, col5 không có data - là NULL!]  │
-  └─────────────────────────────────────────┘
-
-NULL bitmap overhead:
-  ≤ 8 columns:  1 byte overhead
-  9-16 columns: 2 bytes overhead
-  17-24:        3 bytes overhead
-  ... (tăng 1 byte mỗi 8 columns)
-
-1024 columns: 128 bytes = 0.13% overhead - RẤT NHỎ!
+```sql
+SELECT NULL = NULL       AS a,
+       NULL <> NULL      AS b,
+       NULL > 5          AS c,
+       NULL + 1          AS d,
+       'abc' || NULL     AS e;
 ```
 
-### NULL tiết kiệm không gian
-
-```
-Bài toán: Table 500 columns, hầu hết NULL
-
-Lưu với DEFAULT VALUE (0 hoặc -1):
-  500 columns × 4 bytes (int) = 2000 bytes/row
-  
-Lưu với NULL:
-  NULL bitmap: 500/8 = 63 bytes overhead
-  Chỉ lưu columns CÓ GIÁ TRỊ, ví dụ 20 columns:
-  20 × 4 bytes + 63 = 143 bytes/row
-
-Tiết kiệm: 2000 - 143 = 1857 bytes/row = 93% ít hơn!
-
-Ảnh hưởng thực tế:
-  Row size nhỏ → FIT nhiều rows vào 1 page (8KB)
-  → Ít I/O khi đọc
-  → Buffer pool hiệu quả hơn
-  → PERFORMANCE cải thiện đáng kể!
+```text
+ a | b | c | d | e
+---+---+---+---+---
+   |   |   |   |          ← TAT CA deu la NULL, khong phai true/false
 ```
 
-### Những "bẫy" khi dùng NULL
+SQL dùng **logic ba giá trị**: `TRUE`, `FALSE`, `NULL`.
 
-```
-Bẫy 1: COUNT(*) vs COUNT(column)
-
-  Bảng có 5 rows, cột "score" có 2 NULLs:
-    id=1, score=90
-    id=2, score=NULL
-    id=3, score=85
-    id=4, score=NULL
-    id=5, score=95
-
-  SELECT COUNT(*) FROM grades;        → 5 (đếm tất cả rows)
-  SELECT COUNT(score) FROM grades;    → 3 (bỏ qua NULLs!)
-  SELECT COUNT(1) FROM grades;        → 5 (giống COUNT(*))
-
-  Cùng 1 table, khác result → dễ bug!
+```text
+   AND    │ TRUE  │ FALSE │ NULL          OR     │ TRUE │ FALSE │ NULL
+   ───────┼───────┼───────┼──────         ───────┼──────┼───────┼──────
+   TRUE   │ TRUE  │ FALSE │ NULL          TRUE   │ TRUE │ TRUE  │ TRUE
+   FALSE  │ FALSE │ FALSE │ FALSE         FALSE  │ TRUE │ FALSE │ NULL
+   NULL   │ NULL  │ FALSE │ NULL          NULL   │ TRUE │ NULL  │ NULL
 ```
 
-```
-Bẫy 2: NULL không thể so sánh bằng =
+Hai ô đáng nhớ: `FALSE AND NULL = FALSE` (đã sai rồi thì không cần biết vế kia), và `TRUE OR NULL = TRUE` (đã đúng rồi thì không cần biết vế kia).
 
-  WHERE score = NULL    → KHÔNG BAO GIỜ trả kết quả!
-  WHERE score IS NULL   → Đúng!
-  WHERE score IS NOT NULL → Đúng!
+## Bốn cái bẫy
 
-  Tại sao? NULL = NULL → UNKNOWN (không phải TRUE)
-  SQL: chỉ trả rows khi condition = TRUE
-```
+### Bẫy 1 — `WHERE` âm thầm bỏ sót dòng
 
-```
-Bẫy 3: NOT IN với NULL
-
-  SELECT * FROM employees 
-  WHERE dept_id NOT IN (1, 2, NULL);
-  → Trả về NOTHING! 
-
-  Lý do: NOT IN → WHERE id != 1 AND id != 2 AND id != NULL
-         id != NULL → UNKNOWN → cả expression = UNKNOWN → bị lọc
-
-  Fix: Đảm bảo subquery không return NULL
-       Hoặc dùng NOT EXISTS
+```sql
+SELECT * FROM users WHERE status <> 'active';
 ```
 
-```
-Bẫy 4: NULL trong aggregate
+```text
+   `WHERE` chi giu dong co dieu kien TRUE.
+   NULL <> 'active'  →  NULL  →  KHONG duoc giu
 
-  SELECT AVG(score) FROM grades;  → 90 (không phải 54!)
-  Tự động bỏ qua NULLs!
-  (90 + 85 + 95) / 3 = 90  ← chia cho 3 (rows có value), không phải 5
-
-  Nếu muốn tính NULL = 0:
-  SELECT AVG(COALESCE(score, 0)) FROM grades;
-  → (90 + 0 + 85 + 0 + 95) / 5 = 54
+   → Dong co status = NULL BI BO QUA AM THAM
 ```
 
-### NULL và Index
-
+```sql
+-- Cach dung
+WHERE status IS DISTINCT FROM 'active';
+-- hoac
+WHERE status <> 'active' OR status IS NULL;
 ```
-Postgres (từ version 8.3):
-  ✅ Index LƯU NULL values
-  → WHERE column IS NULL có thể dùng index
 
-Oracle (mặc định):
-  ❌ Index KHÔNG lưu NULL
-  → WHERE column IS NULL → Full Table Scan!
-  → Workaround: WHERE COALESCE(column, 'X') = 'X'
+`IS DISTINCT FROM` xử lý `NULL` như một giá trị bình thường — đó là công cụ đúng cho tình huống này, và rất ít người dùng.
 
-Partial Index (Postgres) - Best Practice:
-  CREATE INDEX idx_active ON users(email) 
-    WHERE deleted_at IS NULL;
-  
-  → Index CHỈ chứa active users (không có NULL deleted_at)
-  → Index nhỏ hơn nhiều
-  → Queries WHERE deleted_at IS NULL cực nhanh
-  
-  Admin query (ít dùng): không cần optimize
-  User query (thường xuyên): tận dụng partial index
+### Bẫy 2 — `NOT IN` với subquery chứa `NULL`
+
+Đây là bẫy gây bug âm thầm nhiều nhất:
+
+```sql
+SELECT * FROM orders WHERE user_id NOT IN (SELECT id FROM banned_users);
+```
+
+```text
+   Neu `banned_users.id` co DU MOT gia tri NULL:
+     user_id NOT IN (1, 2, NULL)
+     ≡ user_id <> 1 AND user_id <> 2 AND user_id <> NULL
+     ≡ TRUE AND TRUE AND NULL
+     ≡ NULL
+   → KHONG dong nao duoc giu
+   → KET QUA LUON RONG, khong bao gio bao loi
+```
+
+```sql
+-- AN TOAN
+SELECT * FROM orders o
+WHERE NOT EXISTS (SELECT 1 FROM banned_users b WHERE b.id = o.user_id);
+```
+
+`NOT EXISTS` không bị ảnh hưởng bởi `NULL`, và thường còn nhanh hơn.
+
+### Bẫy 3 — `UNIQUE` cho phép nhiều `NULL`
+
+```sql
+CREATE TABLE users (email TEXT UNIQUE);
+INSERT INTO users VALUES (NULL), (NULL), (NULL);   -- CHAP NHAN CA BA
+```
+
+```text
+   Vi NULL <> NULL, nen cac NULL KHONG duoc coi la trung nhau.
+   → dung theo chuan SQL, nhung thuong khong phai y dinh cua ban
+```
+
+PostgreSQL 15 thêm cách kiểm soát:
+
+```sql
+CREATE TABLE users (
+    email TEXT,
+    UNIQUE NULLS NOT DISTINCT (email)      -- chi cho MOT NULL
+);
+```
+
+### Bẫy 4 — Hàm tổng hợp bỏ qua `NULL`
+
+```sql
+SELECT count(*), count(email), avg(age) FROM users;
+```
+
+```text
+ count | count | avg
+-------+-------+------
+  1000 |   842 | 34.2
+    ▲      ▲      ▲
+    │      │      └ trung binh cua 842 dong CO tuoi, khong phai 1.000
+    │      └ dem dong co email KHAC NULL
+    └ dem MOI dong
+```
+
+Đây thường là hành vi bạn muốn, nhưng phải biết nó xảy ra — nếu không, `AVG` sẽ cho con số khác với `SUM / COUNT(*)`.
+
+## Vì sao `NULL` lại tốt cho hiệu năng
+
+Trái với trực giác, `NULL` **tiết kiệm** chỗ:
+
+```text
+   POSTGRESQL luu mot BITMAP NULL o dau moi tuple: 1 bit moi cot.
+   → cot NULL KHONG chiem byte du lieu nao
+
+   Bang 20 cot, trung binh 15 cot NULL:
+     Dung NULL      : 23 byte header + 3 byte bitmap + 5 cot du lieu
+     Dung chuoi rong: 23 byte header + 20 cot du lieu
+   → NULL GON HON dang ke
+```
+
+Và quan trọng hơn — **index bỏ qua `NULL` được**:
+
+```sql
+-- Bang 100 trieu dong, chi 50.000 dong co `deleted_at` khac NULL
+CREATE INDEX idx_deleted ON orders (deleted_at) WHERE deleted_at IS NOT NULL;
+```
+
+```text
+   Index day du  : 2,1 GB
+   Index bo phan : 1,8 MB      → NHO HON ~1.200 LAN
+```
+
+Ba cột rất hợp với kỹ thuật này: `deleted_at`, `error_message`, `cancelled_at` — những cột "hiếm khi có giá trị".
+
+## Nên dùng `NULL` hay giá trị mặc định?
+
+| Tình huống | Nên |
+|---|---|
+| Giá trị thật sự **không biết** | **`NULL`** |
+| Giá trị **chưa có** (chưa xảy ra) | **`NULL`** |
+| Giá trị **bằng không** có nghĩa | `0` |
+| Chuỗi rỗng có nghĩa (người dùng cố ý để trống) | `''` |
+| Cột dùng trong tính toán thường xuyên | Mặc định, tránh `NULL` lan truyền |
+| Cột hiếm khi có giá trị | **`NULL`** + index bộ phận |
+
+Quy tắc gọn:
+
+```text
+   NULL khi thieu du lieu la CO NGHIA.
+   Mac dinh khi thieu du lieu chi la PHIEN PHUC.
 ```
 
 ---
 
-## Phần 2: Write Amplification
+# Phần II — Write Amplification
 
-### Write Amplification là gì?
+## Định nghĩa
 
-```
-Định nghĩa: 1 logical write → nhiều physical writes
+```text
+   khuech_dai_ghi = so_byte_GHI_THAT_XUONG_DIA / so_byte_DU_LIEU_LOGIC
 
-Ví dụ: User click "Done" trên Todo app
-  Dev nghĩ: 1 UPDATE statement
-  Thực tế có thể: 5-10 physical writes
-
-Tại sao quan trọng?
-  → Tốn I/O
-  → Làm hỏng SSD nhanh hơn
-  → Giảm throughput
-  → Tăng latency
+   Ban UPDATE mot cot 4 byte.
+   Dia phai ghi bao nhieu?  → thuong la HANG NGHIN byte.
 ```
 
-### Tầng 1: Application Write Amplification
+## Sáu tầng khuếch đại
 
-```
-API: PATCH /todos/123 { "done": true }
-Front-end dev nghĩ: "Simple update!"
+```text
+   ┌─ TANG 1: UNG DUNG ─────────────────────────────────────────┐
+   │  UPDATE users SET last_login = now() WHERE id = 42;        │
+   │  Du lieu logic: 8 byte                                     │
+   ├─ TANG 2: MVCC ─────────────────────────────────────────────┤
+   │  PostgreSQL tao PHIEN BAN MOI cua CA DONG                  │
+   │  → ~200 byte (ca dong, khong chi cot doi)                  │
+   ├─ TANG 3: INDEX ────────────────────────────────────────────┤
+   │  ctid doi → cap nhat 5 index × ~40 byte                    │
+   │  → ~200 byte                                               │
+   ├─ TANG 4: WAL ──────────────────────────────────────────────┤
+   │  Ghi ban ghi WAL cho dong + cho moi index                  │
+   │  → ~400 byte                                               │
+   │  VA neu la lan dau page bi sua sau checkpoint:              │
+   │  → GHI CA PAGE 8 KB × (1 heap + 5 index) = 48 KB   ⚠       │
+   ├─ TANG 5: HE DIEU HANH ─────────────────────────────────────┤
+   │  Ghi theo don vi 4 KB                                      │
+   ├─ TANG 6: SSD ──────────────────────────────────────────────┤
+   │  Ghi theo don vi 16 KB, va COLLECT GARBAGE ben trong       │
+   │  → khuech dai them 1,5-4 lan                               │
+   └────────────────────────────────────────────────────────────┘
 
-Backend thực tế:
-  1. UPDATE todos SET done=true WHERE id=123
-  2. INSERT todo_history (todo_id=123, action='done', user_id=...)
-  3. UPDATE user_stats SET completed_count = completed_count + 1
-  4. INSERT notifications (user_id=..., type='achievement')
-  5. (nếu có) UPDATE search_index SET ...
-
-1 API call = 5 database writes!
-
-Với Normalized schema:
-  Đây là THIẾT KẾ ĐÚNG - consistency > performance
-  
-Cần cân nhắc:
-  - Có thực sự cần history?
-  - Có thể async không? (push vào queue)
-  - Có thể batch không?
-```
-
-### Tầng 2: Database Write Amplification (Postgres Example)
-
-```
-Bảng employees: 6 columns, 5 có index
-
-UPDATE employees SET name = 'Alice2' WHERE id = 1;
-
-PostgreSQL thực hiện:
-  1. Tạo NEW tuple (row) TID(0,4): [id=1, name='Alice2', ...]
-  2. Mark OLD tuple TID(0,1) là DEAD
-  3. Update index on (id):    TID(0,1) → TID(0,4)
-  4. Update index on (name):  'Alice' → TID(0,1) bị xóa
-                              'Alice2' → TID(0,4) thêm vào
-  5. Update index on (age):   TID(0,1) → TID(0,4)
-  6. Update index on (dept):  TID(0,1) → TID(0,4)
-  7. Update index on (email): TID(0,1) → TID(0,4)
-  8. Ghi WAL (Write Ahead Log) cho tất cả thay đổi
-
-Kết quả: 1 UPDATE → 8+ writes!
-(+ WAL doubles mọi thứ)
-
-HOT (Heap Only Tuple) - Postgres optimization:
-  Nếu update column KHÔNG có index VÀ same page có space:
-    → Không cần update bất kỳ index nào!
-    → Old tuple point → new tuple
-    → Giảm write amplification đáng kể
+   TONG: 8 byte logic  →  co the thanh 50-200 KB ghi that
+                          KHUECH DAI 6.000 - 25.000 LAN
 ```
 
-### Tầng 3: SSD Write Amplification
+Con số này nghe khó tin, nhưng đo được.
 
-```
-SSD Architecture:
-  Cell → Row of cells → Page (thường 4-8KB)
-  Pages grouped → Block (thường 256KB-1MB)
+## Đo trên máy thật
 
-SSD Rule:
-  ✅ Write: Chỉ viết vào PAGE TRỐNG
-  ❌ Overwrite: KHÔNG THỂ ghi đè trực tiếp!
-     → Phải ERASE cả BLOCK trước khi write
-
-Update process:
-  Old data (valid): [A] [B] [C] [D]  ← Block 1
-  
-  Update [B] → [B']:
-    1. Write [B'] vào page mới → Block 2: [B'][_][_][_]
-    2. Mark [B] trong Block 1 là STALE
-    
-  Block 1 now: [A] [STALE-B] [C] [D]
-
-  Block 1 bây giờ có stale data → waste!
+```sql
+-- Do WAL sinh ra boi mot thao tac
+SELECT pg_current_wal_lsn() AS truoc \gset
+UPDATE users SET last_login = now() WHERE id < 100000;
+SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), :'truoc')) AS wal;
 ```
 
-```
-Garbage Collection (GC) trong SSD:
-  1. GC scan blocks tìm stale pages
-  2. Copy valid pages từ Block 1 sang Block mới
-     Block 1: [A][stale-B][C][D] → Move [A][C][D] sang Block 3
-  3. ERASE toàn bộ Block 1
-  4. Block 1 ready để dùng lại
-
-  1 UPDATE = write mới + GC activity = nhiều physical writes!
-
-Wear Leveling:
-  SSD có giới hạn write cycles (~2500-100000 per cell)
-  → SSD controller phân phối đều writes qua tất cả cells
-  → Kéo dài tuổi thọ SSD
-  → Thêm write amplification!
-
-Thực tế: 1 logical write → 3-10x physical writes trên SSD
+```text
+ wal
+-------
+ 47 MB
 ```
 
-### B-Tree và SSD Write Amplification
-
-```
-Database dùng B+Tree cho indexes
-B+Tree updates → In-place modifications → SSD ghét!
-
-Ví dụ: INSERT row mới
-
-  B+Tree leaf page đầy → PAGE SPLIT:
-    Leaf [1,3,5,7] → thêm 6 → [1,3,5] + [6,7]
-    Parent cần thêm pointer → có thể split tiếp!
-    
-  Page split:
-    1. Write 2 new pages (SSD: mark old pages stale)
-    2. Write parent page
-    3. Có thể split parent → ghi thêm
-    4. GC phải dọn stale pages sau
-
-LSM-Tree (Log-Structured Merge) - Giải pháp:
-  Chỉ APPEND (không update in-place)
-  → SSD: toàn bộ pages mới, không có stale pages
-  → GC ít phải chạy
-  → SSD tuổi thọ cao hơn
-  
-  Dùng trong: RocksDB, Cassandra, LevelDB, HBase
+```text
+   100.000 dong × 8 byte du lieu logic = 800 KB
+   WAL sinh ra                          =  47 MB
+   → KHUECH DAI ~60 LAN (chi rieng tang WAL)
 ```
 
-### Cộng dồn Write Amplification
+Thống kê tổng thể:
 
-```
-User click "Done" → Todo app:
-
-App level (x5):
-  1 API → 5 DB writes
-
-DB level (x3 per write, giả sử 3 indexes):
-  5 writes × 3 index updates = 15 DB physical ops
-
-WAL doubling (x2):
-  15 × 2 = 30 WAL writes
-
-SSD level (x5 GC amplification):
-  30 × 5 = 150 SSD physical writes!
-
-1 user click → 150 physical SSD writes!
-
-Không phải luôn tệ đến vậy, nhưng cần nhận thức được:
-  → Chọn columns cẩn thận khi thêm index
-  → Schema denormalization có thể giảm amplification
-  → LSM-tree cho write-heavy workloads
-  → SSD chịu đựng được - nhưng wear leveling sẽ ảnh hưởng
+```sql
+SELECT wal_records, wal_fpi,
+       pg_size_pretty(wal_bytes) AS tong_wal,
+       round(100.0*wal_fpi/NULLIF(wal_records,0), 1) AS pct_ghi_ca_page
+FROM pg_stat_wal;
 ```
 
-### Giảm thiểu Write Amplification
-
+```text
+ wal_records | wal_fpi | tong_wal | pct_ghi_ca_page
+-------------+---------+----------+-----------------
+    88412993 | 1284993 | 399 GB   |             1.5
 ```
-Application level:
-  ✅ Async writes (push to queue, process later)
-  ✅ Batch updates thay vì từng row
-  ✅ Xem xét kỹ trước khi thêm history/audit tables
 
-Database level:
-  ✅ Chỉ index columns thực sự cần
-  ✅ Dùng HOT-friendly fill factor (70-80%)
-  ✅ VACUUM regular để dọn dead tuples
-  ✅ Chọn LSM-tree (Cassandra) cho write-heavy
+`pct_ghi_ca_page` cao (> 5%) nghĩa là checkpoint quá dày — mỗi checkpoint làm mọi page bị sửa lần đầu phải ghi cả 8 KB vào WAL.
 
-SSD level:
-  ✅ Dùng Enterprise SSD (higher write endurance)
-  ✅ Over-provisioning (để GC hoạt động hiệu quả)
-  ✅ Tránh update hot spots (phân tán writes)
+## Vì sao nó quan trọng
 
-Query design:
-  ✅ UPDATE chỉ columns cần thiết (không SELECT *)
-  ✅ Không update PRIMARY KEY
-  ✅ Tránh UPDATE millions rows trong 1 transaction
+```text
+   1. TUOI THO SSD
+      SSD chi chiu duoc so lan ghi HUU HAN moi o.
+      Khuech dai 50 lan → SSD mon nhanh hon 50 lan.
+      → 5 nam thanh 1 nam
+
+   2. BANG THONG DIA
+      SSD 500 MB/s ghi, khuech dai 50 lan
+      → chi ghi duoc 10 MB/s DU LIEU LOGIC
+
+   3. BANG THONG NHAN BAN
+      WAL duoc gui NGUYEN VEN cho replica.
+      Khuech dai cao → luu luong nhan ban cao
+      → dat khi xuyen trung tam du lieu
+
+   4. DUNG LUONG SAO LUU
+      Sao luu tang dan dua tren WAL → cang lon
 ```
+
+## Tám cách giảm
+
+### 1. Bỏ index không cần thiết
+
+```sql
+SELECT indexrelname, idx_scan, pg_size_pretty(pg_relation_size(indexrelid))
+FROM pg_stat_user_indexes WHERE idx_scan = 0 AND relname = 'users';
+```
+
+Mỗi index bỏ đi là một tầng khuếch đại bỏ đi.
+
+### 2. Tăng tỉ lệ HOT update
+
+```sql
+ALTER TABLE users SET (fillfactor = 80);
+```
+
+```text
+   HOT update: neu phien ban moi nam CUNG PAGE va KHONG cot duoc danh index
+   bi doi → KHONG cap nhat index nao
+   → xoa bo TANG 3 hoan toan
+```
+
+### 3. Đừng đánh index cột hay thay đổi
+
+```text
+   Index tren `last_login` (cap nhat moi lan dang nhap)
+   → PHA VO HOT cho MOI `UPDATE` cua bang do
+   → ke ca cac UPDATE khong lien quan gi toi last_login
+```
+
+Đây là điều phản trực giác nhất trong danh sách: **một index sai chỗ làm hỏng HOT cho toàn bảng**.
+
+### 4. Giãn checkpoint
+
+```sql
+ALTER SYSTEM SET checkpoint_timeout = '15min';   -- mac dinh 5min
+ALTER SYSTEM SET max_wal_size = '8GB';           -- mac dinh 1GB
+```
+
+```text
+   Checkpoint THUA → moi page chi phai ghi ca page MOT LAN
+   trong khoang thoi gian dai hon
+   → giam manh `wal_fpi`
+```
+
+### 5. Bật nén WAL
+
+```sql
+ALTER SYSTEM SET wal_compression = 'zstd';   -- PG15+
+```
+
+```text
+   Nen rieng cac ban ghi GHI CA PAGE
+   → thuong giam 40-70% luong WAL
+   → chi phi CPU nho
+```
+
+### 6. Gộp lô lệnh ghi
+
+```python
+# CHAM: 10.000 transaction → 10.000 lan fsync
+for row in rows:
+    cur.execute("INSERT INTO logs VALUES (%s)", (row,))
+    conn.commit()
+
+# NHANH: 1 transaction
+cur.executemany("INSERT INTO logs VALUES (%s)", rows)
+conn.commit()
+```
+
+### 7. Tách cột lớn ra bảng riêng
+
+```text
+   Cot TEXT 5 KB nam cung bang nong:
+     moi UPDATE bat ky cot nao → tao phien ban moi CUA CA DONG
+     → 5 KB duoc ghi lai du khong doi
+
+   Tach ra bang rieng → bang nong gon → khuech dai giam manh
+```
+
+> PostgreSQL đã tự làm một phần bằng **TOAST** (giá trị > ~2 KB tự đẩy sang bảng phụ, và **không ghi lại nếu không đổi**). Nhưng tách tay vẫn tốt hơn khi bạn biết rõ cột nào hiếm dùng.
+
+### 8. Cân nhắc engine LSM cho tải ghi cực nặng
+
+```text
+   MyRocks o Facebook: khuech dai ghi GIAM ~10 LAN so voi InnoDB
+   → doi lai doc cham hon mot chut
+   → xem [phase-11 bai 3]
+```
+
+## Khuếch đại ghi ở tầng SSD
+
+Tầng cuối cùng thường bị bỏ qua:
+
+```text
+   SSD KHONG GHI DE TAI CHO. Muon sua mot o, phai:
+     1. Doc ca KHOI (thuong 256 KB - 4 MB)
+     2. Xoa ca khoi
+     3. Ghi lai ca khoi
+
+   → COLLECT GARBAGE ben trong SSD gay khuech dai 1,5-4 lan
+   → SSD doanh nghiep co "over-provisioning" (du dung luong an)
+     de giam chuyen nay
+```
+
+Hai điều làm giảm:
+
+```text
+   • TRIM/discard: bao cho SSD biet khoi nao khong con dung
+     → mount voi tuy chon `discard`, hoac chay `fstrim` dinh ky
+   • Giu SSD khong day qua 80%
+     → con nhieu khoi trong → it phai gom rac
+```
+
+## Bảng tổng kết các nguồn khuếch đại
+
+| Tầng | Nguồn | Mức | Giảm bằng |
+|---|---|---|---|
+| MVCC | Tạo phiên bản mới cả dòng | 5-50× | Tách cột lớn; `fillfactor` |
+| Index | Cập nhật mọi index | ×(số index) | Bỏ index thừa; tăng HOT |
+| WAL | Ghi nhật ký | 2-5× | `wal_compression` |
+| **Ghi cả page** | Chống trang rách | **có thể ×1.000** | Giãn checkpoint; `wal_compression` |
+| Hệ điều hành | Ghi theo khối 4 KB | 1-2× | — |
+| SSD | Gom rác bên trong | 1,5-4× | TRIM; không để đầy quá 80% |
+
+Dòng in đậm là nguồn lớn nhất và cũng dễ giảm nhất.
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| `NOT IN` với subquery có `NULL` | **Kết quả luôn rỗng, không báo lỗi** | `NOT EXISTS` |
+| `WHERE x <> 'y'` bỏ sót dòng `NULL` | Thiếu dữ liệu âm thầm | `IS DISTINCT FROM` |
+| Tưởng `UNIQUE` chặn nhiều `NULL` | Nhiều `NULL` đều được chấp nhận | `UNIQUE NULLS NOT DISTINCT` (PG15+) |
+| Dùng `''` hoặc `0` thay `NULL` để "tránh rắc rối" | Mất khả năng phân biệt "không biết" với "bằng không"; và tốn chỗ hơn | `NULL` khi thiếu dữ liệu là có nghĩa |
+| Đánh index cột hay thay đổi | **Phá vỡ HOT cho toàn bảng** | Cân nhắc kỹ; đo tỉ lệ HOT trước/sau |
+| Để `max_wal_size = 1GB` mặc định | Checkpoint bị ép buộc liên tục → `wal_fpi` cao | Tăng lên 4-16 GB |
+| Cột TEXT lớn nằm cùng bảng nóng | Mọi `UPDATE` ghi lại cả dòng | Tách bảng, hoặc để TOAST xử lý |
+| Bỏ qua khuếch đại ở tầng SSD | SSD mòn nhanh hơn dự kiến nhiều lần | TRIM; giữ dưới 80% dung lượng |
+| Không theo dõi `wal_fpi` | Không biết checkpoint đang quá dày | Cảnh báo khi `wal_fpi/wal_records > 5%` |
+
+## Tóm tắt bài 7
+
+- **`NULL` nghĩa là "không biết"**, nên mọi so sánh với nó cho ra `NULL` chứ không phải `TRUE`/`FALSE` — SQL dùng **logic ba giá trị**.
+- Bốn bẫy: `WHERE x <> 'y'` **bỏ sót dòng `NULL`** · **`NOT IN` với subquery chứa `NULL` luôn trả về rỗng** · `UNIQUE` cho phép nhiều `NULL` · hàm tổng hợp bỏ qua `NULL`.
+- Bẫy nguy hiểm nhất là `NOT IN` — nó **không bao giờ báo lỗi**, chỉ âm thầm trả về rỗng. Dùng `NOT EXISTS`.
+- Trái trực giác, **`NULL` tiết kiệm chỗ** (bitmap 1 bit mỗi cột) và cho phép **index bộ phận nhỏ hơn ~1.200 lần** với các cột hiếm có giá trị.
+- **Khuếch đại ghi** có **sáu tầng**: MVCC → index → WAL → ghi cả page → hệ điều hành → SSD. Một `UPDATE` 8 byte có thể thành hàng chục KB ghi thật.
+- Đo thật: cập nhật 100.000 dòng sinh **47 MB WAL** cho 800 KB dữ liệu logic — khuếch đại **~60 lần** chỉ riêng tầng WAL.
+- Nguồn lớn nhất và dễ giảm nhất là **ghi cả page**: giãn checkpoint (`max_wal_size = 8GB`) và bật **`wal_compression = zstd`** (giảm 40-70%).
+- Điều phản trực giác nhất: **một index trên cột hay thay đổi phá vỡ HOT update cho toàn bảng** — kể cả các `UPDATE` không liên quan gì tới cột đó.
+- Tầng SSD thường bị bỏ qua: gom rác bên trong gây khuếch đại thêm **1,5-4 lần**. Giảm bằng **TRIM** và **giữ ổ dưới 80% dung lượng**.
+
+**Bài kế tiếp** → [Bài 8: Optimistic vs Pessimistic Concurrency Control và MySQL InnoDB Locking](07-concurrency-control-va-innodb-locking.md)
