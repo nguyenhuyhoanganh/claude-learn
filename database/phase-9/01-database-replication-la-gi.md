@@ -1,313 +1,445 @@
-# Bài 1: Database Replication là gì?
+# Bài 1: Database Replication — nhân bản dữ liệu và cái giá của độ trễ
 
-## Vấn đề: Single Point of Failure
+Ba giờ sáng. Ổ đĩa của máy chủ database chết. Không có replica.
 
-Khi chỉ có một database server:
-```
-Client → [Database Server] ← Toàn bộ phụ thuộc vào 1 server này
-
-Vấn đề:
-  - Server down → Toàn bộ ứng dụng down
-  - Server quá tải (nhiều reads) → Chậm cho tất cả
-  - Server ở US → Users ở Asia phải chờ ~200ms mỗi query
-  - Backup khó: Phải lock hoặc accept inconsistency
+```text
+   Dữ liệu gần nhất: bản sao lưu lúc 2 giờ sáng
+   Mất: 1 tiếng giao dịch
+   Thời gian phục hồi: 4 tiếng (khôi phục 800 GB từ sao lưu)
+   Hệ thống offline: 4 tiếng
 ```
 
-**Giải pháp:** Database Replication - nhân bản database ra nhiều instances.
+Cùng tình huống, có replica:
+
+```text
+   Phát hiện primary chết         : 10 giây
+   Chuyển replica thành primary   : 30 giây
+   Đổi cấu hình ứng dụng          : 20 giây
+   Hệ thống offline               : ~1 phút
+   Mất dữ liệu                    : 0 tới vài trăm mili-giây
+```
+
+Nhưng replication không miễn phí. Nó đem về một khái niệm mới mà bạn sẽ phải sống chung mãi: **độ trễ nhân bản**.
+
+## Replication là gì
+
+Giữ **bản sao đầy đủ** của dữ liệu trên nhiều máy chủ, và tự động đồng bộ chúng.
+
+```text
+                    ┌─────────────────┐
+        GHI ───────▶│    PRIMARY      │  nhận mọi lệnh ghi
+                    │  (nguồn sự thật)│
+                    └────────┬────────┘
+                             │ dòng thay đổi (WAL)
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+       ┌───────────┐  ┌───────────┐  ┌───────────┐
+       │ REPLICA 1 │  │ REPLICA 2 │  │ REPLICA 3 │
+       │ (chỉ đọc) │  │ (chỉ đọc) │  │ (chỉ đọc) │
+       └─────┬─────┘  └─────┬─────┘  └─────┬─────┘
+             └──────────────┼──────────────┘
+                            ▲
+                          ĐỌC
+```
+
+### Khác sharding chỗ nào
+
+Đây là nhầm lẫn phổ biến, và phân biệt rất gọn:
+
+```text
+   SHARDING                            REPLICATION
+   ════════                            ═══════════
+   Mỗi máy giữ MỘT PHẦN KHÁC NHAU      Mỗi máy giữ TOÀN BỘ, GIỐNG NHAU
+
+   máy 1: user 1-1000                  máy 1: TẤT CẢ user
+   máy 2: user 1001-2000               máy 2: TẤT CẢ user
+   máy 3: user 2001-3000               máy 3: TẤT CẢ user
+
+   Giải quyết: dữ liệu quá lớn         Giải quyết: đọc quá nhiều,
+               ghi quá nhiều                        và máy có thể chết
+```
+
+Hai kỹ thuật **không loại trừ nhau** — hệ thống lớn thường có cả hai: mỗi shard lại có replica riêng.
+
+## Năm lý do để nhân bản
+
+| Lý do | Giải thích |
+|---|---|
+| **Chia tải đọc** | Tỉ lệ đọc/ghi thường 10:1 tới 100:1. Ba replica cho khả năng đọc gấp bốn |
+| **Sẵn sàng cao** | Primary chết thì chuyển sang replica trong vài chục giây, không phải vài giờ |
+| **Cách ly phân tích** | Chạy báo cáo nặng trên replica, không làm bẩn cache của primary |
+| **Gần người dùng** | Replica đặt ở Singapore phục vụ người dùng châu Á với độ trễ thấp |
+| **Nguồn sao lưu** | Chạy `pg_dump` trên replica, không ảnh hưởng hệ thống chính |
+
+Lý do thứ ba đáng nhấn mạnh: một truy vấn phân tích quét toàn bảng sẽ **đẩy mọi page nóng ra khỏi buffer pool** ([phase-3 bài 2](../phase-3/02-row-based-vs-column-based.md)). Chạy nó trên replica là cách rẻ nhất để tránh chuyện đó.
+
+> **Cảnh báo quan trọng:** replica **không phải** bản sao lưu. Lệnh `DELETE FROM orders` nhầm sẽ được nhân bản sang mọi replica trong khoảng **200 mili-giây**. Sao lưu và replication giải quyết hai vấn đề khác nhau.
 
 ---
 
-## Replication là gì?
+## Hai kiến trúc
 
-**Database Replication** là quá trình chia sẻ và đồng bộ dữ liệu giữa nhiều database instances để đảm bảo:
-- **Reliability**: Một instance down, các instance khác vẫn hoạt động
-- **Fault tolerance**: Không có single point of failure
-- **Accessibility**: Users ở nhiều regions có thể đọc từ server gần nhất
+### Primary / Replica (một chiều ghi)
 
+```text
+                ┌──────────┐
+       GHI ────▶│ PRIMARY  │────┬───▶ REPLICA 1  ─┐
+                └──────────┘    ├───▶ REPLICA 2  ─┼──▶ ĐỌC
+                                └───▶ REPLICA 3  ─┘
 ```
-Mô hình cơ bản:
 
-              ┌────────────┐
-    Writes →  │   Master   │  ← Primary node
-              │  (Leader)  │
-              └──────┬─────┘
-                     │  Replication
-         ┌───────────┼───────────┐
-         ▼           ▼           ▼
-   ┌──────────┐ ┌──────────┐ ┌──────────┐
-   │ Standby 1│ │ Standby 2│ │ Standby 3│
-   │ (Asia)   │ │ (Europe) │ │ (US)     │
-   └──────────┘ └──────────┘ └──────────┘
-     ↑ Reads      ↑ Reads      ↑ Reads
+| Ưu | Nhược |
+|---|---|
+| **Không bao giờ có xung đột ghi** | Khả năng **ghi không tăng** — vẫn một máy |
+| Đơn giản, dễ hiểu, dễ vận hành | Primary là điểm chết đơn (cho tới khi chuyển đổi) |
+| Là mặc định của PostgreSQL, MySQL | |
+
+Đây là kiến trúc **99% hệ thống nên dùng**.
+
+### Multi-master (nhiều nơi cùng ghi)
+
+```text
+       GHI ────▶┌──────────┐ ◀────▶ ┌──────────┐◀──── GHI
+                │ MASTER 1 │        │ MASTER 2 │
+                └──────────┘        └──────────┘
+                        (đồng bộ hai chiều)
 ```
+
+| Ưu | Nhược |
+|---|---|
+| Ghi được ở nhiều nơi | **Xung đột ghi** — và không có cách giải quyết nào tự động mà đúng |
+| Chịu lỗi tốt hơn | Vận hành phức tạp hơn nhiều |
+| Ghi độ trễ thấp theo vùng | |
+
+Vấn đề xung đột nghiêm trọng hơn nhiều người nghĩ:
+
+```text
+   Cùng lúc, trên hai master:
+     Master 1:  UPDATE users SET email='a@x.com' WHERE id=5
+     Master 2:  UPDATE users SET email='b@y.com' WHERE id=5
+
+   Khi đồng bộ, ai thắng?
+
+   • "Ghi sau thắng" (last-write-wins) → MẤT một thay đổi, âm thầm
+   • "Trộn" → chỉ áp dụng được cho vài kiểu dữ liệu đặc biệt (CRDT)
+   • "Hỏi ứng dụng" → phải viết logic giải quyết cho MỌI bảng
+```
+
+Chưa kể: `id` tự tăng đụng nhau, `UNIQUE` không đảm bảo được, và khoá ngoại có thể gãy.
+
+**Chỉ dùng multi-master khi** các nơi ghi **không giẫm lên nhau** — ví dụ khách hàng miền Bắc chỉ ghi vào máy chủ Bắc, khách miền Nam chỉ ghi vào máy chủ Nam. Khi đó xung đột gần như không xảy ra.
 
 ---
 
-## Master/Standby Replication (Phổ biến nhất)
+## Đồng bộ hay bất đồng bộ
 
-### Cách hoạt động
+Đây là nút vặn quan trọng nhất của replication.
 
+```text
+   BẤT ĐỒNG BỘ (asynchronous)         ĐỒNG BỘ (synchronous)
+   ══════════════════════════          ═════════════════════
+   Client → PRIMARY                    Client → PRIMARY
+              │ ghi WAL                           │ ghi WAL
+              │ fsync                             │ fsync
+              ▼                                   ▼ gửi cho replica
+   ◀───── "OK, đã commit"                        │ CHỜ replica xác nhận
+              │                                   ▼
+              ▼ gửi cho replica (sau)   ◀───── "OK, đã commit"
+           REPLICA
+
+   Độ trễ ghi : không đổi              Độ trễ ghi : + 1 vòng mạng
+   Mất dữ liệu khi primary chết: CÓ    Mất dữ liệu: KHÔNG
+   Replica chết → primary vẫn chạy     Replica chết → GHI BỊ CHẶN ⚠
 ```
-1. Client ghi vào Master (và CHỈ Master)
-   → INSERT, UPDATE, DELETE, CREATE TABLE...
 
-2. Master sync changes sang Standby nodes
-   → Qua WAL (Write-Ahead Log)
-   → TCP connection liên tục giữa master và standby
+Dòng cuối là cái bẫy lớn nhất của replication đồng bộ: **nếu replica duy nhất bị chết hoặc mạng đứt, primary sẽ ngừng nhận lệnh ghi** — nó đang chờ một xác nhận không bao giờ tới.
 
-3. Client đọc từ Master HOẶC bất kỳ Standby nào
-   → Master: Luôn có data mới nhất
-   → Standby: Có thể hơi trễ (eventual consistency)
+> **Quy tắc:** nếu dùng đồng bộ, luôn có **ít nhất hai** replica đồng bộ tiềm năng, và cấu hình `synchronous_standby_names = 'ANY 1 (r1, r2)'` — chỉ cần một trong hai xác nhận là đủ.
+
+### PostgreSQL: năm mức, vặn theo từng transaction
+
+```sql
+SET synchronous_commit = 'on';   -- hoặc off, local, remote_write, remote_apply
 ```
 
-### Ưu điểm của Master/Standby
+| Mức | Chờ tới khi | Mất tối đa khi primary chết |
+|---|---|---|
+| `off` | Không chờ gì | Vài trăm ms giao dịch cuối |
+| `local` | WAL xuống đĩa **máy này** | Toàn bộ nếu máy này chết hẳn |
+| `remote_write` | Replica **nhận** được vào bộ nhớ | Mất nếu **cả hai** cùng chết |
+| `on` (mặc định) | Replica **ghi WAL xuống đĩa** | Không mất |
+| `remote_apply` | Replica **áp dụng xong**, đọc thấy được | Không mất, và đọc replica luôn thấy |
 
+Điểm mạnh nhất: **vặn được theo từng transaction**.
+
+```sql
+-- Chuyen tien: an toan tuyet doi
+BEGIN;
+SET LOCAL synchronous_commit = 'remote_apply';
+UPDATE accounts SET balance = balance - 100000 WHERE id = 1;
+UPDATE accounts SET balance = balance + 100000 WHERE id = 2;
+COMMIT;
+
+-- Ghi log su kien: nhanh la duoc
+BEGIN;
+SET LOCAL synchronous_commit = 'off';
+INSERT INTO event_logs (payload) VALUES ('...');
+COMMIT;
 ```
-Đơn giản:
-  → Không có write conflicts
-  → 1 nguồn sự thật (Master)
-  → Database quản lý đồng bộ tự động
 
-Scale reads:
-  → 80% workload thường là reads
-  → Thêm standby = thêm read capacity
+Một database, hai mức đảm bảo khác nhau cho hai loại dữ liệu khác nhau. Đây là công cụ rất mạnh mà ít người dùng.
 
-Geographic distribution:
-  → Standby ở US, EU, Asia
-  → Users đọc từ server gần nhất
-  → Latency giảm đáng kể
+### Bán đồng bộ trong MySQL
+
+MySQL có thêm một mức trung gian gọi là *semi-synchronous*: primary chờ replica **nhận** được (chưa cần áp dụng), rồi mới báo commit.
+
+```sql
+SET GLOBAL rpl_semi_sync_source_enabled = 1;
+SET GLOBAL rpl_semi_sync_source_timeout = 1000;   -- 1 giây
 ```
+
+Tham số `timeout` rất quan trọng: nếu replica không trả lời trong 1 giây, MySQL **tự động rơi về chế độ bất đồng bộ** thay vì chặn ghi. Đó là hành vi an toàn hơn PostgreSQL đồng bộ, đổi lại là mất đảm bảo trong khoảnh khắc đó.
 
 ---
 
-## Multi-Master Replication
+## Vật lý hay logic
 
-**Multi-master** cho phép **nhiều nodes đều nhận writes**.
+Hai cách hoàn toàn khác nhau để truyền thay đổi.
 
-```
-┌──────────────┐    Sync     ┌──────────────┐
-│   Master 1   │ ←────────→  │   Master 2   │
-│   (US)       │             │   (Europe)   │
-└──────────────┘             └──────────────┘
-       ↑                            ↑
-    Writes                       Writes
-```
+```text
+   NHÂN BẢN VẬT LÝ (physical / streaming)
+   ══════════════════════════════════════
+   Truyền chính các bản ghi WAL: "page 4201, byte 128, đổi từ X sang Y"
+   → Replica là bản sao BIT-BY-BIT của primary
 
-### Vấn đề: Write Conflicts
-
-```
-T1 (US Master):     UPDATE users SET balance = 500 WHERE id = 1;
-T2 (EU Master):     UPDATE users SET balance = 300 WHERE id = 1;
-
-→ Cả hai commit gần như đồng thời
-→ Giá trị cuối là gì? 500 hay 300?
-→ CONFLICT! Ai thắng?
-
-Phải có conflict resolution strategy:
-  - Last Write Wins (LWW): Timestamp quyết định
-  - Custom merge logic
-  - Application-level conflict resolution
+   NHÂN BẢN LOGIC (logical)
+   ════════════════════════
+   Giải mã WAL thành thao tác mức hàng: "INSERT vào bảng orders: (1, 'x', 42)"
+   → Replica áp dụng thao tác đó, cấu trúc vật lý có thể khác
 ```
 
-**Khuyến nghị:** Tránh multi-master khi có thể. Conflict resolution cực kỳ phức tạp. Ưu tiên tối ưu writes trên single master + nhiều standbys cho reads.
+| | Vật lý | Logic |
+|---|---|---|
+| Nhân bản gì | **Toàn bộ** cụm database | Chọn từng bảng |
+| Replica ghi được không | **Không** (chỉ đọc) | **Có** (bảng khác) |
+| Khác phiên bản PostgreSQL | Không | **Được** — dùng để nâng cấp không dừng |
+| Khác cấu trúc bảng | Không | Được (có giới hạn) |
+| Chi phí | Thấp | Cao hơn (phải giải mã) |
+| Có nhân bản DDL không | **Có** | **Không** — phải chạy tay ở cả hai bên |
+| Dùng cho | Sẵn sàng cao, replica đọc | Nâng cấp phiên bản, đưa dữ liệu sang hệ khác, CDC |
+
+Ứng dụng nổi bật nhất của nhân bản logic: **nâng cấp PostgreSQL 14 lên 17 không dừng dịch vụ**. Dựng máy 17, nhân bản logic từ máy 14 sang, chờ bắt kịp, rồi chuyển đổi trong vài giây.
+
+Dòng "không nhân bản DDL" là cái bẫy phổ biến: bạn `ALTER TABLE ADD COLUMN` trên bên phát, bên nhận không có cột đó, và nhân bản **dừng lại với lỗi**.
 
 ---
 
-## Synchronous vs Asynchronous Replication
+## Độ trễ nhân bản
 
-### Synchronous Replication
+Đây là khái niệm bạn sẽ sống chung mãi sau khi có replica.
 
+### Nó đến từ đâu
+
+```text
+   PRIMARY commit lúc t=0
+     │
+     ├─ ghi WAL xuống đĩa                    ~0,1 ms
+     ├─ tiến trình gửi WAL đọc và gửi        ~0,5 ms
+     ├─ TRUYỀN QUA MẠNG                      0,5 ms (LAN) → 200 ms (xuyên lục địa)
+     ├─ replica nhận và ghi WAL              ~0,5 ms
+     ├─ replica ÁP DỤNG WAL                  ~1 ms  ← thường là nút cổ chai
+     └─ dữ liệu đọc được trên replica
+
+   ĐỘ TRỄ ĐIỂN HÌNH: 5-50 ms trong cùng vùng
 ```
-Client gửi write request
-         │
-         ▼
-    [Master DB]
-         │ Commit locally
-         │
-    Sync to Standby(s)
-         │
-         │ Wait for ACK...
-         │ ← Standby ACK!
-         │
-    Return success to client
+
+### Bốn nguyên nhân làm độ trễ tăng vọt
+
+| Nguyên nhân | Vì sao |
+|---|---|
+| **Ghi hàng loạt trên primary** | Sinh WAL nhanh hơn replica áp dụng được |
+| **Truy vấn dài trên replica** | Việc áp dụng WAL bị **tạm dừng** để không xoá dữ liệu mà truy vấn đang đọc |
+| **Băng thông mạng** | Đặc biệt khi khôi phục sau khi replica offline một lúc |
+| **Replica yếu hơn primary** | Áp dụng WAL là **một luồng** — replica phải theo kịp bằng một lõi |
+
+Nguyên nhân thứ hai đặc biệt phản trực giác: **chạy báo cáo nặng trên replica làm chính replica đó tụt lại**. PostgreSQL cho hai lựa chọn:
+
+```conf
+# Cho phep tam dung ap dung WAL toi 30 giay de truy van chay xong
+max_standby_streaming_delay = 30s
+
+# Hoac: cho primary biet replica dang doc gi, de no khong don rac som
+hot_standby_feedback = on
+```
+
+Đánh đổi:
+
+```text
+   max_standby_streaming_delay lớn  →  replica tụt lại nhiều
+   max_standby_streaming_delay nhỏ  →  truy vấn bị HUỶ:
+                                       "ERROR: canceling statement due to
+                                        conflict with recovery"
+
+   hot_standby_feedback = on        →  truy vấn không bị huỷ
+                                    →  NHƯNG primary không VACUUM được
+                                       → bảng phình trên PRIMARY
+```
+
+Không có lựa chọn nào miễn phí. Với replica dành riêng cho phân tích, `hot_standby_feedback = on` cộng theo dõi độ phình thường là lựa chọn đúng.
+
+### Đo độ trễ
+
+```sql
+-- Chay tren REPLICA: tre bao nhieu giay
+SELECT CASE WHEN pg_last_wal_receive_lsn() = pg_last_wal_replay_lsn()
+            THEN 0
+            ELSE EXTRACT(epoch FROM now() - pg_last_xact_replay_timestamp())
+       END AS tre_giay;
 ```
 
 ```sql
--- PostgreSQL: Cấu hình synchronous standby
--- Trong postgresql.conf trên Master:
-synchronous_standby_names = 'FIRST 1 (standby1, standby2)'
--- → Phải được ACK bởi ít nhất 1 trong 2 standbys trước khi commit
-```
-
-**Ưu điểm:** Không mất data nếu master fail  
-**Nhược điểm:** Latency tăng (phải chờ standby ACK)
-
-### Asynchronous Replication (Mặc định PostgreSQL)
-
-```
-Client gửi write request
-         │
-         ▼
-    [Master DB]
-         │ Commit locally
-         │
-    Return success to client ← Ngay lập tức!
-         │
-    (Background job sync to standby)
-```
-
-**Ưu điểm:** Write latency thấp  
-**Nhược điểm:** Có thể mất data nếu master fail trước khi sync xong
-
-### So sánh
-
-```
-┌─────────────────┬────────────────────┬────────────────────┐
-│ Tiêu chí        │ Synchronous        │ Asynchronous       │
-├─────────────────┼────────────────────┼────────────────────┤
-│ Data safety     │ ✅ Không mất data   │ ❌ Có thể mất data  │
-│ Write latency   │ ❌ Chậm hơn         │ ✅ Nhanh hơn        │
-│ Consistency     │ ✅ Luôn consistent  │ ❌ Eventual         │
-│ Standby offline │ ❌ Write bị block   │ ✅ Write vẫn OK     │
-│ Use case        │ Banking, critical  │ Analytics, social  │
-└─────────────────┴────────────────────┴────────────────────┘
-```
-
----
-
-## WAL - Cơ Chế Đằng Sau Replication
-
-**Write-Ahead Log (WAL)** là file ghi lại tất cả changes trong database, được dùng cho cả durability và replication.
-
-```
-Quy trình replication qua WAL:
-
-1. Client insert row
-2. Master ghi WAL entry trước khi ghi vào heap
-3. WAL được stream sang Standby
-4. Standby apply WAL entries → "Replay" transactions
-5. Standby's data = Master's data (với độ trễ nhỏ)
-```
-
-```
-WAL entry ví dụ:
-  LSN=0/1234ABC  Type=INSERT  Table=orders  Row=(...data...)
-  LSN=0/1234ABD  Type=UPDATE  Table=users   Row=id=1,balance=500
-  LSN=0/1234ABE  Type=DELETE  Table=logs    Row=id=99
-```
-
-**Lợi ích:** Standby không cần full table scan; chỉ cần apply WAL từ vị trí cuối cùng.
-
----
-
-## Ưu và Nhược điểm của Replication
-
-### Ưu điểm
-
-```
-1. Horizontal Read Scaling:
-   → Thêm standby = thêm read capacity
-   → Không cần upsize master server
-
-2. High Availability:
-   → Master down → Promote standby lên làm master mới
-   → Downtime tính bằng giây/phút, không phải giờ
-
-3. Geographic Distribution:
-   → Standby ở nhiều regions
-   → Reads latency giảm 10-100x cho users ở xa
-
-4. Backup không gián đoạn:
-   → Backup từ Standby, không ảnh hưởng Master
-   → Không cần lock Master để backup
-
-5. Analytics workloads:
-   → Queries phân tích nặng → Chạy trên Standby
-   → Không ảnh hưởng production reads/writes
-```
-
-### Nhược điểm
-
-```
-1. Eventual Consistency:
-   → Standby có thể trễ vài giây/phút
-   → Đọc từ Standby: Không đảm bảo data mới nhất
-   
-   Ví dụ:
-     User update profile → Ghi vào Master
-     User ngay lập tức GET profile → Đọc từ Standby
-     → Thấy profile cũ! (Chưa sync)
-   
-   Giải pháp: "Read your own writes" → Route writes/immediate reads to Master
-
-2. Writes vẫn là bottleneck:
-   → Tất cả writes phải đi qua 1 Master
-   → Nếu write-heavy workload: Replication không giải quyết được
-   → Cần xem xét Sharding hoặc tối ưu writes
-
-3. Slow writes (Synchronous mode):
-   → Phải chờ standby ACK
-   → Với nhiều standbys ở xa: Latency tăng
-
-4. Complexity:
-   → Setup và maintain replication
-   → Failover process
-   → Monitoring replication lag
-   → Schema changes cần apply trên tất cả nodes
-```
-
----
-
-## Replication Lag - Vấn đề Quan Trọng
-
-**Replication lag** = Độ trễ giữa Master và Standby
-
-```sql
--- Kiểm tra replication lag trong PostgreSQL
-SELECT 
-    client_addr,
-    application_name,
-    state,
-    sent_lsn,
-    replay_lsn,
-    (sent_lsn - replay_lsn) AS bytes_behind,
-    sync_state
+-- Chay tren PRIMARY: tre bao nhieu BYTE
+SELECT client_addr,
+       state,
+       pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), sent_lsn))   AS chua_gui,
+       pg_size_pretty(pg_wal_lsn_diff(sent_lsn, replay_lsn))             AS chua_ap_dung,
+       write_lag, flush_lag, replay_lag
 FROM pg_stat_replication;
 ```
 
+```text
+ client_addr | state     | chua_gui | chua_ap_dung | replay_lag
+-------------+-----------+----------+--------------+-------------
+ 10.0.1.22   | streaming | 0 bytes  | 128 kB       | 00:00:00.042
 ```
-Replication lag có thể tăng do:
-  - Standby chậm (CPU, I/O bound)
-  - Network latency cao (cross-region)
-  - Heavy write workload trên Master
-  - Lock contention trên Standby
 
-Monitoring thường xuyên:
-  → Alert nếu lag > X seconds
-  → Investigate nguyên nhân ngay
+Ngưỡng cảnh báo gợi ý:
+
+| Độ trễ | Mức |
+|---|---|
+| < 1 giây | Bình thường |
+| 1-10 giây | Cảnh báo — xem có truy vấn dài trên replica không |
+| > 10 giây | Nghiêm trọng — replica không dùng được cho đọc |
+| Tăng đều không dừng | **Khẩn cấp** — replica không bao giờ bắt kịp, sẽ hết đĩa WAL |
+
+---
+
+## Bài toán đọc-được-cái-mình-vừa-ghi
+
+Hệ quả trực tiếp của độ trễ, và là lỗi người dùng nhìn thấy rõ nhất:
+
+```text
+   t=0 ms    Người dùng bấm "Lưu"  → GHI vào PRIMARY  ✔ commit
+   t=2 ms    Ứng dụng trả về "Đã lưu!"
+   t=5 ms    Trang tải lại         → ĐỌC từ REPLICA
+   t=6 ms    Replica trả về DỮ LIỆU CŨ  ⚠
+   t=45 ms   Replica mới nhận được thay đổi
+
+   Người dùng thấy: "Tôi bấm Lưu, nó bảo lưu rồi, mà nó không lưu."
+   → Họ bấm Lưu lần nữa → có thể tạo bản ghi trùng
+```
+
+Bốn cách chữa, từ rẻ tới đắt:
+
+| Cách | Làm gì | Ưu | Nhược |
+|---|---|---|---|
+| **Đọc từ primary sau khi ghi** | Trong N giây sau lệnh ghi, mọi lệnh đọc của **người đó** đi vào primary | Đơn giản, hiệu quả ngay | Primary gánh thêm; cần theo dõi "ai vừa ghi" |
+| **Dính phiên** | Một người dùng luôn đọc từ cùng một replica | Dễ làm ở tầng cân bằng tải | Replica đó chết là mất; vẫn trễ so với primary |
+| **Đọc theo LSN** | Ghi xong lưu vị trí WAL; khi đọc, bắt replica chờ tới vị trí đó | Chính xác nhất | Ứng dụng phải mang theo LSN |
+| **`remote_apply`** | Chờ replica áp dụng xong rồi mới báo commit | Không bao giờ đọc phải dữ liệu cũ | Mỗi lệnh ghi cộng một vòng mạng |
+
+Cách 1 giải quyết ~90% trường hợp với ~10% công sức:
+
+```python
+def lay_ket_noi_doc(user_id):
+    vua_ghi_luc = cache.get(f"vua_ghi:{user_id}")
+    if vua_ghi_luc and time.time() - vua_ghi_luc < 5:
+        return pool_primary          # trong 5 giay sau khi ghi
+    return pool_replica
+
+def sau_khi_ghi(user_id):
+    cache.set(f"vua_ghi:{user_id}", time.time(), ex=10)
+```
+
+Cách 3 với PostgreSQL:
+
+```sql
+-- Tren PRIMARY sau khi ghi
+SELECT pg_current_wal_insert_lsn();     -- → 0/3A2B4C8
+
+-- Tren REPLICA truoc khi doc
+SELECT pg_wal_replay_wait('0/3A2B4C8');  -- PostgreSQL 18+
+-- Ban cu hon: kiem tra pg_last_wal_replay_lsn() >= LSN, khong thi doc primary
 ```
 
 ---
 
-## Khi nào dùng Replication?
+## Chuyển đổi khi primary chết
 
+### Ba mức tự động hoá
+
+| Mức | Cách làm | Thời gian ngừng | Rủi ro |
+|---|---|---|---|
+| **Thủ công** | Người trực nhận cảnh báo, chạy lệnh chuyển | 5-30 phút | Thấp — con người kiểm tra được |
+| **Bán tự động** | Công cụ phát hiện, đề xuất, người bấm nút | 1-5 phút | Thấp |
+| **Tự động** | Patroni, repmgr, PAF tự chuyển | 10-60 giây | **Não phân đôi** nếu cấu hình sai |
+
+### Não phân đôi — rủi ro lớn nhất
+
+```text
+   MẠNG BỊ CHIA CẮT (primary vẫn sống, chỉ là không liên lạc được)
+
+   ┌──────────┐           ✂ mạng đứt          ┌──────────┐
+   │ PRIMARY  │  ← vẫn nhận ghi từ một số     │ REPLICA  │
+   │          │     client ở phía nó          │          │
+   └──────────┘                               └──────────┘
+                                                    │
+                                              "primary chết rồi!"
+                                              → TỰ THĂNG CẤP
+                                                    ▼
+                                              ┌──────────┐
+                                              │ PRIMARY  │ ← cũng nhận ghi
+                                              │   MỚI    │
+                                              └──────────┘
+
+   HAI PRIMARY CÙNG NHẬN GHI.
+   Khi mạng nối lại: hai nhánh dữ liệu KHÔNG THỂ TRỘN TỰ ĐỘNG.
 ```
-✅ Nên dùng khi:
-  - Cần High Availability (HA)
-  - Read-heavy workload (> 60% reads)
-  - Cần geographic distribution
-  - Cần backup không gián đoạn
-  - Analytics queries ảnh hưởng production
 
-❌ Không giải quyết được:
-  - Write-heavy workload bottleneck → Cần Sharding
-  - Dataset quá lớn → Cần Partitioning
-  - Single server capacity → Cần Vertical Scale trước
+Ba cơ chế phòng thủ:
 
-Thứ tự nên thử:
-  Optimize queries → Indexing → Partitioning → Replication → Sharding
-```
+| Cơ chế | Cách hoạt động |
+|---|---|
+| **Quorum** | Chỉ thăng cấp khi **đa số** nút đồng ý. Cụm 3 nút cần 2 phiếu |
+| **Fencing / STONITH** | Chủ động **tắt** máy cũ (qua API đám mây hoặc IPMI) trước khi thăng cấp |
+| **Địa chỉ IP nổi** | Ứng dụng nối tới một IP ảo; chỉ máy giữ IP đó mới nhận được lưu lượng |
 
----
+Patroni — công cụ phổ biến nhất cho PostgreSQL — dùng cả ba, với etcd/Consul làm nơi bỏ phiếu.
 
-**Tiếp theo:** 02-replication-demo-postgres.md →
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Coi replica là bản sao lưu | `DELETE` nhầm được nhân bản trong 200 ms | Sao lưu riêng, có phục hồi theo thời điểm |
+| Dùng đồng bộ với **một** replica | Replica chết → primary ngừng nhận ghi | `ANY 1 (r1, r2)` với hai replica |
+| Cho **mọi** lệnh đọc vào replica | Người dùng không thấy cái mình vừa ghi | Đọc từ primary trong vài giây sau khi ghi |
+| Chạy báo cáo nặng trên replica không chỉnh gì | Replica tụt lại, hoặc truy vấn bị huỷ | `hot_standby_feedback` + theo dõi độ phình |
+| Bật `hot_standby_feedback` mà không theo dõi | Primary không `VACUUM` được, bảng phình | Theo dõi `n_dead_tup` trên primary |
+| Multi-master khi các nơi ghi giẫm lên nhau | Xung đột ghi mất dữ liệu âm thầm | Chỉ multi-master khi phân vùng ghi rõ ràng |
+| Tự động chuyển đổi không có fencing | Não phân đôi, hai nhánh dữ liệu | Patroni + quorum + fencing |
+| Nhân bản logic rồi `ALTER TABLE` một bên | Nhân bản dừng với lỗi | Chạy DDL ở **cả hai** bên, bên nhận trước |
+| Không theo dõi độ trễ | Đọc dữ liệu cũ hàng phút mà không biết | Cảnh báo ở 1s / 10s / tăng đều |
+
+## Tóm tắt bài 1
+
+- **Replication ≠ Sharding**: nhân bản là mọi máy giữ **toàn bộ, giống nhau**; sharding là mỗi máy giữ **một phần khác nhau**. Hai kỹ thuật kết hợp được.
+- **Replica không phải bản sao lưu** — lệnh xoá nhầm được nhân bản trong ~200 ms.
+- **Primary/Replica** phù hợp cho 99% hệ thống. **Multi-master** chỉ nên dùng khi các nơi ghi **không giẫm lên nhau**, vì không có cách giải quyết xung đột nào tự động mà đúng.
+- **Đồng bộ** không mất dữ liệu nhưng **replica chết thì primary ngừng nhận ghi** — luôn cấu hình `ANY 1 (r1, r2)` với ít nhất hai replica.
+- PostgreSQL có **năm mức** `synchronous_commit` và vặn được **theo từng transaction** — chuyển tiền dùng `remote_apply`, ghi log dùng `off`, trong cùng một database.
+- **Vật lý** nhân bản cả cụm, replica chỉ đọc; **logic** chọn từng bảng, replica ghi được, và cho phép **nâng cấp phiên bản không dừng dịch vụ** — nhưng **không nhân bản DDL**.
+- **Truy vấn dài trên replica làm chính replica tụt lại.** Chọn giữa `max_standby_streaming_delay` (truy vấn bị huỷ) và `hot_standby_feedback` (primary không `VACUUM` được).
+- **Đọc-được-cái-mình-vừa-ghi** giải rẻ nhất bằng cách cho lệnh đọc vào primary trong vài giây sau khi ghi.
+- Tự động chuyển đổi cần **quorum + fencing + IP nổi**, nếu không sẽ có **não phân đôi** — hai nhánh dữ liệu không thể trộn lại.
+
+**Bài kế tiếp** → [Bài 2: Demo Replication với PostgreSQL](02-replication-demo-postgres.md)
