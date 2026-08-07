@@ -1,283 +1,296 @@
-# Bài 3: XtraDB, SQLite và Aria - Các Storage Engine Thay Thế
+# Bài 4: XtraDB, SQLite và Aria — ba engine ít nói tới nhưng đáng biết
 
-## Giới thiệu
-
-Sau khi Oracle mua lại Sun Microsystems (và qua đó kiểm soát MySQL), cộng đồng open-source đã phản ứng bằng cách tạo ra các engine thay thế. Bài này khám phá XtraDB, SQLite và Aria - ba storage engine quan trọng với những câu chuyện thú vị đằng sau.
+Ba engine trong bài này ít xuất hiện trong các cuộc thảo luận về "database nào tốt nhất", nhưng một trong số chúng có lẽ đang chạy trên chính chiếc điện thoại bạn cầm — **SQLite là engine database được triển khai nhiều nhất trên thế giới**, với ước tính hơn một nghìn tỷ bản đang hoạt động.
 
 ---
 
-## 1. XtraDB - Fork của InnoDB
+# XtraDB — nhánh InnoDB của Percona
 
-### Nguồn gốc
+## Vì sao nó ra đời
 
-XtraDB được tạo ra bởi **Percona** (công ty của Michael "Monty" Widenius và cộng sự) như một fork của InnoDB. Động lực đơn giản: Oracle sở hữu InnoDB, và cộng đồng muốn một phiên bản độc lập.
+Năm 2008 Sun mua MySQL; năm 2010 Oracle mua Sun. Cộng đồng lo ngại Oracle sẽ để MySQL chết dần để bảo vệ sản phẩm chính của họ. Kết quả là hàng loạt nhánh ra đời — MariaDB, Percona Server — và XtraDB là engine của Percona.
 
-```
-InnoDB (Oracle) ──fork──> XtraDB (Percona)
-     │                         │
-     │  same foundation         │  thêm features mới
-     │                         │
-  closed control            open development
-```
+**XtraDB là nhánh của InnoDB**, giữ nguyên **100% tương thích** nhưng tối ưu cho máy chủ nhiều lõi và tải cao.
 
-### Đặc điểm kỹ thuật
+## Nó cải thiện gì
 
-XtraDB kế thừa toàn bộ tính năng của InnoDB:
-- **B-Tree** cho cấu trúc index
-- **ACID transactions** đầy đủ
-- **Row-level locking**
-- **Foreign key** support
-- **MVCC** (Multi-Version Concurrency Control)
-
-Percona bổ sung thêm:
-- Cải thiện hiệu năng I/O
-- Thêm metrics và monitoring
-- Cải thiện XtraBackup tool
-
-### Số phận của XtraDB
-
-Câu chuyện của XtraDB là bài học thực tế về nguồn lực:
-
-```
-Vấn đề:
-- Oracle (đội lớn, nhiều engineer) liên tục cập nhật InnoDB
-- Percona (nhóm nhỏ hơn) không theo kịp tốc độ
-- XtraDB bắt đầu tụt hậu về features
-
-Kết quả:
-- MariaDB 10.2 (2017): Chuyển từ XtraDB về InnoDB
-- Lý do: không thể duy trì feature parity
-```
-
-**Bài học:** Forking một dự án lớn nghe có vẻ đơn giản, nhưng duy trì nó theo thời gian là thách thức khổng lồ.
-
-### Tại sao System Tables dùng engine không có transactions?
-
-Một điều thú vị: cả MySQL lẫn MariaDB đều dùng storage engine **không hỗ trợ transactions** (MyISAM/Aria) cho system tables nội bộ. Tại sao?
-
-**Lý do có thể:**
-1. **Bootstrap problem**: Database cần đọc system tables để khởi động - nếu system tables cũng cần transaction engine, sẽ có circular dependency
-2. **Hiệu năng**: System tables được đọc rất thường xuyên, overhead của transactions không cần thiết
-3. **Tính đơn giản**: Engine đơn giản ít bug hơn, quan trọng với infrastructure cốt lõi
-4. **Legacy**: Quyết định thiết kế ban đầu và backward compatibility
-
----
-
-## 2. SQLite - Database Nhỏ Gọn Nhất Thế Giới
-
-### Người tạo ra SQLite
-
-**D. Richard Hipp** tạo ra SQLite năm 2000. Vấn đề ông muốn giải quyết rất thực tế:
-
-> "Khi tôi viết dữ liệu cục bộ xuống đĩa, tôi phải dùng file I/O thô sơ. Tại sao tôi không thể có một database ngay trên máy tính của mình?"
-
-### Đặc điểm độc đáo
-
-SQLite khác biệt hoàn toàn với MySQL hay PostgreSQL:
-
-| Tiêu chí | SQLite | MySQL/PostgreSQL |
-|----------|--------|------------------|
-| Kiến trúc | Embedded (nhúng vào app) | Client-Server |
-| Process | Chạy trong process của app | Process riêng biệt |
-| Network | Không có | TCP/IP |
-| File | 1 file duy nhất | Nhiều file hệ thống |
-| Multi-user | Không phù hợp | Có thể |
-| Cài đặt | Không cần | Cần install, configure |
-
-### Sử dụng SQLite ở đâu?
-
-SQLite có lẽ là database được deploy nhiều nhất thế giới:
-
-```
-Trình duyệt web:
-  - Chrome: lưu history, bookmarks, extensions
-  - Firefox: profile data, certificates
-  - Safari: cookies, session data
-
-Hệ điều hành:
-  - Windows: nhiều subsystem nội bộ
-  - macOS/iOS: Core Data framework
-  - Android: mặc định cho app data storage
-
-Ứng dụng:
-  - Skype: lưu chat history
-  - iTunes/Apple Music
-  - Minecraft Pocket Edition
-  - Nhiều IDE và text editor
-
-Thiết bị nhúng:
-  - Set-top box, smart TV
-  - Router firmware
-  - IoT devices
-```
-
-### Kiến trúc kỹ thuật
-
-**Storage engine:** B-Tree (mặc định)
-
-```
-SQLite File Structure:
-┌─────────────────────────────────┐
-│           .db file              │
-├─────────────────────────────────┤
-│  Page 1: Database header        │
-│  Page 2: Root page of table 1   │
-│  Page 3: Leaf page of table 1   │
-│  Page 4: Root page of table 2   │
-│  ...                            │
-└─────────────────────────────────┘
-```
-
-Richard Hipp cũng thử nghiệm LSM (Log-Structured Merge Tree) như extension, nhưng không đạt hiệu năng mong đợi vì:
-
-- Kiến trúc core của SQLite được thiết kế chặt chẽ cho B-Tree
-- Không thể "hoán đổi" engine như MySQL
-- Đây chính là điểm yếu của kiến trúc monolithic so với kiến trúc pluggable engine của MySQL
-
-**Ví dụ sử dụng SQLite với Python:**
-
-```python
-import sqlite3
-
-# SQLite không cần server - chỉ cần tên file
-conn = sqlite3.connect('myapp.db')
-cursor = conn.cursor()
-
-# Tạo bảng
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE
-    )
-''')
-
-# Insert với transaction (SQLite hỗ trợ ACID đầy đủ)
-try:
-    cursor.execute("INSERT INTO users (name, email) VALUES (?, ?)",
-                   ("Alice", "alice@example.com"))
-    conn.commit()
-    print("Thành công!")
-except sqlite3.IntegrityError as e:
-    conn.rollback()
-    print(f"Lỗi: {e}")
-
-conn.close()
-```
-
-### Web SQL trong trình duyệt
-
-Trình duyệt từng expose SQLite qua **Web SQL API**:
-
-```javascript
-// Chạy trong browser console (Chrome/Safari cũ)
-var db = openDatabase('mydb', '1.0', 'My DB', 2 * 1024 * 1024);
-
-db.transaction(function(tx) {
-    tx.executeSql('CREATE TABLE IF NOT EXISTS users (id, name)');
-    tx.executeSql('INSERT INTO users (id, name) VALUES (1, "Alice")');
-});
-```
-
-**Lưu ý:** Web SQL đã bị deprecated và thay thế bằng IndexedDB trong các trình duyệt hiện đại.
-
-### Khi nào dùng SQLite?
-
-**Phù hợp:**
-- App desktop hoặc mobile (1 user)
-- Development và testing (thay thế database thật)
-- Ứng dụng nhúng, IoT
-- Cache cục bộ
-- Config storage
-- Prototype nhanh
-
-**Không phù hợp:**
-- Web application nhiều user đồng thời
-- High write concurrency (SQLite dùng file-level locking cho writes)
-- Database > vài GB
-- Cần network access
-
-### Về Concurrent Reads và Writes
-
-SQLite hỗ trợ **concurrent reads** nhưng **writes là serialized**:
-
-```
-Thread 1: SELECT ...  ──> OK (concurrent)
-Thread 2: SELECT ...  ──> OK (concurrent)
-Thread 3: INSERT ...  ──> Chờ, blocking other writes
-Thread 4: INSERT ...  ──> Chờ thread 3 xong
-```
-
-WAL (Write-Ahead Logging) mode cải thiện điều này:
+| Lĩnh vực | Cải thiện |
+|---|---|
+| **Buffer pool** | Chia thành nhiều phần độc lập → giảm tranh chấp khoá nội bộ |
+| **Thống kê** | Nhiều chỉ số chi tiết hơn cho việc chẩn đoán |
+| **Đọc trước** | Thuật toán đọc trước thông minh hơn |
+| **Undo log** | Dọn dẹp bằng nhiều luồng |
+| **Điều chỉnh** | Nhiều tham số hơn để tinh chỉnh |
 
 ```sql
--- Bật WAL mode
-PRAGMA journal_mode=WAL;
--- Kết quả: Reads không bị block bởi writes
+-- Tuong thich hoan toan: cu the nay van chay
+CREATE TABLE t (id INT PRIMARY KEY) ENGINE = InnoDB;
+-- Tren Percona Server, MySQL tu dung XtraDB
 ```
+
+Cú pháp không đổi, ứng dụng không cần biết. Đó là toàn bộ ý đồ thiết kế.
+
+## Tình trạng hiện nay
+
+```text
+   MariaDB 10.1-10.3:  XtraDB la engine mac dinh
+   MariaDB 10.4+    :  QUAY VE InnoDB
+   Percona Server 8.0: Bo XtraDB, dung InnoDB cua MySQL 8
+
+   Ly do: MySQL 8 da tiep thu phan lon cai tien cua XtraDB.
+          Duy tri mot nhanh rieng khong con dang cong nua.
+```
+
+Bài học rút ra vượt ra ngoài chuyện engine:
+
+> **Cạnh tranh giữa các nhánh làm sản phẩm gốc tốt lên.** XtraDB đã hoàn thành sứ mệnh của nó — không phải bằng cách chiến thắng, mà bằng cách buộc InnoDB phải cải thiện.
+
+Với người dùng hôm nay: **không cần quan tâm tới XtraDB nữa**. Dùng InnoDB.
 
 ---
 
-## 3. Aria - MyISAM Được Cải Tiến
+# SQLite — database phổ biến nhất thế giới
 
-### Nguồn gốc: Câu chuyện của Monty
+## Nó khác mọi thứ khác ở đâu
 
-**Michael "Monty" Widenius** - cha đẻ của MySQL - đã đặt tên cả MySQL và MariaDB theo tên các con gái ông:
-
+```text
+   DATABASE THÔNG THƯỜNG               SQLITE
+   ═════════════════════               ══════
+   Một tiến trình máy chủ              KHÔNG có tiến trình nào cả
+   Giao tiếp qua mạng                  Chỉ là một THƯ VIỆN bạn nhúng vào
+   Phải cài đặt, cấu hình, vận hành    Một file .c, không phụ thuộc gì
+   Dữ liệu ở nhiều file                Toàn bộ database = MỘT FILE
+   Người dùng, quyền, vai trò          Không có — quyền là quyền của FILE
 ```
-MySQL  ──── "My" (con gái đầu)
-MariaDB ─── "Maria" (con gái thứ hai)
-Aria ────── Engine cho MariaDB (tên dự kiến cũng là "Maria" nhưng gây nhầm lẫn)
+
+Nó đang chạy ở:
+
+```text
+   • Mọi điện thoại Android và iOS (danh bạ, tin nhắn, ứng dụng)
+   • Mọi trình duyệt (lịch sử, cookie, IndexedDB)
+   • macOS, Windows 10+ (nhiều thành phần hệ thống)
+   • Ô tô, TV, thiết bị y tế, máy bay (Airbus dùng trong hệ thống bay)
+   • Định dạng file của nhiều phần mềm (thay cho định dạng tự chế)
 ```
 
-Khi Oracle mua Sun Microsystems (và qua đó kiểm soát MySQL):
-1. Monty fork MySQL → tạo **MariaDB**
-2. Không muốn dùng MyISAM (Oracle owned) → tạo **Aria**
+## Kiến trúc
 
-### So sánh MyISAM vs Aria
+```text
+   ┌─────────────────────────────────────────┐
+   │   ỨNG DỤNG CỦA BẠN                      │
+   │  ┌───────────────────────────────────┐  │
+   │  │  Thư viện SQLite (~700 KB)        │  │
+   │  │   • Bộ phân tích SQL              │  │
+   │  │   • Máy ảo bytecode (VDBE)        │  │
+   │  │   • B+Tree engine                 │  │
+   │  │   • Pager (bộ nhớ đệm + khoá)     │  │
+   │  └────────────────┬──────────────────┘  │
+   └───────────────────┼─────────────────────┘
+                       ▼
+              ┌─────────────────┐
+              │  app.db         │  ← MỘT FILE
+              │  app.db-wal     │  ← WAL (nếu bật chế độ WAL)
+              └─────────────────┘
+```
+
+Điểm thú vị: SQLite biên dịch SQL thành **bytecode** rồi chạy trên một máy ảo riêng. Xem được:
+
+```sql
+EXPLAIN SELECT * FROM users WHERE id = 5;
+```
+
+```text
+addr  opcode         p1    p2    p3    p4
+----  -------------  ----  ----  ----  --------------
+0     Init           0     7     0
+1     OpenRead       0     2     0     3
+2     Integer        5     1     0
+3     SeekRowid      0     6     1
+4     Copy           1     2     0
+5     ResultRow      2     3     0
+6     Halt           0     0     0
+```
+
+## Mô hình khoá — điểm mạnh và điểm yếu
+
+```text
+   CHẾ ĐỘ MẶC ĐỊNH (rollback journal)
+     Một người GHI → khoá TOÀN BỘ FILE
+     → mọi người đọc bị chặn trong lúc đó
+
+   CHẾ ĐỘ WAL (nên bật)
+     PRAGMA journal_mode = WAL;
+     → người ĐỌC không chặn người GHI
+     → người GHI không chặn người ĐỌC
+     → nhưng VẪN CHỈ MỘT người ghi tại một thời điểm
+```
+
+```text
+   → SQLite phù hợp: nhiều người đọc, MỘT người ghi
+   → SQLite không phù hợp: nhiều người ghi đồng thời
+```
+
+Đây là ranh giới quyết định khi nào nên dùng nó.
+
+## Cấu hình nên dùng cho sản phẩm thật
+
+```sql
+PRAGMA journal_mode = WAL;        -- doc va ghi khong chan nhau
+PRAGMA synchronous  = NORMAL;     -- can bang ben vung/toc do o che do WAL
+PRAGMA foreign_keys = ON;         -- MAC DINH LA TAT!  ← rat hay bi quen
+PRAGMA busy_timeout = 5000;       -- cho 5 giay thay vi bao loi ngay
+PRAGMA cache_size   = -64000;     -- 64 MB bo nho dem (so am = KB)
+PRAGMA temp_store   = MEMORY;
+```
+
+Dòng `foreign_keys = ON` là cái bẫy lớn nhất của SQLite: **khoá ngoại mặc định bị TẮT** vì lý do tương thích ngược. Bạn khai báo `REFERENCES` và SQLite chấp nhận cú pháp, nhưng **không thực thi gì cả** — cho tới khi bạn bật.
+
+Và `busy_timeout` giải quyết lỗi phổ biến nhất khi dùng SQLite:
+
+```text
+   SQLITE_BUSY: database is locked
+```
+
+Mặc định SQLite báo lỗi ngay khi không lấy được khoá. Đặt `busy_timeout` khiến nó chờ và thử lại.
+
+## Kiểu dữ liệu linh hoạt — bất ngờ khó chịu
+
+```sql
+CREATE TABLE t (id INTEGER, name TEXT);
+INSERT INTO t VALUES ('day khong phai so', 12345);
+SELECT * FROM t;
+```
+
+```text
+id                  name
+------------------  -----
+day khong phai so   12345
+```
+
+SQLite **chấp nhận**. Kiểu cột chỉ là "gợi ý ưu tiên", không phải ràng buộc.
+
+Từ phiên bản **3.37 (2021)** có thể bật kiểm tra nghiêm ngặt:
+
+```sql
+CREATE TABLE t (id INTEGER, name TEXT) STRICT;
+INSERT INTO t VALUES ('abc', 123);
+```
+
+```text
+Error: cannot store TEXT value in INTEGER column t.id
+```
+
+Nên luôn dùng `STRICT` cho bảng mới.
+
+## Khi nào dùng, khi nào không
+
+| Dùng SQLite | Không dùng SQLite |
+|---|---|
+| Ứng dụng di động, để bàn | Ứng dụng web nhiều người ghi đồng thời |
+| Thiết bị nhúng, IoT | Cần truy cập từ nhiều máy |
+| Cache cục bộ | Dữ liệu vượt vài trăm GB |
+| Định dạng file của phần mềm | Cần phân quyền theo người dùng |
+| Kiểm thử tự động | Cần nhân bản, sẵn sàng cao |
+| Website đọc nhiều, ghi ít | Ghi trên 100 giao dịch/giây liên tục |
+
+Dòng cuối cùng bên trái đáng chú ý: **rất nhiều website nhỏ chạy SQLite hoàn toàn ổn**. Với tải đọc là chính, một file SQLite trên SSD phục vụ được hàng nghìn lượt đọc mỗi giây. Đừng mặc định là cần PostgreSQL.
+
+---
+
+# Aria — MyISAM có phục hồi sau sự cố
+
+## Vì sao MariaDB tạo ra nó
+
+Nhắc lại vấn đề của MyISAM ([bài 2](02-myisam-va-innodb.md)): **mất điện làm hỏng bảng, phải `REPAIR TABLE` bằng tay, và có thể mất dữ liệu**.
+
+Aria giải quyết đúng chuyện đó, giữ nguyên mọi thứ khác.
+
+```text
+   MyISAM  +  ghi nhật ký để phục hồi  =  Aria
+```
+
+## Nó thêm gì
 
 | Tính năng | MyISAM | Aria |
-|-----------|--------|------|
-| Transactions | Không | Không |
-| Row-level locking | Không | Không |
-| Full-text search | Có | Có |
-| Crash recovery | Thủ công (`myisamchk`) | **Tự động** |
-| Index repair | Thủ công | **Tự động** |
-| Owner | Oracle | MariaDB Project |
-| Dùng trong | MySQL system tables | MariaDB system tables |
+|---|---|---|
+| Phục hồi sau sự cố | Không — `REPAIR` tay | **Có, tự động** |
+| Transaction | Không | Không (nhưng có lệnh đơn nguyên tử) |
+| Mức khoá | Bảng | Bảng |
+| Bộ nhớ đệm dữ liệu | Không (chỉ index) | **Có** |
+| `COUNT(*)` nhanh | Có | **Có** |
+| Định dạng dòng | Cố định / động | Thêm định dạng **PAGE** (an toàn hơn) |
 
-**Điểm cải tiến quan trọng nhất:** Aria tự động phục hồi sau crash mà không cần chạy công cụ repair thủ công.
+Định dạng `PAGE` là chỗ tạo ra khác biệt: dữ liệu được tổ chức theo trang cố định giống InnoDB, cho phép ghi nhật ký và phục hồi.
 
-### Tại sao System Tables Dùng Aria Thay Vì InnoDB?
-
-Đây là câu hỏi thú vị. Trong MariaDB:
-- **User tables** mặc định: InnoDB (có transactions)
-- **System tables** (`mysql.*`, `information_schema`): Aria (không có transactions)
-
-Lý giải:
+```sql
+CREATE TABLE t (id INT PRIMARY KEY, val TEXT)
+  ENGINE = Aria
+  TRANSACTIONAL = 1;              -- bat ghi nhat ky phuc hoi
 ```
-System tables:
-  - Đọc nhiều, ghi ít
-  - Không cần isolation phức tạp
-  - Cần tốc độ, không cần durability cao
-  - Non-transactional = overhead thấp hơn
-  - Aria đảm bảo crash-safe mà không cần transaction overhead
+
+## Vai trò thật của Aria trong MariaDB
+
+Điều ít người biết: **MariaDB dùng Aria cho các bảng hệ thống và bảng tạm bên trong**.
+
+```text
+   Truoc: bang tam noi bo dung MyISAM
+          → truy van co GROUP BY/ORDER BY lon tao bang tam
+          → mat dien giua chung → bang tam hong
+
+   Sau  : dung Aria
+          → an toan hon, va nhanh hon nho co bo nho dem du lieu
 ```
+
+Nghĩa là ngay cả khi bạn không bao giờ khai `ENGINE = Aria`, nó vẫn đang chạy trong mọi truy vấn phức tạp của bạn trên MariaDB.
+
+## Khi nào dùng
+
+```text
+   ✔ Bang tra cuu chi doc, can COUNT(*) tuc thi
+   ✔ Dang dung MyISAM tren MariaDB → doi sang Aria, gan nhu khong mat gi
+   ✔ Bang tam, bang trung gian trong quy trinh ETL
+
+   ✘ Can transaction → InnoDB
+   ✘ Nhieu nguoi ghi dong thoi → InnoDB (Aria van khoa muc bang)
+```
+
+Quy tắc gọn: **trên MariaDB, không bao giờ có lý do để chọn MyISAM thay vì Aria.**
 
 ---
 
-## Tổng kết So Sánh
+## Bảng đối chiếu ba engine
 
-```
-┌────────────┬──────────────┬──────────┬──────────────────┐
-│  Engine    │  Transactions│  Locking │  Use Case        │
-├────────────┼──────────────┼──────────┼──────────────────┤
-│  XtraDB    │  Có (ACID)   │  Row     │  Fork InnoDB     │
-│  SQLite    │  Có (ACID)   │  File    │  Embedded/Local  │
-│  Aria      │  Không       │  Table   │  MyISAM mới hơn  │
-└────────────┴──────────────┴──────────┴──────────────────┘
-```
+| | XtraDB | SQLite | Aria |
+|---|---|---|---|
+| Cấu trúc | B+Tree gom cụm | B+Tree | B-Tree |
+| Transaction | **Có, ACID** | **Có, ACID** | Không (có phục hồi) |
+| Mức khoá | Dòng | **File** | Bảng |
+| Kiến trúc | Client-server | **Nhúng** | Client-server |
+| Nơi dùng | Percona, MariaDB (cũ) | Khắp mọi nơi | MariaDB |
+| Tình trạng | **Đã ngừng** — dùng InnoDB | Rất sống động | Sống động trong MariaDB |
+| Nên dùng khi | Không còn lý do | Ứng dụng nhúng, đọc nhiều ghi ít | Thay MyISAM trên MariaDB |
 
----
+## Bẫy thường gặp
 
-**Tiếp theo:** 05-berkeleydb-va-tong-ket-engines.md →
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Quên `PRAGMA foreign_keys = ON` trong SQLite | Khoá ngoại **không được thực thi** — dữ liệu mồ côi âm thầm | Bật ở **mỗi kết nối** (không lưu vào file) |
+| Không bật chế độ WAL trong SQLite | Người đọc và người ghi chặn nhau | `PRAGMA journal_mode = WAL` (lưu vĩnh viễn) |
+| Không đặt `busy_timeout` | Lỗi `database is locked` liên tục | `PRAGMA busy_timeout = 5000` |
+| Dùng SQLite cho web nhiều người ghi | Chỉ một người ghi tại một thời điểm | PostgreSQL/MySQL cho tải ghi đồng thời |
+| Dựa vào kiểu cột SQLite để kiểm tra dữ liệu | Kiểu chỉ là gợi ý; chuỗi lọt vào cột số | Dùng `STRICT` cho mọi bảng mới |
+| Vẫn tìm cách cài XtraDB | Đã ngừng phát triển | Dùng InnoDB của MySQL 8 |
+| Dùng MyISAM trên MariaDB | Aria có mọi thứ MyISAM có, cộng phục hồi sự cố | `ALTER TABLE ... ENGINE = Aria` |
+| Nghĩ Aria có transaction | `TRANSACTIONAL = 1` chỉ bật **ghi nhật ký phục hồi** | Cần transaction thì dùng InnoDB |
+
+## Tóm tắt bài 4
+
+- **XtraDB** là nhánh InnoDB của Percona, sinh ra từ lo ngại sau khi Oracle mua MySQL. Nó đã **hoàn thành sứ mệnh** — MySQL 8 tiếp thu phần lớn cải tiến, và XtraDB nay đã ngừng. Bài học: **cạnh tranh giữa các nhánh làm sản phẩm gốc tốt lên.**
+- **SQLite là engine được triển khai nhiều nhất thế giới** — mọi điện thoại, mọi trình duyệt, rất nhiều thiết bị nhúng. Nó không có tiến trình máy chủ, chỉ là một thư viện và **một file**.
+- Mô hình khoá của SQLite: **nhiều người đọc, một người ghi**. Chế độ WAL giúp đọc và ghi không chặn nhau, nhưng vẫn chỉ một người ghi.
+- Cái bẫy lớn nhất của SQLite: **khoá ngoại mặc định TẮT**, và phải bật lại ở **mỗi kết nối**. Cái bẫy thứ hai: **kiểu cột chỉ là gợi ý** — dùng `STRICT`.
+- Rất nhiều website đọc nhiều ghi ít chạy SQLite hoàn toàn ổn. Đừng mặc định là cần PostgreSQL.
+- **Aria = MyISAM + phục hồi sau sự cố.** Nó cũng thêm bộ nhớ đệm cho dữ liệu (MyISAM chỉ cache index). Trên MariaDB nó chạy ngầm trong mọi bảng tạm nội bộ.
+- Quy tắc gọn: **trên MariaDB không bao giờ có lý do chọn MyISAM thay vì Aria.**
+
+**Bài kế tiếp** → [Bài 5: BerkeleyDB, tổng quan Engines phổ biến và chuyển đổi Engine](05-berkeleydb-va-tong-ket-engines.md)

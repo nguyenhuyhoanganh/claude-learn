@@ -1,376 +1,415 @@
-# Bài 3: LevelDB, RocksDB và Demo Đổi Engine MySQL
+# Bài 3: LevelDB, RocksDB và LSM Tree — engine cho tải ghi cực nặng
 
-## LevelDB - Google's Fast Write Engine
+Một hệ thống ghi **500.000 bản ghi đo lường mỗi giây**. B+Tree không chịu nổi:
 
-**LevelDB** được tạo bởi Jeff Dean và Sanjay Ghemawat (Google) năm 2011.
-
-### Mục tiêu thiết kế
-
-```
-Vấn đề với B+Tree trên SSD:
-  B+Tree INSERT có thể trigger rebalancing
-  Rebalancing = update existing nodes = OVERWRITE on SSD
-  SSD ghét overwrite (giảm lifespan)
-
-LevelDB giải pháp:
-  "Never overwrite. Only append. Cleanup later."
+```text
+   MỖI LẦN CHÈN VÀO B+TREE
+     • tìm page lá đích      → I/O NGẪU NHIÊN nếu chưa trong RAM
+     • có thể tách page      → thêm I/O, sửa nút cha
+     • ghi WAL               → có thể ghi cả page 8 KB
+   → 500.000 lần/giây thì đĩa nào cũng chết
 ```
 
-### Cấu trúc LSM-tree (Log-Structured Merge-tree)
+**LSM Tree** giải bài toán này bằng một ý tưởng đơn giản đến mức khó tin:
 
-```
-Level 0 (MemTable - RAM):
-  ┌─────────────────────────┐
-  │ key1:v1, key3:v2, key2:v3│ ← Ghi vào đây trước (fast!)
-  └─────────────────────────┘
-          │ Flush khi đầy (hoặc restart)
-          ▼
-Level 0 (SST files trên disk, nhỏ, có thể overlap):
-  [key1:v1, key3:v2]  [key2:v3, key5:v4]
-          │ Compact khi đủ số lượng
-          ▼
-Level 1 (SST files, lớn hơn, sorted, no overlap):
-  [key1:v1, key2:v3, key3:v2, key5:v4]
-          │ Compact
-          ▼
-Level 2 (Lớn hơn nữa)
-          │ Compact
-          ▼
-Level N ... (lớn nhất, trên slow storage)
+> **Đừng sửa gì cả. Chỉ nối thêm.**
+
+Bài này mổ xẻ LSM Tree qua hai engine dùng nó nhiều nhất — LevelDB (Google) và RocksDB (Facebook) — và giải thích chính xác nó đánh đổi cái gì lấy cái gì.
+
+## Ý tưởng cốt lõi
+
+```text
+   B+TREE                              LSM TREE
+   ══════                              ════════
+   "Tìm đúng chỗ rồi sửa tại chỗ"      "Ghi vào cuối, dọn dẹp sau"
+
+   Ghi = I/O NGẪU NHIÊN                Ghi = I/O TUẦN TỰ
+   (~1-2 MB/s hiệu dụng trên HDD)      (~200 MB/s trên HDD,
+                                        ~3.000 MB/s trên NVMe)
+
+                                       → NHANH HƠN HÀNG TRĂM LẦN
 ```
 
+Cái giá: dữ liệu bây giờ nằm rải ở nhiều nơi, nên **đọc phải tìm qua nhiều chỗ**.
+
+## Kiến trúc LSM Tree
+
+```text
+   ┌─ TRONG RAM ────────────────────────────────────────────────┐
+   │                                                            │
+   │   MEMTABLE (cây có sắp xếp, thường là skip list)           │
+   │   ┌──────────────────────────────────────┐                 │
+   │   │ key1→val1  key5→val5  key9→val9 ...  │                 │
+   │   └──────────────────────────────────────┘                 │
+   │        ▲ mọi lệnh ghi vào đây trước                        │
+   │        │                                                   │
+   │   WAL (ghi tuần tự xuống đĩa để không mất khi sập)         │
+   └────────┼───────────────────────────────────────────────────┘
+            │ khi memtable đầy (mặc định 64 MB) → ĐỔ XUỐNG ĐĨA
+            ▼
+   ┌─ TRÊN ĐĨA ─────────────────────────────────────────────────┐
+   │                                                            │
+   │  TẦNG 0   [SST] [SST] [SST] [SST]   ← mới nhất, CÓ THỂ     │
+   │                                       CHỒNG KHOÁ nhau      │
+   │              │ compaction                                  │
+   │              ▼                                             │
+   │  TẦNG 1   [SST][SST][SST][SST][SST][SST]                   │
+   │           ← không chồng khoá, tổng ~10× tầng 0             │
+   │              │ compaction                                  │
+   │              ▼                                             │
+   │  TẦNG 2   [SST] × 60          ~10× tầng 1                  │
+   │  TẦNG 3   [SST] × 600         ~10× tầng 2                  │
+   │  ...                                                       │
+   └────────────────────────────────────────────────────────────┘
+
+   SST = Sorted String Table: FILE BẤT BIẾN, đã sắp xếp theo khoá.
+         Ghi xong là KHÔNG BAO GIỜ sửa nữa.
 ```
-SST = Sorted String Table
-  - File chứa key-value pairs đã được sort
-  - Immutable (không bao giờ sửa, chỉ tạo mới hoặc xóa)
-  - Tại sao Sorted? → Binary search để tìm key nhanh
+
+### Đường ghi
+
+```text
+   put(key, value)
+     1. Ghi vào WAL (tuần tự, ~microgiây)
+     2. Ghi vào memtable trong RAM (~nanogiây)
+     3. TRẢ VỀ NGAY   ← xong, cực nhanh
+
+   Khi memtable đầy:
+     4. Đóng băng nó, tạo memtable mới nhận ghi tiếp
+     5. Tiến trình nền ghi memtable đã đóng băng thành file SST ở tầng 0
+        (ghi TUẦN TỰ một mạch)
 ```
 
-### Tại sao gọi là "Level" DB?
+Điểm mấu chốt: **không có bước nào phải đọc đĩa**. Ghi vào B+Tree phải đọc page đích lên trước; ghi vào LSM thì không.
 
-```
-LevelDB có nhiều "levels":
-  Level 0: Mới nhất, nhỏ nhất
-  Level 1: Compact từ Level 0
-  Level 2: Compact từ Level 1
-  Level 3-N: ...
+### Xoá và cập nhật — không có gì bị sửa
 
-Compaction process:
-  1. Level 0 đầy → Merge với Level 1 → Tạo Level 1 mới
-  2. Level 1 đầy → Merge với Level 2 → Tạo Level 2 mới
-  3. ...
+```text
+   XOÁ:  không xoá thật, mà GHI THÊM một "bia mộ" (tombstone)
+         put(key, TOMBSTONE)
 
-Kết quả: Dữ liệu "rơi xuống" theo thời gian,
-         Old data ở levels thấp,
-         New data ở levels cao
+   SỬA:  không sửa thật, mà GHI THÊM giá trị mới
+         put(key, giá_trị_mới)
+
+   → Cùng một khoá có thể xuất hiện Ở NHIỀU TẦNG với nhiều giá trị.
+   → Giá trị ĐÚNG là cái ở TẦNG NHỎ NHẤT (mới nhất).
 ```
 
-### Đặc điểm LevelDB
+### Đường đọc — chỗ trả giá
 
+```text
+   get(key)
+     1. Tìm trong MEMTABLE            → thấy thì trả về ngay
+     2. Tìm trong memtable đóng băng  → thấy thì trả về
+     3. Tìm trong TẦNG 0 — phải kiểm tra MỌI file (chúng chồng khoá nhau)
+     4. Tầng 1: nhị phân tìm file chứa khoảng khoá → kiểm tra 1 file
+     5. Tầng 2: tương tự
+     ...
+     N. Không thấy ở đâu → khoá không tồn tại
+
+   → TỆ NHẤT: phải chạm mọi tầng. Đọc chậm hơn B+Tree nhiều.
 ```
-✅ Write performance cực tốt (O(1) ghi vào MemTable)
-✅ Tốt cho SSD (append-only, ít overwrite)
-✅ Không cần rebalancing tree
-❌ Không có transactions (chỉ single key operations)
-❌ Embedded only (không có client-server)
-❌ Reads hơi chậm hơn B+Tree (nhiều levels để tìm)
-❌ Compaction tốn CPU và I/O
 
-Dùng trong: Bitcoin Core, AutoCAD, Minecraft PE
+## Ba kỹ thuật cứu đường đọc
+
+Không có ba thứ này, LSM sẽ không dùng được.
+
+### 1. Bloom filter — chặn phần lớn lần tìm vô ích
+
+Mỗi file SST có một bloom filter ([phase-4 bài 4](../phase-4/04-bloom-filter-va-uuid-performance.md)):
+
+```text
+   Truoc khi MO file SST:
+     bloom.co_the_chua(key)?
+       KHONG  →  BO QUA file, khong cham dia            ✔
+       CO THE →  mo file ra tim (co the la duong tinh gia)
+
+   Voi ti le duong tinh gia 1%:
+     → 99% cac file KHONG chua khoa bi loai ngay tai RAM
+     → doc diem tro nen kha thi
+```
+
+Đây là ứng dụng quan trọng nhất của bloom filter trong thực tế.
+
+### 2. Chỉ mục khối trong từng file SST
+
+```text
+   CẤU TRÚC MỘT FILE SST
+   ┌─────────────────────────────────────┐
+   │ Khối dữ liệu 1 (đã sắp, đã nén)     │
+   │ Khối dữ liệu 2                      │
+   │ ...                                 │
+   ├─────────────────────────────────────┤
+   │ Khối chỉ mục: khoá đầu của mỗi khối │  ← nhỏ, giữ trong RAM
+   ├─────────────────────────────────────┤
+   │ Bloom filter                        │  ← nhỏ, giữ trong RAM
+   ├─────────────────────────────────────┤
+   │ Footer: con trỏ tới các phần trên   │
+   └─────────────────────────────────────┘
+```
+
+Nhờ vậy, tìm trong một file SST chỉ tốn **một** lần đọc khối, không phải quét cả file.
+
+### 3. Compaction — dọn dẹp và gộp
+
+Đây là công việc nền định nghĩa toàn bộ đặc tính của LSM:
+
+```text
+   TRƯỚC compaction (tầng 0 và 1)
+   Tầng 0: [a→1, c→9]  [a→5, b→2]  [c→7, d→3]     ← chồng khoá, có bản cũ
+   Tầng 1: [a→0, b→0, c→0, d→0, e→0]
+
+   COMPACTION: đọc hết, trộn, giữ bản MỚI NHẤT, vứt bia mộ, ghi file mới
+
+   SAU
+   Tầng 1: [a→5, b→2, c→9, d→3, e→0]              ← gọn, không trùng
+```
+
+Compaction làm ba việc:
+
+```text
+   1. Vứt các phiên bản cũ của cùng một khoá     → thu hồi dung lượng
+   2. Xoá thật các bia mộ                         → thu hồi dung lượng
+   3. Giảm số file phải tìm qua                   → đọc nhanh hơn
+```
+
+Cái giá: nó **đọc và ghi lại cùng một dữ liệu nhiều lần**.
+
+---
+
+## Ba loại khuếch đại — bộ ba đánh đổi của LSM
+
+Đây là khung tư duy chuẩn để so sánh các engine lưu trữ.
+
+```text
+   ┌─────────────────────────────────────────────────────────────┐
+   │  KHUẾCH ĐẠI GHI (write amplification)                       │
+   │  Ghi 1 byte dữ liệu → thực tế ghi bao nhiêu byte xuống đĩa?│
+   │  LSM phân tầng: ~10-30×  (dữ liệu đi qua nhiều tầng)        │
+   │  B+Tree:        ~5-20×   (page 8 KB cho một dòng 100 byte)  │
+   ├─────────────────────────────────────────────────────────────┤
+   │  KHUẾCH ĐẠI ĐỌC (read amplification)                        │
+   │  Đọc 1 khoá → phải chạm bao nhiêu chỗ trên đĩa?             │
+   │  LSM:     ~1-10×  (nhiều tầng, giảm nhờ bloom filter)       │
+   │  B+Tree:  ~1×     (3-4 lần I/O, ổn định)                    │
+   ├─────────────────────────────────────────────────────────────┤
+   │  KHUẾCH ĐẠI DUNG LƯỢNG (space amplification)                │
+   │  1 GB dữ liệu logic → chiếm bao nhiêu đĩa?                  │
+   │  LSM phân tầng: ~1,1×  (nén tốt, ít lãng phí)               │
+   │  B+Tree:        ~1,3-2× (page đầy 50-90%, phân mảnh)        │
+   └─────────────────────────────────────────────────────────────┘
+
+   ĐỊNH LÝ RSUM: KHÔNG THỂ TỐI ƯU CẢ BA. Cải thiện một cái làm tệ hai cái kia.
+```
+
+Hai chiến lược compaction thể hiện rõ đánh đổi này:
+
+| | **Phân tầng** (leveled) | **Theo kích thước** (size-tiered) |
+|---|---|---|
+| Cách làm | Mỗi tầng gộp lại, không chồng khoá | Gộp các file cùng cỡ thành file lớn hơn |
+| Khuếch đại ghi | **Cao** (~10-30×) | **Thấp** (~4-10×) |
+| Khuếch đại đọc | **Thấp** | **Cao** (nhiều file chồng khoá) |
+| Khuếch đại dung lượng | **Thấp** (~1,1×) | **Cao** (~2× — bản cũ tồn tại lâu) |
+| Dùng ở | RocksDB (mặc định), LevelDB | Cassandra (mặc định) |
+
+Chọn chiến lược compaction chính là chọn **cái nào bạn chịu được**.
+
+---
+
+## LevelDB vs RocksDB
+
+**LevelDB** (Google, 2011) là bản cài đặt LSM tối giản, ~20.000 dòng C++. **RocksDB** (Facebook, 2012) là nhánh của LevelDB, tối ưu cho SSD và máy chủ nhiều lõi.
+
+| | LevelDB | RocksDB |
+|---|---|---|
+| Ghi song song | Một luồng ghi | **Nhiều luồng** |
+| Compaction | Một luồng | **Nhiều luồng** |
+| Transaction | Chỉ ghi theo lô nguyên tử | **Có** (bi quan và lạc quan) |
+| Column family | Không | **Có** — nhiều không gian khoá trong một DB |
+| Bộ lọc | Bloom cơ bản | Bloom + prefix + ribbon |
+| Nén | Snappy | Snappy, LZ4, ZSTD, Zlib |
+| TTL | Không | **Có** |
+| Sao lưu / snapshot | Cơ bản | **Đầy đủ, có tăng dần** |
+| Số tham số điều chỉnh | ~10 | **Hàng trăm** |
+| Dùng ở | Chrome (IndexedDB), Bitcoin Core | MySQL (MyRocks), Kafka Streams, CockroachDB, TiKV, Flink |
+
+Dòng cuối cho thấy vị thế: **RocksDB là engine lưu trữ của rất nhiều hệ thống lớn hiện nay**. Nó gần như đã trở thành thư viện lưu trữ tiêu chuẩn.
+
+Số tham số "hàng trăm" là con dao hai lưỡi: điều chỉnh được rất sâu, nhưng cấu hình sai thì hiệu năng tệ hơn mặc định rất nhiều.
+
+---
+
+## MyRocks — RocksDB trong MySQL
+
+Facebook đưa RocksDB vào MySQL để thay InnoDB cho tải ghi nặng:
+
+```sql
+CREATE TABLE events (
+    id      BIGINT PRIMARY KEY,
+    payload TEXT
+) ENGINE = ROCKSDB;
+```
+
+Kết quả Facebook công bố khi chuyển hạ tầng UDB từ InnoDB sang MyRocks:
+
+```text
+   Dung lượng đĩa   :  giảm ~50%
+   Khuếch đại ghi   :  giảm ~10 lần
+   Tuổi thọ SSD     :  tăng đáng kể (ghi ít hơn nên mòn chậm hơn)
+   Hiệu năng đọc    :  thấp hơn InnoDB một chút
+```
+
+Đánh đổi rất rõ ràng: **đổi một chút tốc độ đọc lấy một nửa dung lượng và một phần mười lượng ghi**. Với quy mô Facebook, một nửa dung lượng là hàng nghìn máy chủ.
+
+Khi nào MyRocks đáng cân nhắc:
+
+```text
+   ✔ Ghi rất nhiều, đọc chủ yếu theo khoá chính
+   ✔ Dung lượng đĩa là chi phí lớn
+   ✔ SSD bị mòn nhanh vì ghi quá nhiều
+   ✘ Nhiều truy vấn khoảng phức tạp
+   ✘ Cần khoá ngoại (MyRocks không hỗ trợ)
+   ✘ Đội chưa có kinh nghiệm điều chỉnh RocksDB
 ```
 
 ---
 
-## RocksDB - Facebook's Enhancement
-
-**RocksDB** (2012) = Facebook fork của LevelDB với nhiều cải tiến.
-
-### Tại sao Facebook tạo RocksDB?
-
-```
-LevelDB bị giới hạn:
-  - Single-threaded compaction
-  - Không có transactions
-  - Performance không đủ cho Facebook scale
-
-RocksDB improvements:
-  ✅ Multi-threaded compaction
-  ✅ ACID Transactions (đây là game changer!)
-  ✅ Better compression
-  ✅ Merge operators
-  ✅ Read-only mode
-  ✅ Backup & restore tools
-  ✅ Rate limiting
-  ✅ Column families
-  ✅ WAL (Write-Ahead Log) for durability
-  ... hàng trăm features khác
-```
-
-### ACID trong RocksDB
-
-```
-RocksDB hỗ trợ transactions mặc dù dùng LSM:
-  1. Write vào MemTable (in-memory)
-  2. Đồng thời ghi vào WAL (on disk)
-  3. WAL đảm bảo durability
-  4. MemTable đảm bảo visibility trong transaction
-
-Optimistic Transactions:
-  - Không lock khi read
-  - Check conflicts lúc commit
-  - Nếu conflict: Rollback và retry
-
-Pessimistic Transactions:
-  - Lock khi read
-  - Giống B+Tree locks
-```
-
-### MyRocks - RocksDB cho MySQL
-
-```
-MyRocks = RocksDB storage engine cho MySQL/MariaDB/Percona
-
-Tạo bởi: Facebook (để dùng cho MySQL của họ)
-
-Lợi ích:
-  - Write throughput cao hơn InnoDB ~2x trong nhiều workloads
-  - Compression tốt hơn → Ít disk space hơn
-  - SSD-friendly
-
-Dùng khi:
-  - Write-heavy MySQL workload
-  - Log/event data
-  - Time-series data
-  - Cần tiết kiệm disk space
-
-Cài đặt:
-  Percona Server hoặc MariaDB → enable MyRocks plugin
-```
-
----
-
-## So sánh B+Tree vs LSM-tree
-
-```
-┌─────────────────┬────────────────────┬────────────────────┐
-│ Tiêu chí        │ B+Tree (InnoDB)    │ LSM-tree (RocksDB) │
-├─────────────────┼────────────────────┼────────────────────┤
-│ Write speed     │ Good               │ Excellent          │
-│ Read speed      │ Excellent          │ Good               │
-│ Write amplif.   │ Low-Medium         │ High (compaction)  │
-│ Read amplif.    │ Low                │ Medium             │
-│ Space usage     │ Medium             │ Low (compression)  │
-│ SSD friendly    │ Moderate           │ Excellent          │
-│ ACID            │ Yes (InnoDB)       │ Yes (RocksDB)      │
-│ Range queries   │ Excellent          │ Good               │
-│ Point lookups   │ Excellent          │ Good               │
-│ Compaction cost │ Low                │ High (background)  │
-└─────────────────┴────────────────────┴────────────────────┘
-
-Databases dùng B+Tree: PostgreSQL, MySQL/InnoDB, Oracle, SQL Server
-Databases dùng LSM: Cassandra, HBase, LevelDB, RocksDB, InfluxDB, Elasticsearch
-```
-
----
-
-## Demo: Đổi Storage Engine trong MySQL
-
-### Setup Docker MySQL
+## Thử LSM tận tay
 
 ```bash
-docker run \
-  --name mysql-engine-demo \
-  -e MYSQL_ROOT_PASSWORD=password \
-  -p 3306:3306 \
-  -d mysql:8
-
-# Kết nối vào container
-docker exec -it mysql-engine-demo mysql -uroot -ppassword
+pip install plyvel      # binding Python cho LevelDB
 ```
 
-### Xem các Engines được hỗ trợ
+```python
+import plyvel, time, os
 
-```sql
-SHOW ENGINES;
+db = plyvel.DB('/tmp/leveldb-lab', create_if_missing=True)
+
+# GHI 1 TRIEU BAN GHI
+bat_dau = time.time()
+with db.write_batch() as wb:
+    for i in range(1_000_000):
+        wb.put(f'key{i:08d}'.encode(), f'value-{i}'.encode())
+print(f"Ghi 1 trieu: {time.time() - bat_dau:.2f}s")
+
+# DOC NGAU NHIEN
+import random
+bat_dau = time.time()
+for _ in range(10_000):
+    db.get(f'key{random.randint(0, 999999):08d}'.encode())
+print(f"Doc 10.000 ngau nhien: {time.time() - bat_dau:.3f}s")
+
+# QUET KHOANG — cho tay lam LSM manh
+bat_dau = time.time()
+dem = sum(1 for _ in db.iterator(start=b'key00050000', stop=b'key00060000'))
+print(f"Quet 10.000 khoa lien tiep: {time.time() - bat_dau:.3f}s, {dem} ban ghi")
 ```
 
-```
-Output:
-  Engine            | Support | Comment
-  ──────────────────┼─────────┼──────────────────────────────
-  MEMORY            | YES     | Hash based, in memory
-  MRG_MYISAM        | YES     | Merge MyISAM
-  CSV               | YES     | CSV storage engine  
-  BLACKHOLE         | YES     | /dev/null storage engine
-  MyISAM            | YES     | NOT NULL indexed columns
-  PERFORMANCE_SCHEMA| YES     | Performance schema
-  InnoDB            | DEFAULT | Supports transactions, row-lock
-  ARCHIVE           | YES     | Archive storage engine
-  FEDERATED         | NO      | Federated MySQL storage engine
+```text
+Ghi 1 trieu: 2.84s                          → ~352.000 ban ghi/giay
+Doc 10.000 ngau nhien: 0.412s               → ~24.000 doc/giay
+Quet 10.000 khoa lien tiep: 0.018s, 10000   → RAT nhanh (da sap xep)
 ```
 
-### Tạo Tables với Engine khác nhau
+Xem cấu trúc tầng thật:
 
-```sql
-CREATE DATABASE test;
-USE test;
-
--- Table với MyISAM (không có transactions)
-CREATE TABLE employees_myisam (
-    id   INT AUTO_INCREMENT PRIMARY KEY,
-    name TEXT
-) ENGINE = MyISAM;
-
--- Table với InnoDB (có transactions)
-CREATE TABLE employees_innodb (
-    id   INT AUTO_INCREMENT PRIMARY KEY,
-    name TEXT
-) ENGINE = InnoDB;  -- Hoặc không chỉ định (default = InnoDB)
+```bash
+ls -la /tmp/leveldb-lab/
 ```
 
-### Demo: MyISAM không có Transactions
-
-```sql
--- Connect terminal 1:
-BEGIN;
-INSERT INTO employees_myisam (name) VALUES ('Hussein');
--- CHƯA COMMIT!
-
--- Connect terminal 2 (trong khi terminal 1 chưa commit):
-SELECT * FROM employees_myisam;
--- → 1 row (Hussein)!
--- → MyISAM không có isolation, mọi thứ ngay lập tức visible!
-
--- Terminal 1: ROLLBACK
-ROLLBACK;
-
--- Terminal 2:
-SELECT * FROM employees_myisam;
--- → VẪN CÓ 1 ROW! ROLLBACK không hoạt động!
--- → MyISAM không hỗ trợ rollback
+```text
+000005.ldb        2.1M      ← file SST
+000008.ldb        2.1M
+000011.ldb        2.1M
+...
+000042.log        1.2M      ← WAL
+CURRENT             16
+LOCK                 0
+LOG               8.4K      ← nhat ky compaction
+MANIFEST-000002   4.1K
 ```
 
-### Demo: InnoDB có Transactions
+Đọc nhật ký compaction:
 
-```sql
--- Terminal 1:
-BEGIN;
-INSERT INTO employees_innodb (name) VALUES ('Hussein');
--- CHƯA COMMIT!
-
--- Terminal 2:
-SELECT * FROM employees_innodb;
--- → 0 rows! (InnoDB isolation đang hoạt động)
-
--- Terminal 1:
-COMMIT;
-
--- Terminal 2:
-SELECT * FROM employees_innodb;
--- → 1 row! (Hussein) - Chỉ thấy sau khi commit
-
--- Terminal 1:
-BEGIN;
-INSERT INTO employees_innodb (name) VALUES ('Alice');
-ROLLBACK;  -- Hủy transaction
-
-SELECT * FROM employees_innodb;
--- → Vẫn chỉ có Hussein (Alice bị rollback)
+```bash
+grep -i compact /tmp/leveldb-lab/LOG | head -5
 ```
 
-### Node.js Demo - Hành vi Transactions
-
-```javascript
-const mysql = require('mysql2/promise');
-
-const config = {
-    host: 'localhost',
-    port: 3306,
-    user: 'root',
-    password: 'password',
-    database: 'test'
-};
-
-// Test MyISAM - Transactions không có tác dụng
-async function testMyISAM() {
-    const conn = await mysql.createConnection(config);
-    
-    try {
-        await conn.beginTransaction();
-        await conn.query("INSERT INTO employees_myisam (name) VALUES ('Test')");
-        
-        // Kiểm tra từ connection khác - Sẽ THẤY row dù chưa commit!
-        const conn2 = await mysql.createConnection(config);
-        const [rows] = await conn2.query("SELECT * FROM employees_myisam");
-        console.log('MyISAM - Before commit:', rows.length, 'rows'); // > 0!
-        
-        await conn.rollback(); // Rollback không hoạt động!
-        const [afterRollback] = await conn2.query("SELECT * FROM employees_myisam");
-        console.log('MyISAM - After rollback:', afterRollback.length, 'rows'); // Vẫn > 0!
-    } finally {
-        await conn.end();
-    }
-}
-
-// Test InnoDB - Transactions hoạt động đúng
-async function testInnoDB() {
-    const conn = await mysql.createConnection(config);
-    
-    try {
-        await conn.beginTransaction();
-        await conn.query("INSERT INTO employees_innodb (name) VALUES ('Test')");
-        
-        // Kiểm tra từ connection khác - KHÔNG thấy (đúng behavior)
-        const conn2 = await mysql.createConnection(config);
-        const [rows] = await conn2.query("SELECT * FROM employees_innodb");
-        console.log('InnoDB - Before commit:', rows.length, 'rows'); // 0!
-        
-        await conn.rollback(); // Rollback hoạt động!
-        const [afterRollback] = await conn2.query("SELECT * FROM employees_innodb");
-        console.log('InnoDB - After rollback:', afterRollback.length, 'rows'); // 0!
-    } finally {
-        await conn.end();
-    }
-}
+```text
+Compacting 4@0 + 1@1 files
+Compacted 4@0 + 1@1 files => 8842112 bytes
+Compacting 1@1 + 3@2 files
 ```
 
-### Thay đổi Engine của Table đang tồn tại
+Dòng `4@0 + 1@1` nghĩa là: gộp 4 file ở tầng 0 với 1 file ở tầng 1. Đây là compaction phân tầng đang chạy trước mắt bạn.
 
-```sql
--- Xem engine hiện tại
-SELECT table_name, engine 
-FROM information_schema.tables 
-WHERE table_schema = 'test';
+Quan sát tác động của xoá:
 
--- Đổi từ MyISAM → InnoDB
-ALTER TABLE employees_myisam ENGINE = InnoDB;
--- ⚠️ Warning: Trên bảng lớn, lệnh này lock table và mất thời gian!
+```python
+# Xoa mot nua
+with db.write_batch() as wb:
+    for i in range(0, 1_000_000, 2):
+        wb.delete(f'key{i:08d}'.encode())
 
--- Đổi trở lại
-ALTER TABLE employees_myisam ENGINE = MyISAM;
+import subprocess
+print(subprocess.run(['du','-sh','/tmp/leveldb-lab'], capture_output=True, text=True).stdout)
 ```
+
+```text
+28M    /tmp/leveldb-lab        ← LON HON truoc khi xoa!
+```
+
+Vì sao: xoá **ghi thêm** một triệu bia mộ. Dung lượng chỉ giảm sau khi compaction chạy:
+
+```python
+db.compact_range()      # buoc compaction chay ngay
+print(subprocess.run(['du','-sh','/tmp/leveldb-lab'], capture_output=True, text=True).stdout)
+```
+
+```text
+9.2M   /tmp/leveldb-lab        ← gio moi giam
+```
+
+Đây là đặc tính quan trọng nhất cần nhớ về LSM: **xoá làm dữ liệu TO RA trước khi nhỏ lại**.
 
 ---
 
-## Kết luận: Chọn Engine nào?
+## Khi nào chọn LSM, khi nào chọn B+Tree
 
-```
-MySQL/MariaDB users:
-  Default: InnoDB (transactions, row-level locking, ACID)
-  Write-heavy: MyRocks (nếu hiểu LSM-tree trade-offs)
-  Legacy/read-only: MyISAM (nhưng hãy migrate sang InnoDB)
+| Đặc điểm tải | Nên chọn |
+|---|---|
+| Ghi rất nhiều, đọc theo khoá | **LSM** |
+| Chuỗi thời gian, nhật ký, đo lường | **LSM** |
+| Dung lượng đĩa là chi phí lớn | **LSM** (nén tốt hơn nhiều) |
+| SSD mòn nhanh vì ghi quá nhiều | **LSM** (khuếch đại ghi thấp hơn) |
+| Nhiều truy vấn khoảng | **B+Tree** |
+| Cần độ trễ đọc **ổn định** | **B+Tree** (LSM có đuôi trễ do compaction) |
+| Cần transaction phức tạp, khoá ngoại | **B+Tree** |
+| Đọc nhiều hơn ghi | **B+Tree** |
 
-PostgreSQL users:
-  Không có lựa chọn (built-in B+Tree engine)
-  → Nếu cần LSM, dùng PostgreSQL + extension hoặc đổi DB
+Điểm "độ trễ đọc ổn định" đáng nhấn mạnh: LSM có hiện tượng **khựng do compaction** — thỉnh thoảng một đợt compaction lớn chiếm hết I/O và làm độ trễ tăng vọt. Với hệ cần đảm bảo p99, đây là vấn đề thật.
 
-Embedded/standalone:
-  SQLite (iOS, Android, desktop apps, testing)
+## Bẫy thường gặp
 
-Pure performance với LSM:
-  RocksDB (thường dùng qua framework như MyRocks, MongoRocks)
-```
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Kỳ vọng xoá dữ liệu thì đĩa giảm ngay | Dung lượng **tăng** vì bia mộ | Hiểu chu kỳ compaction; kích hoạt thủ công nếu cần |
+| Dùng LSM cho tải nhiều truy vấn khoảng | Phải trộn nhiều tầng, chậm hơn B+Tree | Đối chiếu cấu trúc với mẫu truy vấn |
+| Bỏ qua đuôi trễ do compaction | p99 tăng vọt bất chợt | Giới hạn tốc độ compaction; theo dõi p99 |
+| Điều chỉnh RocksDB mà không đo | Hàng trăm tham số, dễ làm tệ hơn mặc định | Đổi từng tham số một, đo lại mỗi lần |
+| Nghĩ LSM luôn ghi nhanh hơn | Khi compaction không theo kịp, ghi bị **chặn lại** (write stall) | Theo dõi số file tầng 0 |
+| Dùng MyRocks khi cần khoá ngoại | MyRocks không hỗ trợ | Giữ InnoDB cho bảng cần ràng buộc |
+| Tự viết LSM | Rất nhiều chi tiết tinh vi | Nhúng RocksDB |
 
----
+## Tóm tắt bài 3
 
-**Tiếp theo:** 04-xtradb-sqlite-aria.md →
+- **LSM Tree** đổi ghi ngẫu nhiên thành ghi tuần tự bằng nguyên tắc **"đừng sửa, chỉ nối thêm"** — nhanh hơn hàng trăm lần trên tải ghi nặng.
+- Kiến trúc: **memtable** trong RAM (kèm WAL) → đổ xuống thành **file SST bất biến** → **compaction** gộp và dọn qua các tầng.
+- **Xoá không xoá gì cả** — nó ghi thêm một **bia mộ**. Vì thế xoá làm dữ liệu **to ra trước khi nhỏ lại**.
+- Đường đọc phải tìm qua nhiều tầng, và ba kỹ thuật cứu nó: **bloom filter** (chặn 99% lần tìm vô ích), **chỉ mục khối** trong từng SST, và **compaction** giảm số file.
+- **Ba loại khuếch đại** (ghi / đọc / dung lượng) là khung so sánh chuẩn — và **không thể tối ưu cả ba**. Chọn chiến lược compaction chính là chọn cái nào bạn chịu được.
+- **RocksDB** đã trở thành thư viện lưu trữ tiêu chuẩn: MySQL (MyRocks), CockroachDB, TiKV, Kafka Streams, Flink đều dùng.
+- **MyRocks** ở Facebook: giảm ~50% dung lượng và ~10 lần khuếch đại ghi, đổi lại đọc chậm hơn một chút — nhưng không hỗ trợ khoá ngoại.
+- Chọn **LSM** cho ghi nặng, chuỗi thời gian, dung lượng là chi phí lớn. Chọn **B+Tree** cho truy vấn khoảng, độ trễ đọc ổn định, transaction phức tạp.
+
+**Bài kế tiếp** → [Bài 4: XtraDB, SQLite và Aria](04-xtradb-sqlite-aria.md)

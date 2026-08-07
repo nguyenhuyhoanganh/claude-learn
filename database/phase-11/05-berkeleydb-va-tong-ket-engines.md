@@ -1,437 +1,339 @@
-# Bài 5: BerkeleyDB, Tổng Quan Engines Phổ Biến và Chuyển Đổi Engine
+# Bài 5: BerkeleyDB, tổng kết Engines và chuyển đổi Engine
 
-## 1. BerkeleyDB - Ông Tổ của Key-Value Store
+Bài cuối của phase này gồm ba phần: một engine có lịch sử đáng học, một bảng tổng kết để tra cứu, và một quy trình chuyển đổi engine an toàn trên MySQL.
 
-### Lịch sử
+---
 
-**BerkeleyDB** là một trong những database engine lâu đời nhất còn được nhắc đến. Được phát triển tại Đại học California, Berkeley từ năm 1994, BerkeleyDB hiện thuộc sở hữu của Oracle (thêm một item nữa trong danh sách Oracle "thu gom" database).
+# Phần I — BerkeleyDB
 
-```
-1994: BerkeleyDB ra đời tại UC Berkeley
-      ↓
-      Sleepycat Software mua lại và thương mại hóa
-      ↓
-2006: Oracle mua lại Sleepycat
-      ↓
-      Hiện tại: Oracle Berkeley DB (vẫn tồn tại nhưng ít phổ biến hơn)
-```
+## Engine của thời kỳ trước
 
-### Đặc điểm kỹ thuật
+BerkeleyDB (thường viết tắt **BDB**) ra đời năm 1991 tại Đại học California, Berkeley. Nó là **kho khoá-giá trị nhúng** — cùng ý tưởng với LevelDB nhưng sớm hơn hai mươi năm.
 
-BerkeleyDB là **embedded key-value store** - không phải client-server mà nhúng trực tiếp vào ứng dụng:
-
-| Tính năng | BerkeleyDB |
-|-----------|------------|
-| Mô hình | Key-Value embedded |
-| ACID | Có (transactions, locks) |
-| Kiến trúc | Embedded (như SQLite) |
-| Locking | B-tree locks |
-| Client-Server | Không |
-| Network | Không |
-
-### Ứng dụng lịch sử
-
-```
-Bitcoin Core (ban đầu):
-  - Bitcoin blockchain từng dùng BerkeleyDB để lưu UTXO set
-  - Sau đó chuyển sang LevelDB (nhanh hơn cho write-heavy workload)
-  - Dự đoán: có thể sẽ chuyển sang RocksDB trong tương lai
-
-MemcacheDB (khác với Memcached):
-  - Memcache + BerkeleyDB = MemcacheDB
-  - Persistent key-value store với Memcache protocol
-  - Ít phổ biến hiện nay
+```text
+   BDB CUNG CAP BA CAU TRUC LUU TRU, CHON LUC TAO
+   ═══════════════════════════════════════════════
+   BTREE   →  co sap xep, ho tro quet khoang       (giong InnoDB)
+   HASH    →  tra chinh xac cuc nhanh, khong sap   (giong bang bam)
+   QUEUE   →  ban ghi kich thuoc co dinh, FIFO     (giong hang doi)
+   RECNO   →  danh so ban ghi tuan tu
 ```
 
-### Tại sao BerkeleyDB không còn phổ biến?
+Đây là điểm khác biệt lớn nhất so với các engine hiện đại: **bạn chọn cấu trúc dữ liệu phù hợp với bài toán**, thay vì nhận một cấu trúc cố định.
 
+Và nó có ACID đầy đủ:
+
+```text
+   • Transaction voi commit/rollback
+   • Ghi nhat ky truoc (WAL)
+   • Phuc hoi sau su co
+   • Khoa muc dong hoac muc page
+   • Nhan ban
 ```
-LevelDB (2011) và RocksDB (2012) xuất hiện:
-  - LSM-tree: write throughput cao hơn nhiều
-  - Tối ưu cho SSD (append-only, ít overwrite)
-  - Open source, cộng đồng lớn hơn
-  - Không bị Oracle kiểm soát
 
-BerkeleyDB bị bỏ lại phía sau vì:
-  1. B-tree không tối ưu cho write-heavy workload
-  2. Oracle ownership = ít innovation
-  3. Cộng đồng nhỏ hơn
-  4. LevelDB/RocksDB làm tốt hơn với ít giới hạn hơn
+Một kho khoá-giá trị nhúng có ACID đầy đủ — vào năm 1991. Rất nhiều ý tưởng ngày nay coi là hiển nhiên đã có ở đây từ trước.
+
+## Nó từng ở đâu
+
+```text
+   • Backend cua MySQL (engine BDB, den MySQL 5.1)
+   • Backend cua OpenLDAP
+   • Backend cua Subversion (den phien ban 1.4)
+   • Bitcoin Core (vi tien, den nay van con dau vet)
+   • Postfix, Sendmail, Cyrus IMAP
+   • Rat nhieu he thong Unix
+```
+
+## Vì sao nó biến mất
+
+Đây là phần đáng học nhất, và nó **không phải** một câu chuyện kỹ thuật.
+
+```text
+   1996  Sleepycat Software thanh lap, ban BDB thuong mai
+   2006  Oracle mua Sleepycat
+   2013  Oracle DOI GIAY PHEP tu Sleepycat License sang AGPLv3
+```
+
+Điều đó nghĩa là gì:
+
+```text
+   AGPLv3: neu phan mem cua ban dung BDB VA duoc truy cap qua MANG,
+           ban PHAI cong khai toan bo ma nguon cua minh
+           — hoac mua giay phep thuong mai cua Oracle.
+
+   → Moi ung dung web dung BDB dot ngot doi mat:
+       "mo ma nguon" hoac "tra tien"
+```
+
+Phản ứng của cộng đồng diễn ra rất nhanh:
+
+```text
+   Debian, Ubuntu, Red Hat  →  giu lai ban 5.3 (giay phep cu) VINH VIEN
+                                khong bao gio nang cap nua
+   OpenLDAP                 →  chuyen sang LMDB (tu viet)
+   Subversion               →  chuyen han sang FSFS
+   Bitcoin Core             →  ghim mai o ban 4.8 (2010)
+   MySQL                    →  bo engine BDB tu 5.1
+```
+
+Trong vòng vài năm, một engine từng chạy trên hàng triệu máy chủ gần như biến mất hoàn toàn.
+
+Bài học vượt ra ngoài chuyện database:
+
+> **Giấy phép là một rủi ro kỹ thuật.** Một thay đổi giấy phép có thể giết một công nghệ nhanh hơn bất kỳ khiếm khuyết kỹ thuật nào.
+
+Câu chuyện này lặp lại nhiều lần sau đó: **MongoDB** đổi sang SSPL (2018) → Amazon tạo DocumentDB; **Elasticsearch** đổi sang SSPL (2021) → AWS tạo OpenSearch; **Redis** đổi sang RSAL/SSPL (2024) → Linux Foundation tạo **Valkey**.
+
+Đó là lý do khi chọn công nghệ nền tảng, câu hỏi *"giấy phép là gì, và ai kiểm soát nó?"* quan trọng ngang với *"nó nhanh không?"*.
+
+## Người kế thừa: LMDB
+
+Khi OpenLDAP cần thay BDB, họ viết **LMDB** (*Lightning Memory-Mapped Database*):
+
+| | BerkeleyDB | LMDB |
+|---|---|---|
+| Cách truy cập | Đọc/ghi file thường | **Ánh xạ bộ nhớ** (mmap) |
+| Đọc | Nhanh | **Cực nhanh** — không sao chép byte nào |
+| Kích thước mã | ~200.000 dòng | **~10.000 dòng** |
+| Giấy phép | AGPLv3 | **OpenLDAP (kiểu BSD)** |
+| Điều khiển đồng thời | Khoá | **MVCC, không khoá cho người đọc** |
+| Ghi đồng thời | Nhiều | **Một người ghi tại một thời điểm** |
+
+LMDB dùng kỹ thuật **copy-on-write B+Tree**: mỗi transaction ghi tạo ra một cây mới dùng chung phần lớn nút với cây cũ. Nhờ đó người đọc **không bao giờ cần khoá** và **không bao giờ thấy dữ liệu nửa vời**.
+
+Nó đang chạy trong OpenLDAP, Monero, và nhiều hệ thống cần đọc cực nhanh.
+
+---
+
+# Phần II — Bảng tổng kết các engine
+
+## Bảng đối chiếu đầy đủ
+
+| Engine | Cấu trúc | Transaction | Khoá | Nhúng | Dùng ở |
+|---|---|---|---|---|---|
+| **InnoDB** | B+Tree gom cụm | ACID | Dòng | Không | MySQL (mặc định) |
+| **MyISAM** | B-Tree | Không | Bảng | Không | MySQL (cũ) |
+| **Aria** | B-Tree | Không (có phục hồi) | Bảng | Không | MariaDB |
+| **XtraDB** | B+Tree gom cụm | ACID | Dòng | Không | Percona (đã ngừng) |
+| **MyRocks** | **LSM** | ACID | Dòng | Không | MySQL (ghi nặng) |
+| **SQLite** | B+Tree | ACID | File | **Có** | Khắp mọi nơi |
+| **LevelDB** | **LSM** | Không | — | **Có** | Chrome, Bitcoin Core |
+| **RocksDB** | **LSM** | Có | — | **Có** | CockroachDB, TiKV, Kafka |
+| **BerkeleyDB** | B-Tree/Hash/Queue | ACID | Dòng/page | **Có** | Hệ thống cũ |
+| **LMDB** | B+Tree copy-on-write | ACID | Một người ghi | **Có** | OpenLDAP, Monero |
+| **WiredTiger** | B+Tree + LSM | ACID | Tài liệu | Không | MongoDB (mặc định) |
+| **PostgreSQL** | Heap + B+Tree | ACID | Dòng | Không | PostgreSQL (không đổi được) |
+
+## Chọn engine theo bài toán
+
+| Bài toán | Engine |
+|---|---|
+| Ứng dụng web thông thường trên MySQL | **InnoDB** |
+| Ghi cực nhiều, dung lượng đĩa là chi phí lớn | **MyRocks / RocksDB** |
+| Ứng dụng di động, để bàn, nhúng | **SQLite** |
+| Kho khoá-giá trị trong ứng dụng, ghi nặng | **RocksDB** |
+| Kho khoá-giá trị, đọc cực nhiều, ghi ít | **LMDB** |
+| Bảng tra cứu chỉ đọc trên MariaDB | **Aria** |
+| Cần index mở rộng, kiểu dữ liệu phức tạp | **PostgreSQL** |
+| Dữ liệu dạng tài liệu | **WiredTiger** (MongoDB) |
+
+## Bốn câu hỏi để chọn engine
+
+```text
+   1. TỈ LỆ ĐỌC/GHI?
+        Ghi ≫ Đọc  → LSM (RocksDB, MyRocks)
+        Đọc ≫ Ghi  → B+Tree (InnoDB, LMDB)
+
+   2. CÓ CẦN TRANSACTION KHÔNG?
+        Có   → InnoDB, SQLite, RocksDB, BDB
+        Không→ LevelDB, MyISAM (nhưng hãy hỏi lại: THẬT SỰ không cần?)
+
+   3. CÓ TRUY VẤN KHOẢNG KHÔNG?
+        Có   → B+Tree
+        Chỉ tra theo khoá → LSM hoặc Hash
+
+   4. NHÚNG HAY CLIENT-SERVER?
+        Nhúng      → SQLite, RocksDB, LMDB
+        Nhiều máy  → MySQL, PostgreSQL
 ```
 
 ---
 
-## 2. Phân Loại Engines theo Cấu Trúc Dữ Liệu
+# Phần III — Chuyển đổi engine trên MySQL
 
-Khi nhìn toàn bộ landscape, các database engine chia thành 2 trường phái lớn:
-
-### Trường phái B-Tree (đọc nhanh)
-
-```
-┌────────────────────────────────────────────┐
-│              B-Tree / B+Tree               │
-│                                            │
-│  Oracle, SQL Server, IBM DB2               │
-│  PostgreSQL, MySQL/InnoDB                  │
-│  CouchDB, MariaDB                          │
-│                                            │
-│  Đặc điểm:                                 │
-│  ✅ Read performance xuất sắc              │
-│  ✅ Range queries hiệu quả                 │
-│  ✅ Random reads tốt                        │
-│  ❌ Write amplification (rebalancing)      │
-│  ❌ Kém tối ưu hơn trên SSD               │
-└────────────────────────────────────────────┘
-```
-
-### Trường phái LSM-Tree (ghi nhanh)
-
-```
-┌────────────────────────────────────────────┐
-│         LSM (Log-Structured Merge Tree)    │
-│                                            │
-│  Cassandra, HBase                          │
-│  MongoDB (WiredTiger option)               │
-│  InfluxDB, Elasticsearch                  │
-│  Google Cloud Bigtable                     │
-│  RocksDB, LevelDB                          │
-│                                            │
-│  Đặc điểm:                                 │
-│  ✅ Write throughput xuất sắc              │
-│  ✅ SSD-friendly (append-only)             │
-│  ✅ Compression tốt                        │
-│  ❌ Read amplification (nhiều levels)      │
-│  ❌ Compaction overhead                    │
-└────────────────────────────────────────────┘
-```
-
-### Sơ đồ tổng quan
-
-```
-                    DATABASE ENGINES
-                         │
-           ┌─────────────┼─────────────┐
-           │             │             │
-       B-Tree          LSM          Hybrid/Other
-           │             │             │
-    ┌──────┴──┐    ┌─────┴──┐    ┌────┴──────┐
-    │ InnoDB  │    │RocksDB │    │  SQLite   │
-    │ MyISAM  │    │LevelDB │    │  Memory   │
-    │Postgres │    │Cassandra│   │   CSV     │
-    │  Aria   │    │ HBase  │    │  Archive  │
-    └─────────┘    └────────┘    └───────────┘
-```
-
----
-
-## 3. Tổng Quan Databases Nổi Bật
-
-### Nhóm B-Tree (RDBMS truyền thống)
-
-**PostgreSQL**
-```
-Engine: Custom B+Tree
-Transactions: ACID đầy đủ
-Locking: Row-level MVCC
-Điểm mạnh: Compliance, extensions, JSON support
-Dùng khi: Web app, analytics, phức tạp về queries
-```
-
-**MySQL/MariaDB**
-```
-Engine: Pluggable (InnoDB default, MyRocks optional)
-Transactions: ACID (với InnoDB)
-Locking: Row-level
-Điểm mạnh: Phổ biến, ecosystem rộng, có thể đổi engine
-Dùng khi: Web app, LAMP stack
-```
-
-**CouchDB**
-```
-Engine: B-Tree
-Protocol: HTTP (REST API native!)
-Điểm mạnh: HTTP native, offline sync, conflict resolution
-Dùng khi: Mobile apps cần sync, distributed without coordinator
-```
-
-### Nhóm LSM (NoSQL scale-out)
-
-**Cassandra**
-```
-Engine: LSM-tree
-CAP: AP (Availability + Partition tolerance)
-Locking: None (eventual consistency)
-Điểm mạnh: Write throughput, horizontal scale
-Dùng khi: IoT, time-series, write-heavy apps
-```
-
-**HBase**
-```
-Engine: LSM (Apache HBase on HDFS)
-Dựa trên: Google Bigtable paper
-Điểm mạnh: Integrate với Hadoop ecosystem
-Dùng khi: Big data analytics
-```
-
-**InfluxDB**
-```
-Engine: Custom LSM variant
-Chuyên dụng: Time-series data
-Điểm mạnh: Optimized cho time-series queries
-Dùng khi: Metrics, monitoring, IoT sensors
-```
-
-**Elasticsearch**
-```
-Engine: Lucene (inverted index)
-Chuyên dụng: Full-text search
-Điểm mạnh: Search, aggregations, real-time analytics
-Dùng khi: Log analysis, search engines
-```
-
-**CouchBase**
-```
-Engine: B-Tree + caching layer
-Điểm mạnh: Auto-sharding, built-in caching
-Dùng khi: High-concurrency apps cần caching
-```
-
----
-
-## 4. Demo: Chuyển Đổi Engine trong MySQL
-
-MySQL cho phép bạn có nhiều tables với engines khác nhau trong cùng một database - đây là feature rất powerful.
-
-### Setup
-
-```bash
-# Spin up MySQL với Docker
-docker run \
-  --name mysql-demo \
-  -e MYSQL_ROOT_PASSWORD=password \
-  -p 3306:3306 \
-  -d mysql:8
-
-# Vào container
-docker exec -it mysql-demo mysql -uroot -ppassword
-```
-
-### Kiểm tra engines được hỗ trợ
+## Xem engine hiện tại
 
 ```sql
+-- Cac engine may nay ho tro
 SHOW ENGINES;
 ```
 
+```text
++--------------------+---------+------------+--------------+------+
+| Engine             | Support | Transactions | XA         | Savepoints |
++--------------------+---------+------------+--------------+------+
+| InnoDB             | DEFAULT | YES        | YES          | YES  |
+| MyISAM             | YES     | NO         | NO           | NO   |
+| MEMORY             | YES     | NO         | NO           | NO   |
+| CSV                | YES     | NO         | NO           | NO   |
+| ARCHIVE            | YES     | NO         | NO           | NO   |
+| BLACKHOLE          | YES     | NO         | NO           | NO   |
++--------------------+---------+------------+--------------+------+
 ```
-Engine             | Support | Comment
-───────────────────┼─────────┼─────────────────────────────────
-InnoDB             | DEFAULT | Transactions, row-level locking
-MyISAM             | YES     | Fast reads, no transactions
-MEMORY             | YES     | Hash based, stored in memory
-CSV                | YES     | Stores tables as CSV files
-BLACKHOLE          | YES     | /dev/null: accepts writes, returns nothing
-ARCHIVE            | YES     | Compressed, append-only
-PERFORMANCE_SCHEMA | YES     | Performance metrics
-```
-
-### Tạo tables với engines khác nhau
 
 ```sql
-CREATE DATABASE demo;
-USE demo;
-
--- InnoDB: có transactions, row-level locking
-CREATE TABLE employees_innodb (
-    id   INT AUTO_INCREMENT PRIMARY KEY,
-    name TEXT,
-    dept TEXT
-) ENGINE = InnoDB;
-
--- MyISAM: không có transactions, chỉ table-level locking
-CREATE TABLE employees_myisam (
-    id   INT AUTO_INCREMENT PRIMARY KEY,
-    name TEXT,
-    dept TEXT
-) ENGINE = MyISAM;
+-- Engine cua tung bang, kem kich thuoc
+SELECT table_name, engine,
+       ROUND(data_length/1024/1024)  AS data_mb,
+       ROUND(index_length/1024/1024) AS index_mb,
+       table_rows
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+ORDER BY data_length DESC;
 ```
 
-### Demo: Transaction behavior
+## Ba engine đặc biệt đáng biết
 
 ```sql
--- === Terminal 1: Test MyISAM ===
-BEGIN;
-INSERT INTO employees_myisam (name, dept) VALUES ('Alice', 'Engineering');
--- CHƯA COMMIT!
+-- MEMORY: toan bo trong RAM, MAT KHI KHOI DONG LAI
+CREATE TABLE session_tmp (...) ENGINE = MEMORY;
 
--- === Terminal 2 (cùng lúc): ===
-SELECT * FROM employees_myisam;
--- Kết quả: 1 row! (Alice đã visible!)
--- → MyISAM không có transaction isolation!
+-- ARCHIVE: nen manh, CHI cho INSERT va SELECT (khong UPDATE/DELETE)
+CREATE TABLE audit_2025 (...) ENGINE = ARCHIVE;
 
--- Terminal 1:
+-- BLACKHOLE: nhan moi thu roi VUT DI, nhung VAN ghi binlog
+CREATE TABLE relay (...) ENGINE = BLACKHOLE;
+```
+
+`BLACKHOLE` nghe vô nghĩa nhưng có công dụng thật: làm **máy chuyển tiếp nhân bản**. Nó nhận binlog từ primary rồi chuyển tiếp cho hàng chục replica mà **không tốn một byte đĩa nào** cho dữ liệu.
+
+`ARCHIVE` nén tới **~10 lần** so với InnoDB — rất hợp cho nhật ký kiểm toán phải giữ nhiều năm nhưng gần như không bao giờ đọc.
+
+## Quy trình chuyển đổi an toàn
+
+### Bước 1 — Kiểm tra điều kiện
+
+```sql
+-- Bang nao KHONG co khoa chinh?  (bat buoc phai co truoc khi sang InnoDB)
+SELECT t.table_name
+FROM information_schema.tables t
+LEFT JOIN information_schema.table_constraints c
+       ON t.table_schema = c.table_schema
+      AND t.table_name = c.table_name
+      AND c.constraint_type = 'PRIMARY KEY'
+WHERE t.table_schema = DATABASE()
+  AND t.engine = 'MyISAM'
+  AND c.constraint_name IS NULL;
+```
+
+Bảng nào lọt vào danh sách này phải **thêm khoá chính trước**:
+
+```sql
+ALTER TABLE bang_thieu_khoa ADD COLUMN id BIGINT AUTO_INCREMENT PRIMARY KEY FIRST;
+```
+
+### Bước 2 — Ước lượng dung lượng
+
+```text
+   InnoDB ton them 20-40% so voi MyISAM cho CUNG du lieu
+   (vi co thong tin MVCC, undo log, va page day khoang 90%)
+
+   VA: ALTER TABLE tao BAN SAO TAM
+   → can du chỗ cho CA BANG CU LAN BANG MOI cung luc
+
+   Vi du: bang MyISAM 100 GB
+     → InnoDB ~130 GB
+     → trong luc ALTER can 100 + 130 = 230 GB trong
+```
+
+Đây là nguyên nhân thất bại phổ biến nhất khi chuyển đổi.
+
+### Bước 3 — Chuyển, có phanh
+
+```sql
+-- Bang nho (< 1 GB): lam truc tiep
+ALTER TABLE users ENGINE = InnoDB;
+```
+
+```bash
+# Bang lon: dung cong cu, KHONG khoa bang
+pt-online-schema-change \
+  --alter "ENGINE=InnoDB" \
+  D=mydb,t=big_table \
+  --execute
+
+# Hoac
+gh-ost --database=mydb --table=big_table \
+       --alter="ENGINE=InnoDB" --execute
+```
+
+Cách hai công cụ này hoạt động (cùng nguyên lý với chiến lược 3 ở [phase-6 bài 2](../phase-6/02-partitioning-thuc-hanh-postgres.md)):
+
+```text
+   1. Tao bang moi voi cau truc dich
+   2. Chep du lieu theo LO, chay nen
+   3. Bat moi thay doi moi (pt dung TRIGGER, gh-ost doc BINLOG)
+   4. Khi bat kip: doi ten hai bang trong mot giao dich NGAN
+   → Thoi gian dung dich vu: vai GIAY
+```
+
+Khác biệt giữa hai công cụ: `pt-online-schema-change` dùng trigger (đơn giản hơn nhưng thêm tải lên bảng gốc); `gh-ost` đọc binlog (không đụng gì vào bảng gốc, an toàn hơn với bảng rất nóng).
+
+### Bước 4 — Kiểm tra sau khi chuyển
+
+```sql
+-- Xac nhan da doi
+SELECT table_name, engine FROM information_schema.tables
+WHERE table_schema = DATABASE();
+
+-- Xac nhan so dong khong doi
+SELECT COUNT(*) FROM users;
+
+-- Xac nhan transaction hoat dong
+START TRANSACTION;
+UPDATE users SET name = 'test' WHERE id = 1;
 ROLLBACK;
--- Kết quả: Alice VẪN CÒN! Rollback không hoạt động!
-
--- === Test InnoDB ===
--- Terminal 1:
-BEGIN;
-INSERT INTO employees_innodb (name, dept) VALUES ('Bob', 'Sales');
--- CHƯA COMMIT!
-
--- Terminal 2:
-SELECT * FROM employees_innodb;
--- Kết quả: 0 rows (Bob chưa visible - đúng behavior!)
-
--- Terminal 1:
-COMMIT;
-
--- Terminal 2:
-SELECT * FROM employees_innodb;
--- Kết quả: 1 row (Bob visible sau commit)
+SELECT name FROM users WHERE id = 1;   -- PHAI la gia tri cu
 ```
 
-### Thay đổi engine của table đang tồn tại
+### Bước 5 — Chỉnh cấu hình sau khi chuyển
 
-```sql
--- Xem engine hiện tại
-SELECT table_name, engine
-FROM information_schema.tables
-WHERE table_schema = 'demo';
+```ini
+# MyISAM dung key_buffer_size; InnoDB thi KHONG DUNG NO
+key_buffer_size = 64M                 # giam xuong, khong con can nhieu
 
--- Chuyển MyISAM → InnoDB
-ALTER TABLE employees_myisam ENGINE = InnoDB;
--- ⚠️ Lệnh này lock table trong quá trình chuyển đổi
--- ⚠️ Trên bảng lớn (hàng triệu rows) có thể mất vài phút!
-
--- Kiểm tra lại
-SELECT table_name, engine
-FROM information_schema.tables
-WHERE table_schema = 'demo';
--- employees_myisam: InnoDB (đã đổi thành công!)
+# InnoDB can buffer pool lon
+innodb_buffer_pool_size = 12G         # 50-75% RAM
+innodb_flush_log_at_trx_commit = 1
+innodb_flush_method = O_DIRECT
+innodb_file_per_table = ON            # moi bang mot file .ibd
 ```
 
-### Thiết lập default engine
+Bước này rất hay bị quên: sau khi chuyển sang InnoDB mà vẫn để `key_buffer_size` chiếm phần lớn RAM thì InnoDB không còn chỗ cho buffer pool, và hệ thống **chậm hơn cả trước khi chuyển**.
 
-```sql
--- Xem default engine hiện tại
-SHOW VARIABLES LIKE 'default_storage_engine';
+`innodb_file_per_table = ON` cũng quan trọng: không có nó, mọi bảng dồn vào một file `ibdata1` khổng lồ **không bao giờ nhỏ lại** kể cả khi bạn xoá bảng.
 
--- Đổi default engine cho session hiện tại
-SET default_storage_engine = MyISAM;
+## Bẫy thường gặp
 
--- Đổi permanent (cần edit my.cnf)
--- [mysqld]
--- default-storage-engine = InnoDB
-```
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Chuyển sang InnoDB mà bảng không có khoá chính | InnoDB tạo khoá ẩn 6 byte không kiểm soát được | Thêm khoá chính **trước** |
+| Không dự trù đủ đĩa | `ALTER` thất bại giữa chừng | Cần chỗ cho **cả bảng cũ lẫn bảng mới** |
+| `ALTER TABLE` trực tiếp trên bảng lớn | Khoá bảng rất lâu | `pt-online-schema-change` hoặc `gh-ost` |
+| Quên chỉnh `key_buffer_size` và `innodb_buffer_pool_size` | InnoDB không có RAM → **chậm hơn cả trước** | Chỉnh cấu hình ngay sau khi chuyển |
+| Không bật `innodb_file_per_table` | `ibdata1` phình vô hạn, không bao giờ nhỏ lại | Bật trước khi tạo bảng InnoDB |
+| Bỏ qua giấy phép khi chọn công nghệ nền tảng | BDB, MongoDB, Elasticsearch, Redis đều đã đổi giấy phép | Hỏi "giấy phép gì, ai kiểm soát?" khi chọn |
+| Dùng `MEMORY` cho dữ liệu quan trọng | Mất sạch khi khởi động lại | Chỉ dùng cho dữ liệu tạm |
+| Dùng `ARCHIVE` rồi cần `UPDATE` | `ARCHIVE` chỉ cho `INSERT` và `SELECT` | Kiểm tra mẫu truy cập trước |
 
----
+## Tóm tắt bài 5
 
-## 5. Use Case Scenarios - Chọn Engine Nào?
+- **BerkeleyDB** (1991) là kho khoá-giá trị nhúng có **ACID đầy đủ** và cho **chọn cấu trúc lưu trữ** (B-Tree / Hash / Queue) — rất nhiều ý tưởng hiện đại đã có ở đây từ ba mươi năm trước.
+- Nó biến mất **không vì lý do kỹ thuật** mà vì **đổi giấy phép sang AGPLv3 năm 2013**. Bài học: **giấy phép là một rủi ro kỹ thuật**, và câu chuyện này đã lặp lại với MongoDB, Elasticsearch, Redis.
+- **LMDB** là người kế thừa: dùng **ánh xạ bộ nhớ** và **copy-on-write B+Tree**, cho đọc cực nhanh không cần khoá — đổi lại chỉ một người ghi tại một thời điểm.
+- Bốn câu hỏi để chọn engine: **tỉ lệ đọc/ghi** · **có cần transaction không** · **có truy vấn khoảng không** · **nhúng hay client-server**.
+- Ba engine MySQL ít biết nhưng hữu dụng: **`MEMORY`** (mất khi khởi động lại), **`ARCHIVE`** (nén ~10 lần, chỉ chèn và đọc), **`BLACKHOLE`** (máy chuyển tiếp nhân bản, không tốn đĩa).
+- Chuyển đổi engine cần **năm bước**: kiểm tra khoá chính → ước lượng đĩa (cần chỗ cho **cả hai** bảng) → chuyển bằng `gh-ost`/`pt-osc` → kiểm tra → **chỉnh lại cấu hình bộ nhớ**.
+- Bước bị quên nhiều nhất là bước cuối: không chuyển RAM từ `key_buffer_size` sang `innodb_buffer_pool_size` sẽ khiến hệ thống **chậm hơn cả trước khi chuyển**.
 
-```
-Câu hỏi để chọn engine phù hợp:
-
-1. Cần transactions không?
-   Có → InnoDB, PostgreSQL, RocksDB
-   Không → MyISAM (nhưng hãy dùng InnoDB, transactions gratis)
-
-2. Write-heavy hay Read-heavy?
-   Write-heavy → RocksDB/MyRocks, Cassandra, LSM engines
-   Read-heavy → B-Tree engines (InnoDB, PostgreSQL)
-
-3. Kiến trúc ứng dụng?
-   Web app (multi-user) → InnoDB, PostgreSQL
-   Mobile/Desktop (single user) → SQLite
-   Cache layer → Redis, Memcached
-   Analytics → Columnar stores (BigQuery, ClickHouse)
-
-4. Có cần full-text search không?
-   Có → Elasticsearch, PostgreSQL (ts_vector), MySQL FTS
-   Không cần → Standard B-Tree engine đủ rồi
-
-5. Scale như thế nào?
-   Vertical scale (1 máy mạnh) → InnoDB, PostgreSQL
-   Horizontal scale (nhiều máy) → Cassandra, MongoDB, HBase
-```
-
----
-
-## 6. Bài Học Kiến Trúc từ MySQL Pluggable Engine
-
-Thiết kế pluggable engine của MySQL là một trong những quyết định kiến trúc tốt nhất:
-
-```
-Abstraction Layer Architecture:
-┌─────────────────────────────────────────┐
-│           Application / ORM             │
-├─────────────────────────────────────────┤
-│         MySQL Query Parser/Optimizer    │
-├─────────────────────────────────────────┤
-│          Storage Engine Interface       │ ← Abstract layer
-├───────────┬────────────┬────────────────┤
-│  InnoDB   │   MyISAM  │   MyRocks      │ ← Pluggable engines
-│ (default) │ (legacy)  │  (RocksDB)     │
-└───────────┴────────────┴────────────────┘
-
-Ưu điểm:
-  - Swap engine mà không thay đổi code ứng dụng
-  - Thử nghiệm engine mới với production schema
-  - Different tables → different engines (nếu cần)
-  - Community có thể build engine mới (CSV, Blackhole, MyRocks)
-```
-
-**Blackhole Engine** - use case thú vị:
-```sql
-CREATE TABLE events_blackhole (
-    id   INT,
-    data TEXT
-) ENGINE = BLACKHOLE;
-
--- Blackhole nhận data nhưng không lưu gì cả
--- Dùng để: Testing, benchmarking write path
---           Relay server trong MySQL Replication
--- INSERT vào Blackhole → trigger binlog → slave nhận → slave lưu
--- Master không lưu gì, chỉ forward binlog!
-```
-
-**Memory Engine** - useful cho temporary data:
-```sql
-CREATE TABLE session_cache (
-    session_id  VARCHAR(64) PRIMARY KEY,
-    user_id     INT,
-    data        TEXT,
-    expires_at  TIMESTAMP
-) ENGINE = MEMORY;
-
--- Lưu trong RAM: read/write cực nhanh
--- Mất tất cả khi MySQL restart
--- Không bao giờ dùng cho persistent data!
--- Phù hợp: session cache, temp calculations
-```
-
----
-
-## Tổng Kết Section 11 - Database Engines
-
-```
-┌─────────────┬────────────┬─────────────┬────────────────────────┐
-│ Engine      │ Cấu trúc   │ Transactions│ Best Use Case          │
-├─────────────┼────────────┼─────────────┼────────────────────────┤
-│ InnoDB      │ B+Tree     │ Có (ACID)   │ MySQL default, OLTP    │
-│ MyISAM      │ B+Tree     │ Không       │ Legacy, read-only      │
-│ XtraDB      │ B+Tree     │ Có (ACID)   │ InnoDB fork (deprecated)│
-│ Aria        │ B+Tree     │ Không       │ MariaDB system tables  │
-│ SQLite      │ B+Tree     │ Có (ACID)   │ Embedded, mobile       │
-│ BerkeleyDB  │ B+Tree     │ Có          │ Legacy, Bitcoin (cũ)   │
-│ LevelDB     │ LSM        │ Không       │ Embedded, write-heavy  │
-│ RocksDB     │ LSM        │ Có (ACID)   │ Facebook-scale writes  │
-│ MyRocks     │ LSM        │ Có (ACID)   │ MySQL + RocksDB        │
-│ Memory      │ Hash       │ Không       │ Cache, temp data       │
-│ Blackhole   │ N/A        │ Không       │ Testing, replication   │
-│ CSV         │ File       │ Không       │ Export/import          │
-└─────────────┴────────────┴─────────────┴────────────────────────┘
-```
-
----
-
-**Tiếp theo:** Phase 12 - Database Cursors →
+**Bài kế tiếp** → [Phase 12 — Bài 1: Database Cursors](../phase-12/01-database-cursors.md)
