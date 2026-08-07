@@ -1,386 +1,387 @@
-# Bài 3: Ưu Nhược Điểm và Khi Nào Dùng Sharding
+# Bài 3: Khi nào thật sự nên shard — và chín việc nên làm trước
 
-## Ưu điểm của Sharding
+Câu trả lời trung thực cho câu hỏi *"khi nào nên shard database?"* là:
 
-### 1. Horizontal Scalability - Scale tuyến tính
+> **Muộn hơn nhiều so với bạn nghĩ.**
 
-```
-Không Sharding (Vertical Scaling):
-  Server 16 cores, 128GB RAM → Giới hạn vật lý
-  
-  Upgrade: 32 cores, 256GB RAM → Giới hạn cao hơn
-  Upgrade: 64 cores, 512GB RAM → Đắt gấp đôi!
-  
-  → Chi phí tăng phi tuyến tính
-  → Có giới hạn cứng về phần cứng
+Sau khi đọc [bài 1](01-database-sharding-la-gi.md) và tự tay dựng ba shard ở [bài 2](02-sharding-thuc-hanh-nodejs-postgres.md), bạn đã thấy cái giá. Bài này cho bạn **quy trình quyết định**: chính xác cần đo gì, thử gì trước, và tín hiệu nào cho biết đã thật sự đến lúc.
 
-Sharding (Horizontal Scaling):
-  3 servers → 6 servers → 12 servers
-  
-  → Chi phí tăng tuyến tính (mỗi server thêm = 33% thêm capacity)
-  → Không có giới hạn lý thuyết
-  → Có thể dùng commodity hardware (rẻ hơn nhiều)
-```
+## Bước đầu tiên: xác định nút cổ chai thật
 
-### 2. Smaller Index Size - Fit Memory Tốt Hơn
+Đây là bước bị bỏ qua nhiều nhất. Người ta thấy hệ thống chậm và nhảy ngay tới kết luận "cần scale ra nhiều máy" — mà không biết **cái gì** đang là giới hạn.
 
-```
-Bảng 300 triệu rows, B+Tree index trên user_id:
-  1 server:    Index size = 30GB
-  → Không fit memory (server có 16GB RAM)
-  → Mỗi query phải đọc từ disk
-  → Latency cao
+```text
+   BỐN NÚT CỔ CHAI, BỐN CÁCH CHỮA HOÀN TOÀN KHÁC NHAU
 
-3 shards (100M rows mỗi shard):
-  Mỗi shard: Index size = 10GB
-  → Fit trong memory!
-  → Queries đọc từ RAM
-  → Latency thấp hơn 10-100x
+   ┌──────────────────┬─────────────────────┬────────────────────────────┐
+   │ Nút cổ chai      │ Đo bằng             │ Sharding có giúp không?    │
+   ├──────────────────┼─────────────────────┼────────────────────────────┤
+   │ CPU của database │ %CPU, load average  │ CÓ — chia tải ra nhiều máy │
+   │ RAM (cache miss) │ cache hit ratio     │ CÓ — mỗi máy cache phần nhỏ│
+   │ Dung lượng đĩa   │ df, pg_database_size│ CÓ — chia dữ liệu ra       │
+   │ QUERY VIẾT TỆ    │ pg_stat_statements  │ KHÔNG — vẫn tệ trên N máy  │
+   │ THIẾU INDEX      │ EXPLAIN             │ KHÔNG — vẫn thiếu trên N   │
+   │ TRANH CHẤP KHOÁ  │ pg_locks            │ KHÔNG — thường TỆ HƠN      │
+   │ CẠN CONNECTION   │ pg_stat_activity    │ KHÔNG — pool sai vẫn sai   │
+   └──────────────────┴─────────────────────┴────────────────────────────┘
 ```
 
-### 3. Performance - Parallel Processing
+Bốn dòng cuối là điểm mấu chốt: **sharding không sửa được query tệ, index thiếu, hay pool sai cấu hình.** Nó chỉ nhân chúng lên N lần và thêm độ phức tạp.
 
-```
-Query trên 300 triệu rows (không sharding):
-  → 1 server xử lý toàn bộ
-  → Sequential I/O trên 1 disk
-  
-Query trên 3 shards (có sharding):
-  → 3 servers xử lý song song
-  → 3 disks I/O đồng thời
-  → Throughput tối đa gấp 3 lần
-```
-
-### 4. Geographic Distribution
-
-```
-Ví dụ: Ứng dụng toàn cầu
-  Shard US:  Data center Virginia
-  Shard EU:  Data center Frankfurt
-  Shard APAC: Data center Singapore
-  
-User ở EU:
-  → Query Shard EU: ~5ms (same region)
-  → Query Shard US: ~100ms (cross-Atlantic)
-  
-→ Latency giảm đáng kể nhờ data locality!
-→ GDPR compliance: EU data ở EU servers
-```
-
-### 5. Fault Isolation
-
-```
-Không Sharding:
-  Server down → 100% users bị ảnh hưởng
-  MTTR = 2 giờ → 2 giờ downtime toàn bộ
-
-3 Shards:
-  Shard 1 down → 33% users bị ảnh hưởng
-  Shard 2 và 3 vẫn hoạt động bình thường
-  
-→ Blast radius nhỏ hơn nhiều
-```
-
----
-
-## Nhược điểm của Sharding
-
-### 1. Complexity (Lớn Nhất)
-
-```
-Không Sharding:
-  SELECT * FROM users WHERE id = 1234;
-  → Đơn giản, 1 database
-
-Có Sharding:
-  1. Tính hash(1234) → shard key
-  2. hashRing.get(shard_key) → shard ID
-  3. clients[shard_id].query(...)
-  4. Handle connection errors cho từng shard
-  5. Retry logic nếu shard down
-  6. Timeout handling
-  
-→ Application phức tạp hơn đáng kể
-→ Nhiều bug surface hơn
-→ Khó debug khi có vấn đề
-```
-
-### 2. Cross-Shard Transactions: Không Có ACID
-
-```
-Vấn đề: Transfer tiền giữa 2 users trên 2 shards khác nhau
-
--- User 1001 ở Shard A
--- User 2537 ở Shard B
-
--- Muốn: Atomic transfer $100
-
-BEGIN;  -- Trên shard nào?
-
--- Debit Shard A
-UPDATE accounts SET balance = balance - 100 WHERE user_id = 1001;
-
--- Credit Shard B
-UPDATE accounts SET balance = balance + 100 WHERE user_id = 2537;
-
-COMMIT;  -- Nếu Shard B down sau khi Shard A committed?
-
-→ Shard A: -$100 ✓
-→ Shard B: Chưa +$100 ✗
-→ $100 biến mất!
-```
-
-**Giải pháp phức tạp:**
-```
-Distributed Transactions:
-  - 2-Phase Commit (2PC): Đảm bảo atomic nhưng rất chậm
-  - Saga Pattern: Eventual consistency, rollback logic
-  - Compensating transactions: "Undo" nếu step nào đó fail
-  
-→ Tất cả đều phức tạp hơn nhiều so với single-DB transactions
-```
-
-### 3. Cross-Shard Joins: Gần Như Impossible
+Câu lệnh chẩn đoán tối thiểu, chạy trước khi ra bất kỳ quyết định nào:
 
 ```sql
--- Query đơn giản không sharding:
-SELECT u.name, COUNT(o.id) as order_count
-FROM users u
-JOIN orders o ON u.id = o.user_id
-WHERE u.country = 'VN'
-GROUP BY u.name;
-```
+-- 1. Cache hit ratio (khoẻ mạnh: > 99%)
+SELECT round(100.0 * sum(blks_hit) / NULLIF(sum(blks_hit + blks_read), 0), 2) AS pct_cache_hit
+FROM pg_stat_database;
 
-```
-Với Sharding (users và orders trên cùng shard key = user_id):
-  → Có thể được nếu join key = shard key!
-  → Nhưng nếu users ở Shard A và orders ở Shard B?
+-- 2. Query tốn tổng thời gian nhiều nhất
+SELECT left(query, 70), calls, round(total_exec_time::numeric) AS tong_ms
+FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 10;
 
-Phải làm:
-  1. Query tất cả shards cho users WHERE country='VN'
-  2. Collect tất cả user_ids
-  3. Query tất cả shards cho orders WHERE user_id IN (...)
-  4. Join trong application code
-  
-→ Chậm, tốn memory, phức tạp
-→ Đây là "scatter-gather" pattern - antipattern cần tránh
-```
+-- 3. Đang chờ khoá?
+SELECT count(*) FILTER (WHERE wait_event_type = 'Lock') AS dang_cho_khoa,
+       count(*) FILTER (WHERE state = 'active')         AS dang_chay,
+       count(*)                                          AS tong_ket_noi
+FROM pg_stat_activity;
 
-### 4. Schema Changes Phức tạp
-
-```bash
-# Không sharding: 1 migration script
-psql -d mydb -f migration_add_column.sql
-
-# Có sharding: Phải apply cho TẤT CẢ shards
-for shard in shard1 shard2 shard3; do
-    psql -h $shard -d mydb -f migration_add_column.sql
-done
-
-# Nếu 1 shard fail:
-  → Shard 1: ALTER TABLE ✓
-  → Shard 2: ALTER TABLE ✓
-  → Shard 3: ALTER TABLE ✗ (connection timeout)
-  
-  → Shards có schema khác nhau!
-  → Queries có thể fail trên Shard 3
-  → Phải xử lý compatibility giữa old/new schema
-```
-
-### 5. Resharding - Cơn Ác Mộng
-
-```
-Khi cần thêm shard:
-  
-  Ban đầu: 3 shards
-  hashRing.get('abc12') → Shard 2
-  
-  Thêm Shard 4:
-  hashRing.get('abc12') → Shard 1 (có thể thay đổi!)
-  
-  Phải migrate:
-  1. Xác định data nào cần move (scan toàn bộ)
-  2. Copy data từ old shard sang new shard
-  3. Verify consistency
-  4. Update routing (zero-downtime cần careful planning)
-  5. Cleanup old data
-  
-  → Với hàng tỷ rows: Migration có thể mất nhiều ngày!
-  → Zero-downtime resharding là engineering challenge cực kỳ khó
+-- 4. Bảng nào to nhất
+SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) AS kich_thuoc
+FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 10;
 ```
 
 ---
 
-## Khi Nào Nên Dùng Sharding?
+## Chín nấc thang trước sharding
 
-### Checklist trước khi Shard
+Mỗi nấc kèm mức cải thiện **điển hình** và chi phí. Đọc theo thứ tự, và **đừng bỏ qua nấc nào**.
 
-```
-Câu hỏi bắt buộc phải trả lời YES:
+### Nấc 1 — Sửa query và thêm index
 
-□ Đã thực sự cần chưa?
-  → Bảng > 500M rows? CPU/RAM/Disk consistently > 80%?
-  → Không thể upgrade hardware thêm?
-
-□ Đã thử tất cả alternatives chưa?
-  → Index optimization: DONE
-  → Query optimization: DONE
-  → Partitioning: DONE
-  → Read replicas: DONE
-  → Caching layer (Redis): DONE
-  
-□ Có shard key rõ ràng không?
-  → Data có natural partition key (user_id, tenant_id)?
-  → Shard key đủ high cardinality?
-  → Queries thường filter theo shard key?
-
-□ Cross-shard operations có chấp nhận được không?
-  → Không có cross-shard transactions critical?
-  → Cross-shard joins có thể avoid?
-
-□ Team có expertise không?
-  → Senior DBA / Backend engineer với distributed systems?
-  → Không phải lúc "học trên production"?
+```text
+   Chi phí   : vài giờ
+   Cải thiện : 10× tới 1000× cho các query cụ thể
+   Rủi ro    : rất thấp
 ```
 
-### Khi Sharding Phù hợp
+Đây là nấc cho lợi ích lớn nhất trên mỗi giờ bỏ ra, và cũng là nấc bị bỏ qua nhiều nhất vì nó "không sang". Xem [phase-4](../phase-4/01-co-ban-ve-indexing.md).
 
-```
-✅ Use cases tốt cho Sharding:
+Kiểm tra nhanh xem còn dư địa không:
 
-1. Multi-tenant SaaS (tenant_id là shard key):
-   → Mỗi tenant isolate trên 1-2 shards
-   → Tenant lớn → Dedicated shard
-   → Cross-tenant queries hiếm
-
-2. Social Media (user_id là shard key):
-   → Queries thường là "data của user X"
-   → user_id consistent trong WHERE clause
-   → Posts, likes, follows đều liên kết với user_id
-
-3. IoT / Time-series (device_id hoặc time là shard key):
-   → Massive write throughput
-   → Queries thường filter theo device và time range
-   → Archive old shards dễ dàng
-
-4. E-commerce (customer_id là shard key):
-   → Queries: "orders của customer X"
-   → Cart, wishlist, reviews đều theo customer
-   → Cross-customer operations hiếm
+```sql
+SELECT schemaname, relname, seq_scan, seq_tup_read,
+       seq_tup_read / NULLIF(seq_scan, 0) AS dong_moi_lan_quet
+FROM pg_stat_user_tables
+WHERE seq_scan > 1000
+ORDER BY seq_tup_read DESC LIMIT 10;
 ```
 
-### Khi Sharding Không Phù Hợp
+Bảng nào có `seq_scan` cao **và** `dong_moi_lan_quet` lớn là ứng viên rõ ràng cho một index còn thiếu.
 
-```
-❌ Tránh Sharding khi:
+### Nấc 2 — Loại bỏ N+1 và query thừa
 
-1. Data quan hệ chặt chẽ (nhiều JOINs):
-   → Reporting queries span toàn bộ data
-   → ERP / CRM với nhiều relational queries
-   
-2. Transactions cross-entity nhiều:
-   → Ngân hàng: Transfer giữa accounts random
-   → Inventory: Update stock affects nhiều products
-   
-3. Team nhỏ không có distributed systems expertise:
-   → Sharding có thể tạo ra nhiều vấn đề hơn giải quyết
-   
-4. Bảng chưa đủ lớn:
-   → < 100M rows → Partitioning đủ rồi
-   → Index optimization có thể giải quyết vấn đề
+```text
+   Chi phí   : vài ngày
+   Cải thiện : 5× tới 100× cho các trang cụ thể
 ```
+
+Một trang gọi 300 truy vấn thay vì 3 thì không có phần cứng nào cứu được. Xem [orm-n-plus-1](../../orm-n-plus-1/README.md).
+
+### Nấc 3 — Chỉnh connection pool
+
+```text
+   Chi phí   : vài giờ
+   Cải thiện : thường bất ngờ lớn khi pool đang sai
+```
+
+Pool quá lớn làm database **chậm đi** vì chuyển ngữ cảnh và tranh chấp khoá. Xem [phase-8 bài 3](../phase-8/03-connection-pooling.md).
+
+### Nấc 4 — Chỉnh tham số database
+
+```text
+   Chi phí   : vài giờ
+   Cải thiện : 20% tới 300%
+```
+
+Bốn tham số cho lợi ích lớn nhất:
+
+| Tham số | Mặc định | Nên đặt |
+|---|---|---|
+| `shared_buffers` | 128 MB | **25% RAM** |
+| `effective_cache_size` | 4 GB | **50-75% RAM** |
+| `random_page_cost` | 4 | **1,1** trên SSD |
+| `work_mem` | 4 MB | Tuỳ tải, thường 16-64 MB |
+
+Riêng `random_page_cost` trên SSD có thể thay đổi hoàn toàn quyết định của optimizer — xem [phase-4 bài 3](../phase-4/03-composite-index-va-optimizer.md).
+
+### Nấc 5 — Nâng cấp phần cứng theo chiều dọc
+
+```text
+   Chi phí   : tiền, và một lần khởi động lại
+   Cải thiện : tuyến tính theo tài nguyên thêm vào
+```
+
+Nấc này bị chê là "không đúng cách" nhưng thường là lựa chọn **kinh tế nhất**:
+
+```text
+   Máy 8 vCPU / 32 GB   →   Máy 64 vCPU / 512 GB
+
+   Chi phí thêm : vài nghìn đô mỗi tháng
+   Công sức     : một lần khởi động lại
+   So với       : sharding = nhiều tháng công sức của cả đội
+                             + độ phức tạp vĩnh viễn
+```
+
+Máy chủ đám mây hiện nay lên tới **hàng trăm vCPU và hàng TB RAM**. Rất nhiều hệ thống tưởng cần sharding thực ra chỉ cần một máy lớn hơn.
+
+### Nấc 6 — Cache tầng ứng dụng
+
+```text
+   Chi phí   : vài ngày tới vài tuần
+   Cải thiện : 10× tới 100× cho dữ liệu đọc nhiều
+   Rủi ro    : bài toán vô hiệu hoá cache
+```
+
+Xem [redis](../../redis/README.md) và bài về vô hiệu hoá cache trong [database-su-co-va-phong-van](../../database-su-co-va-phong-van/README.md).
+
+### Nấc 7 — Replica đọc
+
+```text
+   Chi phí   : vài ngày
+   Cải thiện : nhân khả năng ĐỌC lên N lần
+   Rủi ro    : độ trễ nhân bản, bài toán read-your-own-writes
+```
+
+Đây là nấc quan trọng nhất nếu tải của bạn nghiêng về đọc — mà phần lớn hệ thống thì đúng như vậy (tỉ lệ đọc/ghi thường 10:1 tới 100:1). Xem [phase-9](../phase-9/01-database-replication-la-gi.md).
+
+```text
+   1 primary + 3 replica đọc  →  khả năng đọc GẤP 4 LẦN
+                                 khả năng ghi KHÔNG ĐỔI
+```
+
+### Nấc 8 — Partitioning
+
+```text
+   Chi phí   : vài tuần
+   Cải thiện : bảo trì gọn lại, cắt tỉa mảnh, xoá dữ liệu cũ tức thì
+   Rủi ro    : vừa, và quay đầu được
+```
+
+Xem [phase-6](../phase-6/01-database-partitioning-la-gi.md). Nếu vấn đề của bạn là "một bảng quá to" thì đây là nấc đúng, không phải sharding.
+
+### Nấc 9 — Tách theo chức năng
+
+```text
+   Chi phí   : vài tuần tới vài tháng
+   Cải thiện : chia tải ghi theo miền nghiệp vụ
+```
+
+Trước khi chia **một bảng** ra nhiều máy, hãy thử chia **các bảng khác nhau** ra các database khác nhau:
+
+```text
+   MỘT DATABASE                    BA DATABASE THEO CHỨC NĂNG
+   ═════════════                    ═══════════════════════════
+   users                            DB-1: users, sessions, auth
+   orders                           DB-2: orders, order_items, payments
+   products                         DB-3: products, categories, inventory
+   sessions                              analytics_events → kho riêng
+   analytics_events
+```
+
+Ưu điểm lớn: **mỗi database vẫn giữ nguyên `JOIN` và transaction bên trong miền của nó**. Bạn chỉ mất `JOIN` xuyên miền — mà xuyên miền thì thường vốn đã ít.
+
+Đây gần như luôn là bước nên thử **ngay trước** sharding, và rất nhiều hệ thống dừng lại được ở đây.
 
 ---
 
-## Alternatives Trước Khi Shard
+## Bảng thang đầy đủ
 
-### Read Replicas (Thường Đủ Hiệu Quả)
+| Nấc | Việc | Chi phí | Cải thiện điển hình | Quay đầu được? |
+|---|---|---|---|---|
+| 0 | **Đo đạc** | Vài giờ | — (nhưng quyết định mọi thứ) | — |
+| 1 | Sửa query + index | Vài giờ | 10-1000× | ✔ |
+| 2 | Bỏ N+1 | Vài ngày | 5-100× | ✔ |
+| 3 | Chỉnh pool | Vài giờ | Thường lớn | ✔ |
+| 4 | Chỉnh tham số DB | Vài giờ | 1,2-3× | ✔ |
+| 5 | Máy lớn hơn | Tiền | Tuyến tính | ✔ |
+| 6 | Cache | Vài tuần | 10-100× đọc | ✔ |
+| 7 | Replica đọc | Vài ngày | N× đọc | ✔ |
+| 8 | Partitioning | Vài tuần | Bảo trì + cắt tỉa | ✔ |
+| 9 | Tách theo chức năng | Vài tháng | Chia tải ghi | Khó |
+| **10** | **Sharding** | **Nhiều tháng** | **N× mọi thứ** | **✘** |
 
-```
-Master-Replica Setup:
-  ┌──────────────┐
-  │    Master    │  ← Nhận toàn bộ Writes
-  └──────┬───────┘
-         │ Replication
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌──────────┐ ┌──────────┐
-│ Replica 1│ │ Replica 2│  ← Phục vụ Reads
-└──────────┘ └──────────┘
-
-80% workload là reads → Replicas giảm tải đáng kể!
-→ Không cần shard, không mất ACID transactions
-```
-
-### Caching Layer
-
-```
-Application → Redis Cache → Database
-
-Cache hit rate 90%:
-  → Chỉ 10% queries đến database
-  → Database load giảm 10x!
-  → Không cần shard
-
-Use cases tốt cho caching:
-  - Session data
-  - User profile (ít thay đổi)
-  - Product catalog
-  - Aggregated counts/statistics
-```
+Đọc bảng này thành lời: *"Chín nấc đầu đều quay đầu được. Nấc thứ mười thì không."*
 
 ---
 
-## Tóm tắt: Decision Framework
+## Bốn tín hiệu cho biết đã đến lúc
 
-```
-Start Here:
-          │
-          ▼
-  Performance issue?
-          │ YES
-          ▼
-  Optimize queries & indexes
-          │ Still slow?
-          ▼
-  Add Partitioning
-          │ Still slow?
-          ▼
-  Add Read Replicas + Caching
-          │ Still slow?
-          ▼
-  Vertical Scale (better hardware)
-          │ At hardware limit?
-          ▼
-  Consider Sharding
-  (with expert review)
+Sharding trở nên hợp lý khi **cả bốn** điều sau cùng đúng:
 
-Ở mỗi bước: Measure → Optimize → Measure lại
-Đừng sharding premature!
+### 1. Đã leo hết chín nấc
+
+Không phải "đã nghĩ tới" — mà đã **làm và đo**.
+
+### 2. Nút cổ chai là GHI, không phải đọc
+
+```text
+   Replica đọc giải quyết được tải ĐỌC.
+   Chỉ có sharding giải quyết được tải GHI vượt quá một máy.
+
+   Kiểm tra: primary có đang bão hoà bởi lệnh ghi không?
 ```
+
+```sql
+SELECT sum(xact_commit + xact_rollback) AS tps,
+       sum(tup_inserted + tup_updated + tup_deleted) AS dong_ghi
+FROM pg_stat_database;
+```
+
+Chạy hai lần cách nhau 60 giây rồi lấy hiệu để ra tốc độ thật.
+
+### 3. Dữ liệu vượt quá máy lớn nhất mua được
+
+Máy đám mây lớn nhất hiện nay có hàng TB RAM và hàng chục TB SSD. Nếu dữ liệu **nóng** của bạn vẫn vượt qua đó, sharding là bắt buộc.
+
+Chú ý chữ **nóng**: 50 TB dữ liệu trong đó chỉ 200 GB được truy cập thường xuyên thì đó là bài toán **phân tầng lưu trữ**, không phải bài toán sharding.
+
+### 4. Có shard key rõ ràng và tự nhiên
+
+```text
+   CÓ shard key tốt:
+     • Hệ SaaS nhiều khách hàng  →  tenant_id
+     • Mạng xã hội               →  user_id
+     • Thương mại điện tử        →  seller_id hoặc buyer_id
+     • Nhắn tin                  →  conversation_id
+
+   KHÔNG có shard key tốt:
+     • Dữ liệu mà mọi truy vấn đều cắt ngang nhiều chiều
+     • Hệ phân tích với truy vấn tự do
+     → Hai loại này shard xong sẽ khổ vĩnh viễn
+```
+
+Nếu thiếu tiêu chí 4, hãy dừng lại. Sharding không có shard key tốt là công thức cho một hệ thống chậm và khó bảo trì hơn hệ thống ban đầu.
 
 ---
 
-## Công ty đã dùng Sharding thành công
+## Ưu điểm thật sự của sharding
 
-```
-YouTube → Vitess (MySQL sharding middleware)
-  - Vẫn viết SQL bình thường
-  - Vitess xử lý routing
+Để công bằng — sharding có những thứ **không cách nào khác đạt được**:
 
-Slack → Vitess (sau khi grow đến hàng tỷ messages)
-  - channel_id là shard key
-  
-Pinterest → MySQL với custom sharding
-  - user_id là shard key
-  
-Shopify → Pods architecture
-  - Merchant là unit of sharding
-  
-Tất cả đều bắt đầu KHÔNG shard, chỉ shard khi thực sự cần!
-```
+| Ưu điểm | Giải thích |
+|---|---|
+| **Vượt trần một máy** | Đây là ưu điểm duy nhất không thay thế được. CPU, RAM, đĩa, băng thông mạng — tất cả đều nhân lên |
+| **Khả năng ghi mở rộng tuyến tính** | Replica không giúp được gì cho ghi; sharding thì có |
+| **Bán kính sự cố nhỏ hơn** | Một shard chết chỉ ảnh hưởng 1/N người dùng, không phải tất cả |
+| **Cách ly theo khách hàng** | Khách hàng lớn có thể được đặt vào shard riêng, không ảnh hưởng người khác |
+| **Tuân thủ dữ liệu theo vùng** | Dữ liệu người dùng EU nằm vật lý trong EU |
+
+Ưu điểm "bán kính sự cố" đáng chú ý: với một database duy nhất, một sự cố làm **100%** người dùng offline. Với 10 shard, nó làm 10% offline. Với một số ngành, đây là lý do đủ.
+
+## Nhược điểm thật sự — thuế vận hành
+
+Ngoài những mất mát kỹ thuật ở [bài 1](01-database-sharding-la-gi.md), có một khoản chi phí ít được nói: **thuế vận hành trả hàng ngày, mãi mãi**.
+
+| Việc hàng ngày | Trước | Sau khi shard 10 máy |
+|---|---|---|
+| Đổi cấu trúc bảng | Một lệnh, vài giây | Điều phối 10 lệnh; xử lý khi 3 máy thành công, 7 máy lỗi |
+| Sao lưu | Một job | 10 job, và phải nhất quán về thời điểm giữa chúng |
+| Phục hồi | Một quy trình | 10 quy trình, và phải khớp thời điểm |
+| Nâng cấp phiên bản | Một lần | 10 lần, hoặc chấp nhận chạy lẫn phiên bản |
+| Theo dõi | Một bảng điều khiển | 10 bộ chỉ số + phát hiện shard nóng |
+| Gỡ lỗi một sự cố | Xem một log | Tìm shard nào trước, rồi mới xem log |
+| Thêm dung lượng | Gắn đĩa | Dự án di chuyển dữ liệu |
+| Onboarding người mới | Vài ngày | Vài tuần |
+
+Khoản cuối đáng suy nghĩ: sharding làm **mọi người trong đội** phải hiểu một mô hình phức tạp hơn, mãi mãi.
 
 ---
 
-**Tiếp theo:** Phase 8 - Concurrency Control →
+## Đừng tự viết — dùng thứ có sẵn
+
+Nếu đã xác định cần sharding, gần như luôn nên dùng một hệ đã làm sẵn thay vì tự viết như [bài 2](02-sharding-thuc-hanh-nodejs-postgres.md).
+
+| Giải pháp | Nền | Ưu | Nhược |
+|---|---|---|---|
+| **Citus** | PostgreSQL (extension) | Vẫn là Postgres thật; `JOIN` và transaction phân tán được hỗ trợ; nhóm cùng vị trí là khái niệm hạng nhất | Cần chọn cột phân tán đúng; một số tính năng Postgres bị hạn chế |
+| **Vitess** | MySQL | Đã chứng minh ở quy mô YouTube; ứng dụng gần như không cần đổi | Vận hành phức tạp; cần đội có kinh nghiệm |
+| **CockroachDB** | Tự thân (giống Postgres) | Tự shard, tự cân bằng, transaction phân tán thật | Độ trễ ghi cao hơn; không phải Postgres 100% |
+| **YugabyteDB** | Tự thân (giống Postgres) | Tương tự CockroachDB, tương thích Postgres cao hơn | Cộng đồng nhỏ hơn |
+| **MongoDB sharding** | MongoDB | Tích hợp sẵn, tự cân bằng chunk | Chọn shard key sai vẫn khổ y hệt |
+| **DynamoDB / Cassandra** | NoSQL | Sharding là mặc định, không phải lựa chọn | Mô hình dữ liệu phải thiết kế quanh mẫu truy vấn |
+
+Với hệ đang chạy PostgreSQL, **Citus** thường là đường đi ít đau nhất:
+
+```sql
+-- Bien mot bang thanh bang phan tan
+SELECT create_distributed_table('users', 'user_id');
+
+-- Nhom cung vi tri — cac bang lien quan dung CUNG cot phan tan
+SELECT create_distributed_table('orders', 'user_id', colocate_with => 'users');
+
+-- Bang tham chieu — nhan ban sang MOI shard de JOIN cuc bo
+SELECT create_reference_table('countries');
+```
+
+Ba lệnh đó thay thế toàn bộ những gì bạn tự viết ở [bài 2](02-sharding-thuc-hanh-nodejs-postgres.md), và còn xử lý cả những trường hợp biên mà code tự viết sẽ bỏ sót.
+
+Khái niệm **bảng tham chiếu** (nhân bản bảng nhỏ sang mọi shard) là lời giải chính thức cho vấn đề `JOIN` xuyên shard — đúng cách "nhân đôi dữ liệu ít đổi" đã nhắc ở [bài 1](01-database-sharding-la-gi.md).
+
+---
+
+## Danh sách kiểm tra trước khi quyết định
+
+Trả lời trung thực. Bất kỳ câu "không" nào ở phần A đều là lý do dừng lại.
+
+**Phần A — Đã làm hết chưa**
+
+- [ ] Đã đo và biết chính xác nút cổ chai là CPU, RAM, đĩa hay ghi?
+- [ ] Đã tối ưu 10 truy vấn tốn nhiều tổng thời gian nhất?
+- [ ] Đã loại bỏ N+1 ở các đường dẫn nóng?
+- [ ] Đã chỉnh `shared_buffers`, `effective_cache_size`, `random_page_cost`?
+- [ ] Đã thử máy lớn hơn, và biết máy lớn nhất khả dụng là bao nhiêu?
+- [ ] Đã có cache cho dữ liệu đọc nhiều?
+- [ ] Đã có replica đọc và đã đẩy tải đọc sang đó?
+- [ ] Đã partitioning các bảng lớn?
+- [ ] Đã thử tách theo chức năng?
+
+**Phần B — Có phù hợp không**
+
+- [ ] Nút cổ chai là **ghi**, không phải đọc?
+- [ ] Có shard key **xuất hiện trong đa số truy vấn**?
+- [ ] Các bảng liên quan **nhóm được cùng vị trí** theo shard key đó?
+- [ ] Shard key **phân bố đều**, không có giá trị siêu lớn?
+- [ ] Đội có đủ người để gánh thuế vận hành **mãi mãi**?
+
+**Phần C — Chọn cách làm**
+
+- [ ] Đã cân nhắc Citus / Vitess / CockroachDB thay vì tự viết?
+- [ ] Có kế hoạch di chuyển dữ liệu không dừng dịch vụ?
+- [ ] Có công cụ chạy migration trên mọi shard?
+- [ ] Có cách phát hiện shard nóng?
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Shard vì "hệ thống lớn thì phải shard" | Trả giá khổng lồ cho vấn đề không tồn tại | Đo trước; phần lớn hệ thống không cần |
+| Shard trong khi thủ phạm là query tệ | Query tệ vẫn tệ trên N máy, cộng thêm độ phức tạp | Leo hết nấc 1-2 trước |
+| Shard trong khi nút cổ chai là đọc | Replica đọc rẻ hơn nhiều lần | Xác định đọc hay ghi trước |
+| Tự viết lớp sharding | Nhiều tháng công sức để làm lại thứ đã có | Citus / Vitess / CockroachDB |
+| Chọn shard key theo trực giác | Đa số truy vấn phải rải-gom | Chọn theo `pg_stat_statements` |
+| Không nhóm cùng vị trí | Mất `JOIN` và transaction không cần thiết | Mọi bảng liên quan dùng cùng shard key |
+| Quên thuế vận hành | Đội kiệt sức vì việc thường ngày nhân lên N lần | Tính chi phí vận hành vào quyết định |
+| Shard xong mới nghĩ tới migration | Không đổi được cấu trúc bảng nữa | Chuẩn bị công cụ migration đa shard trước |
+
+## Tóm tắt bài 3
+
+- Bước đầu tiên **luôn là đo**: sharding chỉ giúp khi nút cổ chai là **CPU, RAM, đĩa hoặc tải ghi**. Nó **không** sửa được query tệ, index thiếu, pool sai, hay tranh chấp khoá.
+- Có **chín nấc thang** trước sharding, và **cả chín đều quay đầu được**. Nấc thứ mười thì không.
+- Nấc bị bỏ qua nhiều nhất là nấc 5 — **mua máy lớn hơn**. Máy đám mây hiện nay có hàng trăm vCPU và hàng TB RAM; rất nhiều hệ tưởng cần sharding chỉ cần một máy lớn hơn.
+- Nấc nên thử **ngay trước** sharding là **tách theo chức năng** — vì nó giữ nguyên `JOIN` và transaction bên trong từng miền.
+- Bốn tín hiệu để shard, phải đúng **cả bốn**: đã leo hết thang · nút cổ chai là **ghi** · dữ liệu **nóng** vượt máy lớn nhất · có **shard key tự nhiên**.
+- Ưu điểm không thay thế được: **vượt trần một máy**, **khả năng ghi mở rộng tuyến tính**, **bán kính sự cố nhỏ hơn**, **cách ly khách hàng**, **tuân thủ dữ liệu theo vùng**.
+- Nhược điểm ít được nói nhất là **thuế vận hành trả hàng ngày mãi mãi**: migration, sao lưu, phục hồi, nâng cấp, theo dõi, gỡ lỗi — tất cả nhân lên N lần.
+- Nếu đã quyết shard: **đừng tự viết**. Citus cho PostgreSQL, Vitess cho MySQL, hoặc chuyển sang CockroachDB/YugabyteDB — ba lệnh của Citus thay thế toàn bộ những gì tự viết ở [bài 2](02-sharding-thuc-hanh-nodejs-postgres.md).
+
+**Bài kế tiếp** → [Phase 8 — Bài 1: Shared Lock và Exclusive Lock](../phase-8/01-shared-lock-va-exclusive-lock.md)
