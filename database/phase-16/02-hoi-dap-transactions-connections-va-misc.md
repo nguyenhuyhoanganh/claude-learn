@@ -1,412 +1,447 @@
-# Bài 2: Hỏi & Đáp - Transactions, Connections và Miscellaneous
+# Bài 2: Hỏi & Đáp — Transactions, Connections và Isolation
 
-## Q1: Read-only Transaction có cần không?
+Bảy câu hỏi về transaction và kết nối. Ba câu đầu là những câu bị trả lời sai nhiều nhất khi phỏng vấn.
 
-**Câu hỏi:** Khi chỉ đọc data, có cần bọc trong transaction không?
+---
 
-### Lợi ích của Read-only Transaction
+## Câu 1 — Bốn isolation level: giải thích đầy đủ
+
+Đây là câu hỏi phỏng vấn phổ biến nhất về database. Câu trả lời tốt phải có **ba tầng**: bảng chuẩn, cơ chế bên dưới, và khác biệt giữa các hệ.
+
+### Tầng 1 — Bảng chuẩn
+
+| Mức | Dirty read | Non-repeatable read | Phantom read |
+|---|---|---|---|
+| `READ UNCOMMITTED` | Có thể | Có thể | Có thể |
+| `READ COMMITTED` | Không | Có thể | Có thể |
+| `REPEATABLE READ` | Không | Không | **Có thể** |
+| `SERIALIZABLE` | Không | Không | Không |
+
+### Tầng 2 — Cơ chế thật
+
+Đây là chỗ phân biệt người thuộc bài với người hiểu bài:
+
+```text
+   READ COMMITTED
+     → MOI CAU LENH lay MOT ANH CHUP MOI
+     → nen cau lenh thu hai thay duoc thay doi ma cau thu nhat khong thay
+
+   REPEATABLE READ
+     → MOT ANH CHUP duy nhat, chup luc cau lenh DAU TIEN chay
+     → dung cho toan bo transaction
+
+   SERIALIZABLE (PostgreSQL)
+     → nhu REPEATABLE READ, CONG THEM theo doi phu thuoc doc-ghi
+     → phat hien duoc chu ky phu thuoc → HUY mot transaction (loi 40001)
+```
+
+### Tầng 3 — Thực tế từng hệ
+
+**Đây là phần tạo ra khác biệt khi phỏng vấn:**
+
+| Hệ | Mặc định | `READ UNCOMMITTED` thật? | `REPEATABLE READ` chặn phantom? |
+|---|---|---|---|
+| **PostgreSQL** | `READ COMMITTED` | Không — âm thầm nâng thành `READ COMMITTED` | **CÓ** — vì cài bằng snapshot |
+| **MySQL InnoDB** | `REPEATABLE READ` | Có | Có với `SELECT` thường; đọc có khoá thì khác |
+| **Oracle** | `READ COMMITTED` | Không hỗ trợ | Không có mức này |
+| **SQL Server** | `READ COMMITTED` (khoá) | **Có** (`WITH (NOLOCK)`) | Không, trừ khi bật `SNAPSHOT` |
+
+Vì sao PostgreSQL `REPEATABLE READ` chặn được phantom:
+
+```text
+   CACH CHUAN ANSI HINH DUNG:  khoa cac DONG da doc
+     → khe trong giua cac dong KHONG khoa duoc
+     → ai do INSERT vao khe → PHANTOM lot vao
+
+   CACH POSTGRESQL LAM:  ghi nho minh bat dau o thoi diem nao,
+                          roi LOC BO moi dong sinh ra sau do
+     → dong moi co xmin > snapshot cua toi → VO HINH
+     → phantom khong lot duoc, va khong can khoa gi ca
+```
+
+Nó **không cố** chặn phantom — cơ chế snapshot **tình cờ** chặn luôn. Nói được câu này là dấu hiệu hiểu cơ chế chứ không thuộc bảng.
+
+Chi tiết đầy đủ ở [phase-2 bài 3](../phase-2/03-isolation-va-read-phenomena.md).
+
+---
+
+## Câu 2 — Snapshot Isolation khác Repeatable Read thế nào?
+
+Câu trả lời phụ thuộc vào **hệ nào**:
+
+```text
+   TRONG POSTGRESQL:  KHONG KHAC GI CA.
+     PostgreSQL cai dat REPEATABLE READ BANG snapshot isolation.
+     Hai ten goi, mot co che.
+
+   TRONG SQL SERVER:  LA HAI MUC KHAC NHAU.
+     REPEATABLE READ  → dung KHOA
+     SNAPSHOT         → dung phien ban (giong Postgres)
+     → phai bat rieng: ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION ON
+
+   TRONG LY THUYET:
+     Snapshot Isolation MANH HON Repeatable Read chuan ANSI
+     (vi no chan luon phantom), nhung YEU HON Serializable
+     (vi no khong chan write skew).
+```
+
+### Bất thường mà Snapshot Isolation **không** chặn: write skew
+
+```text
+   Quy dinh: ca truc phai co it nhat 1 bac si.
+   Hien co 2: An va Binh.
+
+   An:   dem bac si dang truc → 2 → "con Binh, minh xin nghi duoc"
+   Binh: dem bac si dang truc → 2 → "con An, minh xin nghi duoc"
+   An:   UPDATE ... An nghi      COMMIT
+   Binh: UPDATE ... Binh nghi    COMMIT
+
+   → 0 bac si truc. Quy tac nghiep vu bi pha.
+```
+
+```text
+   Vi sao Snapshot Isolation khong bat duoc:
+     • An va Binh sua HAI DONG KHAC NHAU
+     • khong co ghi de → khong phai lost update
+     • ca hai deu doc dung, ghi dung dong cua minh
+   → Chi SERIALIZABLE moi bat duoc, bang cach theo doi PHU THUOC DOC-GHI
+```
+
+Thí nghiệm tái hiện đầy đủ ở [phase-2 bài 5](../phase-2/05-acid-thuc-hanh-voi-postgres.md).
+
+---
+
+## Câu 3 — Đã có `SELECT FOR UPDATE` rồi, sao còn cần `SERIALIZABLE`?
+
+Câu hỏi rất hay, và câu trả lời là: **chúng giải hai vấn đề khác nhau**.
+
+```text
+   SELECT ... FOR UPDATE  →  khoa nhung DONG BAN DA DOC
+   SERIALIZABLE           →  bao ve ca nhung DONG CHUA TON TAI
+```
+
+### Trường hợp `FOR UPDATE` bó tay
 
 ```sql
--- Bắt đầu read-only transaction
+-- Quy dinh: moi phong toi da 3 nguoi
 BEGIN;
-SET TRANSACTION READ ONLY;
-
-SELECT * FROM accounts WHERE user_id = 123;
-SELECT * FROM transactions WHERE account_id = 456;
-
+SELECT count(*) FROM members WHERE room_id = 7 FOR UPDATE;   -- dem duoc 2
+-- ... hai transaction cung dem duoc 2 ...
+INSERT INTO members (room_id, user_id) VALUES (7, :toi);
 COMMIT;
+-- → 4 nguoi trong phong
 ```
 
-### Lý do 1: Bảo vệ code
-
-```
-Scenario: Bạn đang gọi nhiều service methods
-  readUserData() 
-  → readAccountBalance()
-  → readTransactionHistory()
-  → ... (có 20 methods)
-  
-  Một method nào đó có thể vô tình UPDATE data
-  
-  → Read-only transaction sẽ FAIL ngay lập tức!
-  → Bạn tìm ra bug sớm hơn
-  → Code rõ ràng ý định: "Tôi CHỈ đọc"
+```text
+   `FOR UPDATE` khoa 2 DONG DANG CO.
+   Nhung dong SAP DUOC CHEN thi khong ton tai → khong khoa duoc.
+   → Ca hai transaction deu chen thanh cong.
 ```
 
-### Lý do 2: Performance optimization
+Ba cách chữa:
 
+```text
+   1. SERIALIZABLE
+      → PostgreSQL theo doi phu thuoc doc-ghi va huy mot transaction
+      → CAN VONG LAP THU LAI
+
+   2. KHOA MOT DONG "CHA" DAI DIEN
+      SELECT * FROM rooms WHERE id = 7 FOR UPDATE;   -- khoa CHINH cai phong
+      → moi nguoi vao phong 7 deu phai xep hang qua dong nay
+
+   3. KHOA TU VAN
+      SELECT pg_advisory_xact_lock(hashtext('room:7'));
+      → khong can dong that de khoa
 ```
-PostgreSQL mặc định behavior:
-  → Transaction ID chỉ được gán khi có WRITE đầu tiên
-  → Read-only transaction: Không có transaction ID!
-  → Tiết kiệm:
-    - Không cần acquire transaction ID từ sequence
-    - Không cần maintain MVCC metadata
-    - Không cần vacuum cleanup sau này
 
-Scale: 100 triệu transactions
-  - 50 triệu read-only → Tiết kiệm 50 triệu transaction IDs
-  → Significant improvement at scale!
+Cách 2 đơn giản nhất và thường là câu trả lời đúng trong thực tế.
+
+### So sánh
+
+| | `FOR UPDATE` | `SERIALIZABLE` |
+|---|---|---|
+| Kiểu | **Bi quan** — chờ | **Lạc quan** — huỷ và thử lại |
+| Bảo vệ dòng đã có | ✔ | ✔ |
+| Bảo vệ dòng chưa tồn tại | **✘** | ✔ |
+| Chống write skew | ✘ | ✔ |
+| Cần vòng lặp thử lại | Không | **Bắt buộc** |
+| Chi phí khi ít tranh chấp | Chờ vô ích | Gần như không |
+| Chi phí khi nhiều tranh chấp | Xếp hàng | **Huỷ và làm lại nhiều** |
+
+---
+
+## Câu 4 — Nhiều client dùng chung một kết nối database được không?
+
+**Về mặt kỹ thuật: được. Về mặt an toàn: rất nguy hiểm.**
+
+```text
+   MOT KET NOI POSTGRES CO TRANG THAI:
+     • transaction hien tai
+     • bien phien (SET search_path, SET timezone, SET role...)
+     • bang tam
+     • cau lenh chuan bi san
+     • con tro dang mo
+     • khoa tu van cap phien
 ```
 
-### Snapshot Isolation trong Read-only Transaction
+```text
+   Client A: SET search_path = 'tenant_a';
+   Client B (dung chung ket noi): SELECT * FROM users;
+   → B doc du lieu cua TENANT A
+```
+
+Đây không phải giả thuyết — đó là một lớp lỗi bảo mật thật, và nó rất khó truy vì lỗi chỉ xuất hiện khi hai request rơi trúng cùng một kết nối.
+
+### Cách đúng: connection pool
+
+```text
+   Pool KHONG chia se ket noi dong thoi.
+   No CHO MUON: mot client giu ket noi tu luc bat dau toi luc ket thuc
+   mot don vi cong viec, roi TRA LAI.
+
+   → Khong co hai client dung chung MOT LUC
+   → Nhung TRANG THAI van co the sot lai
+```
+
+Vì thế pool tốt phải **dọn dẹp khi trả kết nối**:
+
+```text
+   PgBouncer transaction mode:
+     • tu chay DISCARD ALL (hoac server_reset_query)
+     • → xoa bang tam, cau lenh chuan bi, bien phien
+
+   HikariCP:
+     • rollback transaction chua ket thuc
+     • dat lai autoCommit, readOnly, isolation
+```
+
+Và với PgBouncer transaction mode, quy tắc bắt buộc:
 
 ```sql
--- Đảm bảo consistent snapshot cho cả transaction
-BEGIN;
-SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
-SET TRANSACTION READ ONLY;
+-- SAI: dinh lai o ket noi, request sau thua huong
+SET search_path = 'tenant_a';
 
--- Query 1 lúc 12:00:00
-SELECT balance FROM accounts WHERE id = 1;  -- Thấy: 1000
-
--- (Meanwhile: someone updates balance to 1500 and commits)
-
--- Query 2 lúc 12:00:05
-SELECT balance FROM accounts WHERE id = 1;  -- Vẫn thấy: 1000!
--- → REPEATABLE READ đảm bảo nhất quán trong transaction
-
-COMMIT;
+-- DUNG: chi trong transaction hien tai
+SET LOCAL search_path = 'tenant_a';
 ```
+
+Danh sách đầy đủ những gì PgBouncer transaction mode phá vỡ ở [phase-8 bài 3](../phase-8/03-connection-pooling.md).
 
 ---
 
-## Q2: Có dùng chung 1 database connection cho nhiều clients không?
+## Câu 5 — Chỉ đọc thôi thì có cần transaction không?
 
-**Câu hỏi:** Tại sao không dùng 1 connection duy nhất cho toàn bộ application?
+**Có, trong ba trường hợp** — và trường hợp đầu tiên là trường hợp thật sự quan trọng.
 
-### Vấn đề 1: Concurrency
+### Trường hợp 1 — Nhiều truy vấn phải nhất quán với nhau
 
-```
-Tình huống: 100 concurrent requests + 1 shared connection
+```text
+   BAO CAO KHONG CO TRANSACTION
 
-  Request 1: SELECT * FROM orders WHERE user_id = 1
-  Request 2: INSERT INTO logs VALUES ('event')
-  Request 3: UPDATE inventory SET qty = qty - 1
-  ...
-  
-  → Tất cả 100 requests cạnh tranh 1 TCP connection
-  → Serialization: Chỉ 1 query chạy tại một thời điểm
-  → Throughput cực thấp
-```
+   10:00:00.000  SELECT SUM(amount) FROM orders;   → 5.000.000.000
+   10:00:00.100     ⟵ mot don hang 3.000.000 duoc ghi vao
+   10:00:00.200  SELECT COUNT(*) FROM orders;      → 12.001
 
-### Vấn đề 2: Response Ordering (Nghiêm trọng hơn)
-
-```
-TCP là bidirectional stream, không phải request-response!
-
-Timeline:
-  Client gửi Query 1 (SELECT users)     → Server
-  Client gửi Query 2 (SELECT products)  → Server
-  
-  Server xử lý Query 2 nhanh hơn → Gửi Response 2 trước
-  Client nhận Response 2...
-  
-  Câu hỏi: Client biết Response 2 là cho Query 2 hay Query 1?
-  
-  → KHÔNG CÓ TAGGING TRONG TCP!
-  → User 1 có thể nhận kết quả của User 2!
-  → Data corruption / security breach!
-```
-
-```javascript
-// BAD: Share single connection
-const sharedConn = await createConnection(config);
-
-app.get('/users', async (req, res) => {
-    const result = await sharedConn.query('SELECT * FROM users');
-    res.json(result.rows);  // Có thể nhận kết quả của /products!
-});
-
-app.get('/products', async (req, res) => {
-    const result = await sharedConn.query('SELECT * FROM products');
-    res.json(result.rows);  // Có thể nhận kết quả của /users!
-});
-
-// GOOD: Connection Pool
-const pool = new Pool({ max: 10 });
-
-app.get('/users', async (req, res) => {
-    // Pool cấp riêng 1 connection, execute, return
-    const result = await pool.query('SELECT * FROM users');
-    res.json(result.rows);  // Đảm bảo đúng kết quả
-});
-```
-
-### Connection Pool: Best Practice
-
-```javascript
-const pool = new Pool({
-    max: 10,                    // Max connections
-    idleTimeoutMillis: 30000,   // Đóng idle connections sau 30s
-    connectionTimeoutMillis: 2000, // Error nếu không lấy được conn trong 2s
-});
-
-// 1 query = 1 connection từ pool
-async function getUser(id) {
-    const result = await pool.query(
-        'SELECT * FROM users WHERE id = $1',
-        [id]
-    );
-    return result.rows[0];
-}
-// Connection tự động return về pool sau khi query xong!
-```
-
----
-
-## Q3: UUID vs Sequential ID - Nên dùng cái nào?
-
-**Câu hỏi:** UUID hay AUTO_INCREMENT integer cho Primary Key?
-
-### UUID: Pros và Cons
-
-```
-UUID (Universally Unique Identifier):
-  - 128 bits = 16 bytes (native binary)
-  - Hoặc 36 chars khi lưu dưới dạng string: "550e8400-e29b-41d4-a716-446655440000"
-
-Pros:
-  ✅ Globally unique (client tự generate, không cần DB)
-  ✅ Không lộ business data (số records, growth rate)
-  ✅ Merge data từ nhiều databases dễ dàng
-  ✅ Microservices: Mỗi service generate UUID độc lập
-
-Cons:
-  ❌ 16 bytes (min) vs 8 bytes (BIGINT) = 2x larger primary key
-  ❌ String format: 36 bytes = 4.5x larger
-  ❌ Random = Random I/O → Cache miss nhiều hơn
-  ❌ Bloated secondary indexes (PK value copied vào mỗi secondary index)
-```
-
-### Sequential Integer: Pros và Cons
-
-```
-BIGSERIAL / AUTO_INCREMENT:
-  - 8 bytes
-  - Sequential: 1, 2, 3, 4, 5...
-
-Pros:
-  ✅ Nhỏ gọn (8 bytes)
-  ✅ Sequential inserts = Leaf page luôn hot trong cache
-  ✅ Range queries hiệu quả (WHERE id BETWEEN 100 AND 200)
-  ✅ Secondary indexes nhỏ hơn (8 byte PK)
-
-Cons:
-  ❌ Predictable (attacker có thể đoán /users/1, /users/2...)
-  ❌ Cần central sequence generator (bottleneck ở scale lớn)
-  ❌ Khó merge data từ nhiều databases
-```
-
-### UUID v7: Compromise tốt nhất
-
-```
-UUID v7 (mới, 2022):
-  - 128 bits như UUID v4
-  - Nhưng BẮT ĐẦU bằng millisecond timestamp!
-  - Sequential trong cùng millisecond
-  
-  Format: [48-bit timestamp][4-bit version][12-bit seq][62-bit random]
-  
-  Lợi ích so với UUID v4:
-  ✅ Chronologically sortable (new > old)
-  ✅ Sequential inserts within same ms → Fewer random I/Os
-  ✅ Still globally unique
-  
-  So với INTEGER:
-  ❌ Vẫn 16 bytes (2x larger)
-  ❌ Vẫn chậm hơn sequential integer một chút
-```
-
-### Decision Framework
-
-```
-Dùng UUID khi:
-  → Microservices (nhiều services insert vào cùng table)
-  → Data từ nhiều nguồn cần merge
-  → Public API (không muốn lộ sequential IDs)
-  → Event sourcing, distributed systems
-
-Dùng Sequential Integer khi:
-  → Single service, single writer
-  → Maximum write/read performance cần thiết
-  → Internal IDs (không expose ra ngoài)
-  → Large scale với nhiều secondary indexes
-```
-
----
-
-## Q4: Cần Transaction khi chỉ UPDATE không?
-
-**Câu hỏi:** Nếu chỉ có 1 UPDATE statement, có cần explicit transaction không?
-
-### Single Statement = Implicit Transaction
-
-```sql
--- Statement đơn lẻ TỰ ĐỘNG có implicit transaction
-UPDATE accounts SET balance = balance - 100 WHERE id = 1;
-
--- PostgreSQL tự làm:
--- BEGIN;
--- UPDATE accounts SET balance = balance - 100 WHERE id = 1;
--- COMMIT;  ← Auto commit nếu thành công
-
--- Không khác gì:
-BEGIN;
-UPDATE accounts SET balance = balance - 100 WHERE id = 1;
-COMMIT;
-```
-
-### Khi nào cần explicit Transaction?
-
-```sql
--- NEED explicit transaction: Multiple related statements
-BEGIN;
-UPDATE accounts SET balance = balance - 100 WHERE id = 1;  -- Debit
-UPDATE accounts SET balance = balance + 100 WHERE id = 2;  -- Credit
-COMMIT;
--- → Nếu statement 2 fail: Cả 2 đều rollback (atomicity!)
-
--- KHÔNG cần: Single statement
-UPDATE users SET last_login = NOW() WHERE id = 123;
--- → Auto transaction, implicit commit
-```
-
----
-
-## Q5: Tại sao UPDATE trong PostgreSQL update tất cả indexes?
-
-**Câu hỏi:** Tôi chỉ update 1 column, tại sao tất cả indexes đều bị update?
-
-### PostgreSQL: MVCC qua Copy-on-Write (HOT Update)
-
-```
-PostgreSQL không update row tại chỗ!
-  
-UPDATE users SET email = 'new@email.com' WHERE id = 1;
-
-Bước 1: Tạo row MỚI với giá trị mới
-  [id=1, name="Alice", email="new@email.com"] ← Row mới
-  
-Bước 2: Mark row CŨ là deleted (xmax = current txn)
-  [id=1, name="Alice", email="old@email.com"] ← Invisible sau commit
-
-Bước 3: Update ALL indexes để trỏ đến row mới
-  → Primary index: PK=1 → new_tuple_id
-  → Email index: "new@email.com" → new_tuple_id  (add new entry)
-  → Name index: "Alice" → new_tuple_id  (update to new pointer)
-  → Created_at index: ... → new_tuple_id
-  
-→ Tất cả indexes phải cập nhật!
-→ N indexes = N index updates per UPDATE
-```
-
-### HOT Update: Optimization
-
-```
-HOT = Heap Only Tuple update
-Điều kiện: 
-  1. Updated column KHÔNG CÓ INDEX
-  2. Row mới nằm trên cùng page với row cũ
-  
-Khi đủ điều kiện:
-  → Chỉ tạo chain trong heap: Old row → New row
-  → KHÔNG update secondary indexes!
-  → Tiết kiệm N-1 index updates
+   TO BAO CAO IN RA:
+     Tong doanh thu : 5.000.000.000   (tren 12.000 don)
+     So don         : 12.001
+   → HAI CON SO KHONG KHOP NHAU
 ```
 
 ```sql
--- Kiểm tra HOT updates
-SELECT n_tup_upd, n_tup_hot_upd
-FROM pg_stat_user_tables
-WHERE relname = 'users';
-
--- n_tup_upd: Tổng số updates
--- n_tup_hot_upd: HOT updates (tốt!)
--- HOT ratio = n_tup_hot_upd / n_tup_upd
--- → Cao = Tốt (ít index overhead)
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SELECT SUM(amount) FROM orders;
+SELECT COUNT(*)   FROM orders;
+COMMIT;
+-- → ca hai nhin CUNG MOT anh chup
 ```
+
+### Trường hợp 2 — Cần trạng thái tại một thời điểm
+
+Xuất dữ liệu, đối soát, sao lưu logic — tất cả đều cần "ảnh chụp lúc bắt đầu", không phải "trạng thái trôi theo thời gian".
+
+### Trường hợp 3 — Khai báo rõ để database tối ưu
+
+```sql
+BEGIN TRANSACTION READ ONLY;
+```
+
+```text
+   PostgreSQL biet chac khong co gi de rollback
+   → khong can cap XID ghi
+   → mot so kiem tra duoc bo qua
+```
+
+### Khi nào **không** cần
+
+```text
+   ✘ Mot cau SELECT don le
+     → no DA nam trong mot transaction ngam roi (autocommit)
+     → boc them BEGIN/COMMIT chi ton hai vong mang
+```
+
+### Và cái giá phải nhớ
+
+```text
+   Transaction chi doc VAN GIU MOT ANH CHUP.
+   Anh chup do CHAN `VACUUM` don rac tren TOAN BO database.
+
+   → Bao cao chay 2 gio = VACUUM bi chan 2 gio
+   → Bang bi UPDATE nhieu se phinh len trong 2 gio do
+```
+
+Đây là lý do các báo cáo nặng nên chạy trên **replica**, không phải trên primary.
 
 ---
 
-## Q6: Bitmap Index Scan có giá trị gì?
+## Câu 6 — Vì sao `UPDATE` trong PostgreSQL đụng vào MỌI index?
 
-**Câu hỏi:** Tại sao cần Bitmap Index Scan? Không phải Index Scan là đủ?
-
-### So sánh Index Scan vs Bitmap Index Scan
-
-```
-Situation: Query trả về nhiều rows phân tán ngẫu nhiên
-
-Index Scan:
-  Tìm row 1 → Fetch page 500 từ disk
-  Tìm row 2 → Fetch page 12 từ disk  
-  Tìm row 3 → Fetch page 987 từ disk
-  Tìm row 4 → Fetch page 12 từ disk  ← Same page! Fetch AGAIN!
-  ...
-  
-  → Nhiều random I/Os
-  → Cùng page có thể được fetch nhiều lần!
-
-Bitmap Index Scan:
-  Phase 1: Scan index → Build bitmap of PAGES
-    "Row cần tìm ở các pages: 12, 500, 987, ..."
-    Loại bỏ duplicates → [12, 500, 987]
-  
-  Phase 2: Sort pages → [12, 500, 987] (sequential order!)
-  
-  Phase 3: Fetch each page ONCE (sequential, sorted)
-    Fetch page 12   → Filter rows needed
-    Fetch page 500  → Filter rows needed
-    Fetch page 987  → Filter rows needed
-  
-  → Mỗi page chỉ fetch 1 lần!
-  → Sequential access (friendly to disk prefetch)
+```sql
+UPDATE users SET last_login = now() WHERE id = 42;
+-- Bang co 5 index, khong cai nao chua cot `last_login`
+-- → van co the phai cap nhat ca 5
 ```
 
-### Khi nào dùng Bitmap vs Index Scan?
+Lý do nằm ở mô hình MVCC:
 
+```text
+   PostgreSQL KHONG SUA TAI CHO.
+   `UPDATE` = tao mot PHIEN BAN MOI cua dong o vi tri KHAC.
+   → ctid doi tu (0,1) sang (0,4)
+
+   Ma MOI index cua PostgreSQL deu tro toi `ctid`.
+   → dong doi cho → moi index phai tro lai cho moi
+   → KE CA index tren cac cot KHONG HE THAY DOI
 ```
-PostgreSQL planner tự quyết định dựa trên:
-  
-  Estimated rows returned:
-    → Ít rows (1-10): Index Scan (direct fetch)
-    → Nhiều rows, nhiều pages: Bitmap Index Scan
-    → Rất nhiều rows (> 20% table): Sequential Scan
-  
-  Page correlation:
-    → Data clustered (sequential IDs): Index Scan OK
-    → Data scattered (random UUIDs): Bitmap preferred
+
+### Cơ chế giảm nhẹ: HOT update
+
+**HOT** = *Heap-Only Tuple*. Nếu thoả **cả hai** điều kiện:
+
+```text
+   1. Phien ban moi nam CUNG PAGE voi phien ban cu
+   2. KHONG cot nao DUOC DANH INDEX bi thay doi
+
+   → Index KHONG can cap nhat.
+   → Chi tao mot chuoi lien ket trong chinh page do.
 ```
+
+Kiểm tra tỉ lệ HOT:
+
+```sql
+SELECT relname,
+       n_tup_upd                                              AS tong_update,
+       n_tup_hot_upd                                          AS update_hot,
+       round(100.0*n_tup_hot_upd/NULLIF(n_tup_upd,0), 1)      AS ti_le_hot
+FROM pg_stat_user_tables WHERE n_tup_upd > 1000
+ORDER BY n_tup_upd DESC;
+```
+
+```text
+ relname |  tong_update  | update_hot | ti_le_hot
+---------+---------------+------------+-----------
+ users   |       1284993 |    1198442 |      93.3
+ orders  |        882117 |     102883 |      11.7    ← THAP, can xem lai
+```
+
+Hai cách tăng tỉ lệ HOT:
+
+```sql
+-- 1. Chua cho trong page de phien ban moi nam cung page
+ALTER TABLE orders SET (fillfactor = 80);
+VACUUM FULL orders;      -- can dung lai bang de ap dung
+
+-- 2. Bo index tren cac cot BI CAP NHAT THUONG XUYEN
+DROP INDEX idx_orders_updated_at;   -- neu it duoc dung
+```
+
+Cách 2 phản trực giác nhưng rất hiệu quả: **một index trên cột hay thay đổi làm hỏng HOT cho mọi `UPDATE` của bảng đó**.
+
+### So sánh với InnoDB
+
+```text
+   INNODB SUA TAI CHO, va index phu tro toi PRIMARY KEY (khong doi).
+   → `UPDATE` mot cot khong duoc danh index → KHONG dung index phu nao
+
+   Doi lai: InnoDB phai ghi UNDO LOG, va doc du lieu cu phai tra undo log.
+```
+
+Đây là ví dụ tiêu biểu cho nguyên tắc "không có lựa chọn miễn phí": PostgreSQL đổi chi phí đọc dữ liệu cũ lấy chi phí cập nhật index; InnoDB đổi ngược lại.
 
 ---
 
-## Tóm tắt Best Practices từ Q&A
+## Câu 7 — Vì sao `COUNT(*)` trong PostgreSQL chậm?
 
-```
-Query Planning:
-  1. VACUUM ANALYZE sau khi insert lượng lớn data
-  2. Index không dùng → Drop (tiết kiệm write overhead)
-  3. Cost trong EXPLAIN không phải milliseconds, chỉ là relative units
-  4. Small tables → Sequential scan thường nhanh hơn index scan
-
-Transactions:
-  5. Read-only transactions: Code clarity + Performance hint cho DB
-  6. Single statement: Implicit transaction (không cần explicit)
-  7. Multiple related statements: LUÔN dùng explicit transaction
-
-Connections:
-  8. KHÔNG dùng 1 shared connection cho nhiều concurrent requests
-  9. Connection Pool: Giải pháp đúng đắn
-  10. Mỗi query trong pool: 1 riêng connection
-
-Primary Key:
-  11. UUID v4: Random → Random I/Os → Tránh nếu có thể
-  12. UUID v7: Sequential timestamp prefix → Better than v4
-  13. Sequential INTEGER: Fastest, smallest, best cache locality
-  14. Choose based on: Distributed system? → UUID; Single writer? → INTEGER
+```sql
+SELECT count(*) FROM orders;   -- bang 50 trieu dong → ~4 giay
 ```
 
----
+```text
+   MyISAM luu san so dong trong metadata → tra ve tuc thi.
+   PostgreSQL PHAI DEM THAT.
 
-**Tiếp theo:** Phase 17 - Database Discussions Summary →
+   VI SAO?  Vi MVCC:
+     Transaction A dang chay thay 50.000.000 dong
+     Transaction B (bat dau sau) thay 50.000.017 dong
+     → KHONG CO "so dong" duy nhat de luu san
+```
+
+Ba cách thay thế:
+
+```sql
+-- 1. UOC LUONG (tuc thi, sai so vai phan tram)
+SELECT reltuples::BIGINT FROM pg_class WHERE relname = 'orders';
+```
+
+```text
+ reltuples
+-----------
+  49998112
+```
+
+```sql
+-- 2. UOC LUONG cho truy van CO DIEU KIEN
+EXPLAIN SELECT * FROM orders WHERE status = 'paid';
+--   → doc so `rows=` trong ke hoach
+```
+
+```sql
+-- 3. BO DEM CHINH XAC bang trigger (khi that su can)
+CREATE TABLE row_counts (bang TEXT PRIMARY KEY, cnt BIGINT NOT NULL DEFAULT 0);
+-- + trigger AFTER INSERT/DELETE tang/giam
+-- ⚠ nhung dong nay tro thanh DIEM NONG → can bo dem chia manh
+```
+
+Cách 3 mang lại đúng vấn đề đã phân tích ở [phase-10 bài 1](../phase-10/01-system-design-twitter-database.md): một dòng bộ đếm bị cập nhật liên tục trở thành điểm nóng khoá.
+
+Và cách rẻ nhất cho giao diện phân trang:
+
+```sql
+SELECT ... LIMIT 21;   -- lay 21, hien 20, con 1 dong nghia la "con trang sau"
+```
+
+## Bảng tra nhanh
+
+| Câu hỏi | Câu trả lời một dòng |
+|---|---|
+| Isolation level nào mặc định? | PostgreSQL/Oracle/SQL Server: `READ COMMITTED`. MySQL: `REPEATABLE READ` |
+| PostgreSQL `REPEATABLE READ` có phantom không? | **Không** — nó cài bằng snapshot |
+| Snapshot Isolation khác Repeatable Read? | Trong PostgreSQL: **giống hệt**. Trong SQL Server: khác |
+| `FOR UPDATE` có chống được write skew? | **Không** — chỉ `SERIALIZABLE` hoặc khoá dòng cha |
+| Chia sẻ kết nối giữa các client? | **Không** — dùng pool, và `SET LOCAL` thay `SET` |
+| Chỉ đọc có cần transaction? | **Có** nếu nhiều truy vấn phải nhất quán với nhau |
+| `UPDATE` có đụng mọi index? | **Có**, trừ khi đạt điều kiện **HOT update** |
+| `COUNT(*)` sao chậm? | MVCC — không có "số dòng" duy nhất để lưu sẵn |
+
+## Tóm tắt bài 2
+
+- Trả lời về isolation level cần **ba tầng**: bảng chuẩn, cơ chế bên dưới (mỗi câu lệnh một snapshot vs một snapshot cho cả transaction), và **thực tế từng hệ**.
+- **PostgreSQL `REPEATABLE READ` chặn phantom** — không phải vì nó cố chặn, mà vì cơ chế snapshot **tình cờ** chặn luôn. Nói được điều này phân biệt hiểu cơ chế với thuộc bảng.
+- **Snapshot Isolation = Repeatable Read trong PostgreSQL**, nhưng là hai mức khác nhau trong SQL Server. Cả hai đều **không chặn write skew**.
+- **`FOR UPDATE` không bảo vệ được dòng chưa tồn tại** — nó khoá cái đã đọc. Ba cách chữa: `SERIALIZABLE`, khoá dòng cha đại diện, hoặc khoá tư vấn.
+- **Không bao giờ chia sẻ một kết nối giữa các client** — trạng thái phiên (`search_path`, bảng tạm, khoá tư vấn) rò rỉ sang nhau. Với PgBouncer transaction mode, luôn dùng **`SET LOCAL`**.
+- **Transaction chỉ đọc vẫn cần** khi nhiều truy vấn phải nhất quán với nhau — nhưng nó **giữ ảnh chụp và chặn `VACUUM`**, nên báo cáo nặng phải chạy trên replica.
+- **`UPDATE` trong PostgreSQL đụng mọi index** vì `ctid` đổi — trừ khi đạt **HOT update**. Theo dõi tỉ lệ HOT; tỉ lệ thấp thì giảm `fillfactor` hoặc bỏ index trên cột hay thay đổi.
+- **`COUNT(*)` chậm vì MVCC**: mỗi transaction thấy số dòng khác nhau nên không có con số duy nhất để lưu sẵn. Dùng `reltuples` cho số xấp xỉ, hoặc `LIMIT n+1` cho phân trang.
+
+**Bài kế tiếp** → [Bài 3: Hỏi & Đáp - Database Internals và Best Practices](03-hoi-dap-database-internals.md)

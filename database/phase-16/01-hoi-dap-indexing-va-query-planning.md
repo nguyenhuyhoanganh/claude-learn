@@ -1,377 +1,556 @@
-# Bài 1: Hỏi & Đáp - Indexing và Query Planning
+# Bài 1: Hỏi & Đáp — Indexing và Query Planning
 
-## Q1: Tại sao query của tôi dùng Heap Scan thay vì Index Only Scan?
+Chín câu hỏi thật, được hỏi đi hỏi lại. Mỗi câu trả lời đủ để dùng ngay trong phỏng vấn hoặc khi chẩn đoán sự cố.
 
-**Tình huống:** Adam tạo partitioned table, insert 1000 rows, ngay lập tức query → Thấy Bitmap Index Scan thay vì Index Only Scan.
+---
 
-### Nguyên nhân: MVCC Visibility
+## Câu 1 — Đơn vị của `cost` trong `EXPLAIN` là gì?
 
-```
-PostgreSQL cần kiểm tra "visibility" của mỗi row:
-  - Có transaction nào đang chạy mà KHÔNG nên thấy row này không?
-  - Row này có bị delete/update bởi transaction chưa commit không?
-
-Thông tin visibility lưu ở đâu?
-  → HEAP (bảng thực), không phải INDEX!
-  → Hai hidden columns: xmin và xmax
-```
-
-```
-xmin = Transaction ID tạo row này
-xmax = Transaction ID xóa/update row này
-
-Ví dụ:
-  Transaction T1 insert row → xmin = T1
-  Transaction T2 delete row → xmax = T2
-  Transaction T3 query      → Check: xmin < T3 < xmax? → Visible!
-```
-
-### Tại sao sau khi insert ngay rồi query lại cần Heap Fetch?
-
-```
-Bạn vừa insert rows → xmin = transaction ID vừa rồi
-Postgres không "tin" index 100%:
-  "Rows này có thể có transactions đang chạy không thấy được"
-  → Phải go to HEAP để check visibility (xmin/xmax)
-  → Không thể dùng Index Only Scan!
-```
-
-### Giải pháp: VACUUM
+**Câu trả lời ngắn: không có đơn vị.** Nó là một số quy ước, chỉ dùng để **so sánh hai kế hoạch với nhau**.
 
 ```sql
--- Sau khi insert nhiều data, chạy VACUUM
-VACUUM ANALYZE your_table;
+EXPLAIN SELECT * FROM grades WHERE g = 50;
+```
 
--- VACUUM làm gì?
--- → Đi qua tất cả rows, check visibility
--- → Nếu row visible với TẤT CẢ transactions → Mark as "all_visible"
--- → Lưu thông tin này trong Visibility Map
+```text
+Seq Scan on grades  (cost=0.00..17709.00 rows=9867 width=19)
+                          ▲     ▲          ▲         ▲
+                          │     │          │         └ kích thước dòng ước tính (byte)
+                          │     │          └ số dòng ước tính
+                          │     └ chi phí để lấy dòng CUỐI CÙNG
+                          └ chi phí để lấy dòng ĐẦU TIÊN
+```
 
--- Sau đó:
-EXPLAIN ANALYZE SELECT count(*) FROM your_table WHERE grade = 1;
--- → Bây giờ sẽ dùng Index Only Scan!
--- → Không cần check heap nữa vì Visibility Map đảm bảo rồi
+Con số đó được tính từ năm hằng số:
+
+```sql
+SELECT name, setting FROM pg_settings WHERE name LIKE '%_cost';
+```
+
+```text
+         name         | setting
+----------------------+---------
+ cpu_index_tuple_cost | 0.005
+ cpu_operator_cost    | 0.0025
+ cpu_tuple_cost       | 0.01
+ random_page_cost     | 4
+ seq_page_cost        | 1        ← MOC CHUAN = 1,0
+```
+
+Mọi thứ được quy về "đọc tuần tự một page = 1,0". Kiểm chứng bằng tay:
+
+```text
+   Bang grades:  8.334 page,  1.000.000 dong
+
+   Chi phi Seq Scan = (so_page × seq_page_cost)
+                    + (so_dong × cpu_tuple_cost)
+                    + (so_dong × cpu_operator_cost)     ← danh gia dieu kien WHERE
+                    = 8.334 × 1,0
+                    + 1.000.000 × 0,01
+                    + 1.000.000 × 0,0025
+                    = 8.334 + 10.000 + 2.500
+                    = 20.834
+```
+
+Con số PostgreSQL đưa ra là 17.709 — sai lệch vì `cpu_operator_cost` chỉ áp cho các phép so sánh thật sự chạy. Nhưng bậc độ lớn khớp, và cách tính là như vậy.
+
+Ba hệ quả thực dụng:
+
+```text
+   1. "cost = 5.000" KHONG cho biet nhanh hay cham.
+      Chi co nghia khi so voi cost cua ke hoach KHAC cho CUNG cau truy van.
+
+   2. cost KHONG ti le tuyen tinh voi thoi gian.
+      Ke hoach cost 100 co the cham hon ke hoach cost 1.000
+      neu du lieu nam san trong cache.
+
+   3. `random_page_cost = 4` la mac dinh tu THOI O DIA QUAY.
+      Tren SSD nen dat 1,1 — neu khong optimizer bo index qua som.
 ```
 
 ---
 
-## Q2: Tôi đã có Index nhưng tại sao vẫn dùng Full Table Scan?
+## Câu 2 — Có index rồi, sao database vẫn quét toàn bảng?
 
-**Tình huống:** Karate tạo bảng với 7 rows, có PRIMARY KEY index, nhưng query vẫn dùng Sequential Scan.
+Đây là câu hỏi được hỏi nhiều nhất. Có **bảy** nguyên nhân, xếp theo tần suất thực tế.
 
-### Lý do: Bảng quá nhỏ
+### Nguyên nhân 1 — Quét toàn bảng thật sự rẻ hơn
 
-```
-PostgreSQL planner logic:
-  
-  Option A - Dùng B+Tree index:
-    Traverse root → intermediate nodes → leaf
-    → 3-5 I/O operations
-    → Fetch tuple from heap
-    → 4-6 I/O total
-  
-  Option B - Sequential Scan:
-    Bảng 7 rows → 1 page (< 8KB)
-    → 1 I/O total!
-  
-  → Option B rẻ hơn 4-6 lần!
-  → Planner chọn Sequential Scan (đúng!)
+```sql
+EXPLAIN SELECT * FROM grades WHERE g < 90;   -- khop ~90% bang
 ```
 
-### Vấn đề: Statistics outdated sau khi insert nhiều data
-
+```text
+Seq Scan on grades  (cost=0.00..17709.00 rows=899471 width=19)
+  Filter: (g < 90)
 ```
-Scenario:
-  1. Bảng nhỏ → Planner cache: "Sequential Scan là best"
-  2. Insert 3 triệu rows...
-  3. Query ngay → Planner VẪN nghĩ bảng nhỏ!
-  4. Sequential scan qua 3M rows → Rất chậm!
 
-Nguyên nhân:
-  → Statistics chưa update sau khi insert
-  → Planner không biết bảng đã to hơn
+```text
+   Lay 90% so dong bang index nghia la:
+     • tra index 900.000 lan
+     • nhay vao heap 900.000 lan (I/O NGAU NHIEN)
+   → dat hon nhieu so voi doc thang 8.334 page tuan tu
 
-Fix:
+   → Optimizer chon DUNG. Diem lat thuong o 5-20% so dong.
+```
+
+### Nguyên nhân 2 — Thống kê cũ
+
+```sql
+EXPLAIN ANALYZE SELECT * FROM fresh WHERE val = 500;
+```
+
+```text
+Seq Scan on fresh  (cost=0.00..42.55 rows=1 ...) (actual ... rows=5000 ...)
+                                    ▲                              ▲
+                              uoc luong 1                    thuc te 5.000
+```
+
+Lệch 5.000 lần nghĩa là thống kê sai. Chữa: `ANALYZE fresh;` — chi tiết ở [phase-4 bài 3](../phase-4/03-composite-index-va-optimizer.md).
+
+### Nguyên nhân 3 — Hàm hoặc ép kiểu trên cột
+
+```sql
+WHERE UPPER(name) = 'AN'      -- index tren `name` KHONG dung duoc
+WHERE id::TEXT = '5'          -- ep kieu la mot ham
+WHERE created_at::DATE = ...  -- ep kieu
+WHERE age + 1 = 30            -- bieu thuc
+```
+
+Chữa: index trên biểu thức, hoặc viết lại điều kiện:
+
+```sql
+CREATE INDEX ON users (UPPER(name));
+-- hoac
+WHERE created_at >= '2026-08-01' AND created_at < '2026-08-02'   -- thay vi ::DATE
+```
+
+### Nguyên nhân 4 — Vi phạm quy tắc tiền tố trái
+
+```sql
+CREATE INDEX idx ON t (a, b);
+WHERE b = 5                   -- KHONG dung duoc
+```
+
+### Nguyên nhân 5 — Kiểu dữ liệu không khớp
+
+```sql
+-- cot user_id la BIGINT, tham so gui vao la TEXT
+WHERE user_id = '42'          -- co the phai ep kieu → mat index
+```
+
+Đây là bẫy phổ biến với ORM cấu hình sai. Kiểm tra bằng cách xem `EXPLAIN` có hiện `::text` hay không.
+
+### Nguyên nhân 6 — Bảng quá nhỏ
+
+```sql
+EXPLAIN SELECT * FROM small_table WHERE id = 5;   -- bang co 50 dong
+```
+
+```text
+Seq Scan on small_table  (cost=0.00..1.62 rows=1 width=8)
+```
+
+Bảng 50 dòng nằm trong **một page**. Đọc một page rẻ hơn tra index (cũng phải đọc ít nhất một page index rồi mới vào bảng). Optimizer chọn đúng.
+
+### Nguyên nhân 7 — `OR` không có index cho mọi vế
+
+```sql
+CREATE INDEX ON t (a);
+WHERE a = 1 OR b = 2          -- b khong co index → phai quet toan bang
+```
+
+Chữa: tạo index cho `b`, khi đó `BitmapOr` hoạt động.
+
+### Quy trình chẩn đoán
+
+```sql
+-- 1. Ep dung index de so sanh
+SET enable_seqscan = off;
+EXPLAIN ANALYZE <cau truy van>;
+RESET enable_seqscan;
+```
+
+```text
+   Ep index NHANH HON  →  optimizer sai → nghi thong ke hoac random_page_cost
+   Ep index CHAM HON   →  optimizer dung → tim cach khac
 ```
 
 ```sql
--- Cập nhật statistics
-ANALYZE your_table;
--- hoặc
-VACUUM ANALYZE your_table;
+-- 2. So uoc luong voi thuc te
+EXPLAIN ANALYZE <cau truy van>;   -- xem rows= o hai cho co lech nhieu khong
 
--- Oracle:
-EXEC DBMS_STATS.GATHER_TABLE_STATS('schema', 'table');
-
--- SQL Server:
-UPDATE STATISTICS your_table;
-```
-
-### Rule of thumb
-
-```
-Sau khi insert lượng lớn data:
-  1. Chạy VACUUM ANALYZE (PostgreSQL)
-  2. Đợi auto-vacuum chạy
-  3. Hoặc manually trigger statistics update
-
-Khi nào dùng index vs sequential scan?
-  → Nhỏ (< vài nghìn rows): Sequential scan thường nhanh hơn
-  → Lớn (hàng triệu rows) + chọn lọc cao (< 5% rows): Index scan
-  → Lớn + chọn lọc thấp (> 20% rows): Sequential scan
+-- 3. Kiem tra dinh dang dieu kien
+EXPLAIN (VERBOSE) <cau truy van>; -- xem co ep kieu an khong
 ```
 
 ---
 
-## Q3: Chi phí (Cost) trong PostgreSQL EXPLAIN là gì?
-
-**Câu hỏi:** `cost=0.00..4.25` trong EXPLAIN có nghĩa là 4.25 milliseconds không?
-
-### Trả lời: KHÔNG phải milliseconds!
-
-```
-cost=0.00..4.25 có nghĩa:
-  - 0.00 = Chi phí để lấy ROW ĐẦU TIÊN (startup cost)
-  - 4.25 = Chi phí để lấy ROW CUỐI CÙNG (total cost)
-  
-  Đơn vị: Không có đơn vị thực tế!
-  → Đây là "cost units" = combination of:
-    - Disk I/O cost (số page reads)
-    - CPU cost (số operations)
-    - Không liên quan đến thời gian thực
-```
+## Câu 3 — Index trên cột có nhiều giá trị trùng hoạt động thế nào?
 
 ```sql
--- Ví dụ 1: Không có ORDER BY
-EXPLAIN SELECT * FROM grades;
--- → cost=0.00..21.00
--- Startup cost = 0 (không cần chuẩn bị gì)
--- Total cost = 21 (đọc tất cả rows)
-
--- Ví dụ 2: Có ORDER BY
-EXPLAIN SELECT * FROM grades ORDER BY g;
--- → cost=70.00..73.00
--- Startup cost = 70 (phải sort TẤT CẢ trước khi trả row đầu tiên!)
--- Total cost = 73 (sau khi sort, lấy tất cả)
-
-→ ORDER BY tăng startup cost đáng kể!
-→ Với LIMIT 10 sau ORDER BY: Bạn trả startup cost nhưng chỉ lấy 10 rows
-→ Chi phí thực tế phụ thuộc vào cách sử dụng kết quả
+-- Cot `status` chi co 3 gia tri, tren bang 10 trieu dong
+CREATE INDEX idx_status ON orders (status);
 ```
 
-### Khi nào startup cost quan trọng?
+Trong B+Tree, các khoá trùng nhau **nằm liền nhau ở tầng lá**:
 
+```text
+   LA CUA INDEX:
+   ['cancelled' → ctid1] ['cancelled' → ctid2] ... ['paid' → ctid1] ...
+    └──────── 2 trieu muc ────────┘             └── 7 trieu muc ──┘
 ```
-LIMIT clause:
-  SELECT * FROM grades ORDER BY g LIMIT 10;
-  → Startup cost = 70 (vẫn phải sort trước)
-  → Nhưng chỉ fetch 10 rows sau đó
-  
-  Optimization: Nếu có index trên g → Sort free!
-  → Startup cost = 0 (đọc index theo thứ tự)
 
-Pagination:
-  → OFFSET pagination: Mỗi trang vẫn trả startup cost
-  → Keyset pagination: Không trả startup cost
+```text
+   → Tim WHERE status = 'paid' → nhay toi khoi 'paid', doc lien tiep
+   → Nhung khoi do co 7 TRIEU muc
+   → Doc het roi nhay vao heap 7 trieu lan → dat hon quet toan bang
+   → Optimizer se BO INDEX
+```
+
+**Từ PostgreSQL 13, có khử trùng lặp** giúp index nhỏ đi rất nhiều:
+
+```text
+   TRUOC PG13                        TU PG13
+   ══════════                        ═══════
+   'paid' → ctid1                    'paid' → [ctid1, ctid2, ctid3, ...]
+   'paid' → ctid2                            ▲ MOT muc, danh sach con tro
+   'paid' → ctid3
+   ... × 7 trieu
+
+   Index: 380 MB                     Index: 92 MB    → NHO HON 4,1 LAN
+```
+
+Nhưng nhỏ hơn **không** làm nó hữu ích hơn cho `WHERE status = 'paid'` — vẫn phải nhảy 7 triệu lần vào heap.
+
+Ba cách làm nó hữu ích:
+
+```sql
+-- 1. INDEX BO PHAN — chi danh index phan hiem
+CREATE INDEX idx_pending ON orders (created_at) WHERE status = 'pending';
+--    'pending' chi co 5.000 dong → index 200 KB thay vi 380 MB
+
+-- 2. INDEX COMPOSITE — dat cot chon loc THAP truoc cot chon loc CAO
+CREATE INDEX idx_status_user ON orders (status, user_id);
+--    WHERE status='paid' AND user_id=42 → rat hieu qua
+
+-- 3. COVERING INDEX — tranh nhay vao heap
+CREATE INDEX idx_status_cover ON orders (status) INCLUDE (total, created_at);
+```
+
+Cách 1 là cách hiệu quả nhất và ít được dùng nhất.
+
+---
+
+## Câu 4 — Có nên xoá index không dùng đến?
+
+**Có** — nhưng phải kiểm tra ba điều trước.
+
+```sql
+SELECT s.relname                                    AS bang,
+       s.indexrelname                               AS ten_index,
+       s.idx_scan                                   AS so_lan_dung,
+       pg_size_pretty(pg_relation_size(s.indexrelid)) AS kich_thuoc,
+       (SELECT stats_reset FROM pg_stat_database WHERE datname = current_database())
+                                                    AS thong_ke_tu_luc
+FROM pg_stat_user_indexes s
+JOIN pg_index i ON i.indexrelid = s.indexrelid
+WHERE s.idx_scan = 0
+  AND NOT i.indisunique                              -- ← bo qua UNIQUE
+  AND NOT i.indisprimary                             -- ← bo qua PRIMARY KEY
+ORDER BY pg_relation_size(s.indexrelid) DESC;
+```
+
+### Ba điều phải kiểm tra
+
+```text
+   1. THONG KE DA DU DAI CHUA?
+      Neu vua pg_stat_reset() tuan truoc thi bao cao cuoi quy CHUA CHAY.
+      → Quan sat it nhat MOT CHU KY NGHIEP VU day du (thuong 1 quy).
+
+   2. NO CO DANG THUC THI RANG BUOC KHONG?
+      Index cua PRIMARY KEY va UNIQUE luon hien idx_scan = 0
+      nhung TUYET DOI khong duoc xoa.
+      → Cau truy van tren da loc san.
+
+   3. NO CO DUOC DUNG TREN REPLICA KHONG?
+      pg_stat_user_indexes la thong ke CUA TUNG MAY.
+      Index khong dung tren primary co the dang phuc vu bao cao tren replica.
+      → Phai kiem tra TREN MOI MAY.
+```
+
+Điều thứ ba là cái bẫy nguy hiểm nhất, và rất ít người kiểm tra.
+
+### Cách xoá an toàn
+
+```sql
+-- 1. Vo hieu hoa TRUOC (PG chua ho tro truc tiep, dung meo nay)
+UPDATE pg_index SET indisvalid = false
+WHERE indexrelid = 'idx_nghi_ngo'::regclass;
+-- → planner khong dung nua, nhung index VAN duoc cap nhat
+-- → theo doi vai ngay xem co truy van nao cham di khong
+
+-- 2. Neu on, xoa that
+DROP INDEX CONCURRENTLY idx_nghi_ngo;
+```
+
+Mẹo ở bước 1 rất hữu dụng: nó cho phép **quay lại tức thì** nếu có gì đó chậm đi, thay vì phải dựng lại index mất hàng giờ.
+
+### Cái giá của index không dùng
+
+```text
+   • Ton dia
+   • Lam cham MOI lenh INSERT/UPDATE/DELETE
+   • Tranh cho voi index huu ich trong buffer pool
+   • Lam cham VACUUM va REINDEX
+   • Lam CHAM VIEC LAP KE HOACH — planner phai xet no moi lan
+```
+
+Dòng cuối ít người biết: mỗi index thừa làm tăng thời gian lập kế hoạch của **mọi** truy vấn trên bảng đó.
+
+---
+
+## Câu 5 — Bitmap Index Scan có giá trị gì?
+
+Nó lấp khoảng trống giữa `Index Scan` và `Seq Scan`:
+
+```text
+   RAT IT DONG          VUA PHAI              RAT NHIEU DONG
+   (< ~1%)              (1-20%)               (> ~20%)
+   ─────────            ────────              ──────────────
+   Index Scan           Bitmap Scan           Seq Scan
+   nhay tung dong       gom truoc roi doc     doc thang toan bang
+                        moi page MOT LAN
+```
+
+Ba giá trị cụ thể:
+
+```text
+   1. MOI PAGE CHI DOC MOT LAN
+      Index Scan: 10.000 muc khop → co the doc mot page 50 lan
+      Bitmap    : gom lai → moi page doc dung mot lan
+
+   2. DOC HEAP THEO THU TU TANG DAN
+      → gan voi I/O TUAN TU, tan dung duoc doc truoc cua he dieu hanh
+
+   3. KET HOP NHIEU INDEX (BitmapAnd / BitmapOr)
+      → hai index rieng le HOP TAC duoc voi nhau
+      → khong can tao index composite cho moi to hop
+```
+
+Chi tiết cơ chế ở [phase-4 bài 2](../phase-4/02-index-scan-va-covering-index.md).
+
+Chú ý dòng `lossy` trong kế hoạch:
+
+```text
+  Heap Blocks: exact=1204  lossy=41882
+```
+
+`lossy` nghĩa là `work_mem` không đủ, bitmap chỉ nhớ được **page nào** chứ không nhớ **dòng nào** → bước `Recheck Cond` phải kiểm tra mọi dòng trong các page đó. Thấy `lossy` lớn thì tăng `work_mem`.
+
+---
+
+## Câu 6 — `EXPLAIN ANALYZE` thật sự làm gì?
+
+```text
+   EXPLAIN            →  chi LAP KE HOACH, KHONG chay.  An toan.
+   EXPLAIN ANALYZE    →  CHAY THAT, do thoi gian tung buoc.
+```
+
+**Cảnh báo nghiêm túc:**
+
+```sql
+EXPLAIN ANALYZE DELETE FROM users WHERE id > 100;   -- XOA THAT!
+EXPLAIN ANALYZE UPDATE orders SET status = 'x';     -- SUA THAT!
+```
+
+Cách an toàn:
+
+```sql
+BEGIN;
+EXPLAIN ANALYZE DELETE FROM users WHERE id > 100;
+ROLLBACK;
+```
+
+### Các tuỳ chọn đáng dùng
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS, WAL, FORMAT TEXT) <query>;
+```
+
+| Tuỳ chọn | Cho biết |
+|---|---|
+| `BUFFERS` | **Số page đọc** từ cache và từ đĩa ← quan trọng nhất |
+| `VERBOSE` | Danh sách cột đầy đủ, tên schema, ép kiểu ẩn |
+| `SETTINGS` | Các tham số **khác mặc định** đang ảnh hưởng kế hoạch |
+| `WAL` | Lượng WAL sinh ra (chỉ với lệnh ghi) |
+| `TIMING OFF` | Bỏ đo thời gian từng nút — giảm chi phí đo |
+
+### Chi phí của việc đo
+
+```text
+   `EXPLAIN ANALYZE` GOI DONG HO CHO MOI DONG o MOI NUT.
+   Voi truy van tra ve hang trieu dong, chi phi do co the
+   lam truy van CHAM HON 2-3 LAN so voi khi chay binh thuong.
+
+   → `Execution Time` trong EXPLAIN ANALYZE co the CAO HON thuc te.
+```
+
+Cách đo chính xác hơn:
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, BUFFERS) <query>;
+-- van biet so dong va so page, nhung khong do thoi gian tung nut
+```
+
+### Ba con số cần đọc
+
+```text
+   1. rows= UOC LUONG  vs  rows= THUC TE
+      Lech > 100 lan → thong ke sai
+
+   2. Buffers: shared hit=X read=Y
+      `read` cao → dang cham dia; `hit` cao → dang trong cache
+
+   3. Rows Removed by Filter
+      Cao → dang doc roi vut di → thieu index
 ```
 
 ---
 
-## Q4: Tại sao database đọc Pages thay vì Rows?
+## Câu 7 — `CREATE INDEX` có chặn ghi không? Vì sao?
 
-**Câu hỏi:** Database đã biết vị trí row trong index, tại sao phải fetch cả page?
+**Có**, và lý do rất căn bản:
 
-### Giới hạn của phần cứng
+```text
+   Index duoc dung tu MOT ANH CHUP du lieu.
+   Neu co dong moi chen vao giua chung, index se THIEU dong do.
+   Index thieu du lieu con TE HON khong co index — truy van tra ve SAI.
 
-```
-Hard Drive / SSD:
-  Không có "byte addressability"!
-  Chỉ đọc được theo BLOCKS (thường 4KB, 8KB, 16KB)
-  
-  Bạn muốn 1 byte ở position 1024?
-  → Phải đọc block chứa byte đó
-  → Block kích thước 4KB = 4096 bytes
-  → Đọc 4096 bytes, lấy 1 byte cần
-  
-  → Không thể "chỉ đọc row"!
-
-PostgreSQL page size = 8KB
-  → Mỗi lần đọc từ disk = 8KB minimum
-  → Nhiều rows fit trong 1 page → Amortize I/O cost
+   → Phai chan ghi de dam bao anh chup khong doi.
 ```
 
-### Row size không cố định
+`CREATE INDEX` giữ khoá `SHARE`: cho đọc, chặn mọi lệnh ghi. Với bảng 400 triệu dòng, đó là hàng chục phút.
 
-```
-Tại sao không biết vị trí chính xác của row?
-  → Row size KHÔNG cố định (variable length)!
-  
-  Table schema:
-    id:    4 bytes (fixed)
-    name:  VARCHAR(255) - 1 đến 255 bytes (variable!)
-    email: TEXT - variable
-    notes: TEXT - variable (có thể NULL = 0 bytes)
-  
-  Row 1: id=1, name="Al", email="al@x.com", notes=NULL
-    → Tổng: 4 + 2 + 8 + 0 = 14 bytes
-    
-  Row 2: id=2, name="Bob Smith Johnson", email="bob@longdomain.com", notes="very long note..."
-    → Tổng: 4 + 17 + 18 + 100 = 139 bytes
-  
-  → Không thể biết trước offset của Row 3!
+Cách tránh:
+
+```sql
+CREATE INDEX CONCURRENTLY idx_x ON t (col);
 ```
 
-### Tuple ID không phải byte offset
+Nó quét bảng **hai lần** (lần hai để nhặt các dòng đã đổi trong lúc lần một chạy), nên chậm hơn 2-3 lần — nhưng không chặn ghi.
 
+**Cái bẫy lớn nhất**: `CONCURRENTLY` vẫn cần một khoá ngắn, và nếu có transaction dài đang mở thì nó phải chờ — và trong lúc chờ, **nó chặn cả hàng đợi phía sau**. Chi tiết đầy đủ và quy trình an toàn ở [phase-4 bài 5](../phase-4/05-create-index-concurrently-va-best-practices.md).
+
+---
+
+## Câu 8 — Vì sao database đọc theo page thay vì theo dòng?
+
+Ba lý do, xếp theo mức độ căn bản:
+
+```text
+   1. PHAN CUNG KHONG CHO DOC MOT BYTE
+      SSD doc theo trang 4-16 KB; HDD doc theo cung 512 byte.
+      Doc 1 byte va doc 8.192 byte ton GAN NHU BANG NHAU.
+      → doc le la lang phi thuan tuy
+
+   2. TINH CUC BO
+      Du lieu duoc doc cung nhau thuong nam canh nhau.
+      Doc ca page = "khuyen mai" cac dong ke ben, thuong dung tiep ngay.
+
+   3. QUAN LY BO NHO DEM DON GIAN
+      Buffer pool quan ly cac o CO DINH 8 KB → cap phat va thay the
+      cuc ky don gian, khong bao gio phan manh.
+      Neu quan ly theo dong (kich thuoc thay doi) → bai toan phan manh
+      giong het slab allocator o [phase-13 bai 2].
 ```
-B+Tree leaf node chứa:
-  (salary_value) → (page_number, slot_number)
-  
-  Ví dụ: (50000) → (page=7, slot=3)
-  
-  Nghĩa là:
-    → Fetch page 7 từ disk
-    → Trong page 7, tìm slot 3
-    → Slot = offset trong page (được lưu trong page header)
-  
-  Không phải byte offset trong file!
-  → Phải đọc cả page để tìm slot 3
+
+Hệ quả thực tế đã phân tích ở [phase-3 bài 1](../phase-3/01-page-heap-va-io.md): **`SELECT name` vẫn đọc đủ số page như `SELECT *`** — vì bạn không thể yêu cầu đĩa đưa cho riêng một cột.
+
+---
+
+## Câu 9 — Vì sao `Index Scan` mà không phải `Index Only Scan`?
+
+```sql
+EXPLAIN ANALYZE SELECT g FROM grades WHERE g = 50;
+```
+
+```text
+Index Scan using idx_grades_g on grades      ← tai sao khong "Only"?
+```
+
+Có **ba** nguyên nhân.
+
+### Nguyên nhân 1 — Cột cần không nằm trong index
+
+```sql
+SELECT g, name FROM grades WHERE g = 50;   -- `name` khong co trong index
+```
+
+Chữa: `CREATE INDEX ... (g) INCLUDE (name)`.
+
+### Nguyên nhân 2 — Visibility map chưa được cập nhật
+
+Đây là nguyên nhân hay bị bỏ sót nhất:
+
+```sql
+EXPLAIN (ANALYZE) SELECT g FROM grades WHERE g BETWEEN 95 AND 100;
+```
+
+```text
+Index Only Scan using idx_grades_g on grades
+  Heap Fetches: 29882           ← van dang cham heap!
+```
+
+```text
+   Index KHONG luu thong tin MVCC — no khong biet dong nao con song.
+   PostgreSQL dua vao VISIBILITY MAP: mot bit moi page,
+   bat len nghia la "moi dong trong page nay deu nhin thay duoc".
+
+   CHI `VACUUM` moi bat bit do.
+   → Vua ghi nhieu → nhieu page chua co bit → phai vao heap kiem tra
+```
+
+```sql
+VACUUM grades;   -- → Heap Fetches tro ve 0
+```
+
+`Heap Fetches` lớn kéo dài là dấu hiệu **autovacuum không theo kịp tốc độ ghi**.
+
+### Nguyên nhân 3 — Điều kiện dùng cột không có trong index
+
+```sql
+CREATE INDEX ON grades (g);
+SELECT g FROM grades WHERE g = 50 AND name LIKE 'a%';
+--                                    ▲ phai vao heap de kiem tra
 ```
 
 ---
 
-## Q5: Có nên Drop Indexes không dùng không?
+## Bảng tra nhanh: triệu chứng → nguyên nhân
 
-**Câu hỏi:** Index không được dùng có nên xóa không?
+| Thấy trong `EXPLAIN` | Nghĩa là | Làm gì |
+|---|---|---|
+| `Seq Scan` trên bảng lớn | Không dùng index | Xem 7 nguyên nhân ở Câu 2 |
+| `rows=` ước lượng lệch > 100× thực tế | Thống kê sai | `ANALYZE`; tăng `SET STATISTICS` |
+| `Rows Removed by Filter` lớn | Đọc rồi mới vứt | Thiếu index cho điều kiện đó |
+| `Filter:` thay vì `Index Cond:` | Điều kiện không đẩy được vào index | Sửa index hoặc sửa điều kiện |
+| `Heap Fetches` lớn | Visibility map cũ | `VACUUM`; chỉnh autovacuum |
+| `lossy=` lớn trong bitmap | `work_mem` không đủ | Tăng `work_mem` |
+| `Sort Method: external merge Disk` | Sắp xếp tràn ra đĩa | Tăng `work_mem`; hoặc index cho `ORDER BY` |
+| `Nested Loop` với `loops=` rất lớn | Ước lượng sai bên trong | `ANALYZE`; xem lại điều kiện `JOIN` |
+| `Buffers: read=` rất cao | Đang chạm đĩa nhiều | Tăng `shared_buffers`; hoặc giảm dữ liệu phải đọc |
 
-### Chi phí duy trì Index
+## Tóm tắt bài 1
 
-```
-Mỗi index = Cấu trúc B+Tree riêng biệt
-  → Mỗi INSERT: Cập nhật TẤT CẢ indexes
-  → Mỗi UPDATE (column có index): Cập nhật index đó
-  → Mỗi DELETE: Cập nhật TẤT CẢ indexes
-  
-  10 indexes trên 1 bảng:
-    INSERT 1 row → 10 index updates!
-    → Write throughput giảm đáng kể
-    → Disk space tăng
-    → Buffer pool bị chia cho nhiều index pages
-```
+- **`cost` không có đơn vị** — nó quy về "đọc tuần tự một page = 1,0", và chỉ có nghĩa khi **so hai kế hoạch của cùng một truy vấn**.
+- Có **bảy nguyên nhân** khiến index bị bỏ qua, và nguyên nhân phổ biến nhất là **quét toàn bảng thật sự rẻ hơn** — optimizer chọn đúng.
+- Chẩn đoán bằng `SET enable_seqscan = off` rồi **so thời gian thật**: nhanh hơn nghĩa là optimizer sai (nghi thống kê hoặc `random_page_cost`); chậm hơn nghĩa là optimizer đúng.
+- Index trên cột nhiều giá trị trùng: **khử trùng lặp (PG13) làm nó nhỏ hơn 4 lần nhưng không hữu ích hơn**. Cách hiệu quả nhất là **index bộ phận**.
+- Xoá index không dùng phải kiểm tra ba điều: thống kê đã đủ một chu kỳ nghiệp vụ chưa, nó có đang thực thi ràng buộc không, và **nó có được dùng trên replica không** — điều thứ ba là cái bẫy nguy hiểm nhất.
+- Mẹo `UPDATE pg_index SET indisvalid = false` cho phép **vô hiệu hoá index để thử trước khi xoá**, và quay lại tức thì nếu có gì chậm đi.
+- **`EXPLAIN ANALYZE` chạy thật** — luôn bọc lệnh ghi trong `BEGIN`/`ROLLBACK`. Và chi phí đo có thể làm truy vấn chậm hơn 2-3 lần; dùng `TIMING OFF` khi cần con số chính xác.
+- `CREATE INDEX` chặn ghi vì **index thiếu dữ liệu còn tệ hơn không có index** — nó khiến truy vấn trả về kết quả sai.
+- **`Heap Fetches` lớn trong `Index Only Scan`** là dấu hiệu visibility map chưa được `VACUUM` cập nhật — nguyên nhân bị bỏ sót nhiều nhất.
 
-### Covering Index (Non-key columns)
-
-```sql
--- Tình huống: Query thường dùng
-SELECT name, email FROM users WHERE age > 25;
-
--- Index đơn giản trên age:
-CREATE INDEX idx_age ON users(age);
-→ Tìm được rows qua index
-→ Nhưng vẫn phải fetch heap để lấy name, email
-→ Random I/O trên heap!
-
--- Covering index (non-key columns):
-CREATE INDEX idx_age_covering ON users(age) INCLUDE (name, email);
-→ age = search key
-→ name, email = stored in leaf nodes (non-key columns)
-→ Index Only Scan! Không cần fetch heap!
-→ Nhanh hơn nhiều cho query này
-```
-
-### Khi nào nên drop index?
-
-```
-✅ Drop khi:
-  - Index không được dùng trong bất kỳ query nào
-  - Index chỉ được dùng trong query rất hiếm (cân nhắc)
-  - Table write-heavy và index gây bottleneck
-  - Index bị outdated (business logic thay đổi)
-
-❌ Không drop khi:
-  - Index dùng trong nhiều queries
-  - Table read-heavy
-  - Index enforce uniqueness (PRIMARY KEY, UNIQUE)
-  - Bạn không chắc (hỏi DBA!)
-
-Cách kiểm tra index usage:
-```
-
-```sql
--- PostgreSQL: Index usage statistics
-SELECT indexrelname, idx_scan, idx_tup_read, idx_tup_fetch
-FROM pg_stat_user_indexes
-WHERE relname = 'your_table'
-ORDER BY idx_scan;
-
--- Index với idx_scan = 0 → Không bao giờ được dùng!
--- Cân nhắc drop
-```
-
----
-
-## Q6: CREATE INDEX có block writes không?
-
-### Standard CREATE INDEX
-
-```sql
--- Cách thông thường - Block tất cả writes!
-CREATE INDEX idx_salary ON employees(salary);
-```
-
-```
-Cách database xử lý:
-  1. Acquire AccessExclusiveLock trên table
-  2. Đọc TẤT CẢ rows, build B+Tree
-  3. Commit index vào catalog
-  4. Release lock
-
-Trong thời gian build:
-  → Mọi INSERT, UPDATE, DELETE đều BỊ BLOCK
-  → Chỉ SELECT được phép
-  → Trên bảng lớn: Có thể mất hàng giờ!
-  → Production: Không thể dùng cách này!
-```
-
-### CREATE INDEX CONCURRENTLY (PostgreSQL)
-
-```sql
--- An toàn cho production - Không block writes
-CREATE INDEX CONCURRENTLY idx_salary ON employees(salary);
-```
-
-```
-Cách database xử lý:
-  Phase 1: Take note of WAL sequence number (LSN1)
-           Scan toàn bộ table, build index (không lock writes)
-           Concurrent writes tiếp tục...
-  
-  Phase 2: Note new LSN2
-           Apply diff (LSN1 → LSN2) lên index
-           Concurrent writes tiếp tục...
-  
-  Phase 3: Check if more changes after LSN2?
-           Repeat until LSN is stable
-  
-  Final:   Lock briefly → Commit to catalog → Release
-           Index now available!
-
-Trade-offs:
-  ✅ Không block writes
-  ❌ Khoảng 2x chậm hơn standard CREATE INDEX
-  ❌ Nếu có lỗi giữa chừng: Index "invalid", phải drop và tạo lại
-  ❌ Không thể trong transaction block
-```
-
-```sql
--- Kiểm tra index status
-SELECT indexname, indisvalid 
-FROM pg_indexes 
-JOIN pg_index ON indexrelid = (SELECT oid FROM pg_class WHERE relname = indexname)
-WHERE tablename = 'employees';
--- indisvalid = false → Index invalid, cần drop và tạo lại
-```
-
----
-
-**Tiếp theo:** 02-hoi-dap-transactions-connections-va-misc.md →
+**Bài kế tiếp** → [Bài 2: Hỏi & Đáp - Transactions, Connections và Miscellaneous](02-hoi-dap-transactions-connections-va-misc.md)
