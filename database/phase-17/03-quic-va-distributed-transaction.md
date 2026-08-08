@@ -13,7 +13,7 @@ Hai chủ đề trong bài này đều là câu hỏi mở — loại câu hỏi
 ```text
    ┌─ NGAN XEP CU (HTTP/2) ────┐    ┌─ NGAN XEP MOI (HTTP/3) ───┐
    │  HTTP/2                   │    │  HTTP/3                   │
-   │  TLS 1.3                  │    │  QUIC  (da bao gom TLS 1.3)│
+   │  TLS 1.3                  │    │  QUIC  (đã bao gồm TLS 1.3)│
    │  TCP                      │    │  UDP                      │
    │  IP                       │    │  IP                       │
    └───────────────────────────┘    └───────────────────────────┘
@@ -22,10 +22,10 @@ Hai chủ đề trong bài này đều là câu hỏi mở — loại câu hỏi
 Bốn đặc tính chính:
 
 ```text
-   1. CHAY TREN UDP, tu cai dat lai do tin cay
-   2. TLS 1.3 GAN LIEN — khong tach roi duoc
-   3. NHIEU LUONG DOC LAP trong mot ket noi
-   4. DI CHUYEN KET NOI — doi mang van giu duoc ket noi
+   1. CHẠY TRÊN UDP, tự cài đặt lại độ tin cậy
+   2. TLS 1.3 GẮN LIỀN — không tách rời được
+   3. NHIỀU LUỒNG ĐỘC LẬP trong một kết nối
+   4. DI CHUYỂN KẾT NỐI — đổi mạng vẫn giữ được kết nối
 ```
 
 ## Ba điểm mạnh
@@ -35,8 +35,8 @@ Bốn đặc tính chính:
 ```text
    TCP + TLS 1.3                     QUIC
    ═════════════                     ════
-   SYN → SYN-ACK → ACK   (1 RTT)     ClientHello + du lieu  (1 RTT)
-   ClientHello → ...     (1 RTT)     hoac 0-RTT neu da noi truoc do
+   SYN → SYN-ACK → ACK   (1 RTT)     ClientHello + dữ liệu  (1 RTT)
+   ClientHello → ...     (1 RTT)     hoặc 0-RTT nếu đã nối trước đó
    ────────────────────────────
    TONG: 2 RTT                       TONG: 1 RTT, hoac 0-RTT
 ```
@@ -46,26 +46,26 @@ Trong mạng LAN (~0,5 ms RTT) thì tiết kiệm 0,5 ms — không đáng kể.
 ### Không còn nghẽn đầu dòng
 
 ```text
-   TCP: mot goi tin MAT → MOI luong phia sau PHAI CHO no duoc gui lai
+   TCP: một gói tin MẤT → MỌI luồng phía sau PHẢI CHỜ nó được gửi lại
         ┌─────────────────────────────────────────┐
-        │ [truy van A] [MAT] [truy van B] [truy van C] │
+        │ [truy vấn A] [MẤT] [truy vấn B] [truy vấn C] │
         │                ▲                        │
-        │        B va C BI CHAN du chung khong loi │
+        │        B và C BỊ CHẶN dù chúng không lỗi │
         └─────────────────────────────────────────┘
 
-   QUIC: moi luong DOC LAP
-        → chi luong co goi mat bi anh huong
-        → B va C van di tiep
+   QUIC: mỗi luồng ĐỘC LẬP
+        → chỉ luồng có gói mất bị ảnh hưởng
+        → B và C vẫn đi tiếp
 ```
 
 ### Di chuyển kết nối
 
 ```text
-   TCP: ket noi = (IP nguon, cong nguon, IP dich, cong dich)
+   TCP: kết nối = (IP nguồn, cổng nguồn, IP đích, cổng đích)
         → doi WiFi sang 4G → doi IP → KET NOI DUT
 
-   QUIC: ket noi = mot ID doc lap voi dia chi mang
-        → doi mang → ket noi VAN SONG
+   QUIC: kết nối = một ID độc lập với địa chỉ mạng
+        → đổi mạng → kết nối VẪN SỐNG
 ```
 
 ## Bốn lý do database chưa dùng QUIC
@@ -73,39 +73,39 @@ Trong mạng LAN (~0,5 ms RTT) thì tiết kiệm 0,5 ms — không đáng kể.
 ### 1. Database thường ở trong mạng nội bộ
 
 ```text
-   Uu the cua QUIC lon nhat khi:
-     • do tre cao      → mang noi bo: 0,1-1 ms
-     • mat goi nhieu   → mang noi bo: gan nhu 0%
-     • doi mang        → may chu khong doi mang
+   Ưu thế của QUIC lớn nhất khi:
+     • độ trễ cao      → mạng nội bộ: 0,1-1 ms
+     • mất gói nhiều   → mạng nội bộ: gần như 0%
+     • đổi mạng        → máy chủ không đổi mạng
 
-   → BA uu the chinh deu KHONG AP DUNG cho ket noi ung dung ↔ database
+   → BA ưu thế chính đều KHÔNG ÁP DỤNG cho kết nối ứng dụng ↔ database
 ```
 
 ### 2. Connection pool đã xoá bỏ chi phí bắt tay
 
 ```text
-   QUIC tiet kiem 1 RTT khi MO ket noi.
-   Nhung voi pool, ket noi duoc mo MOT LAN roi dung cho hang trieu truy van.
-   → tiet kiem 1 ms mot lan, chia cho 1 trieu truy van → ~0
+   QUIC tiết kiệm 1 RTT khi MỞ kết nối.
+   Nhưng với pool, kết nối được mở MỘT LẦN rồi dùng cho hàng triệu truy vấn.
+   → tiết kiệm 1 ms một lần, chia cho 1 triệu truy vấn → ~0
 ```
 
 ### 3. Nghẽn đầu dòng ít xảy ra
 
 ```text
-   Giao thuc database thuong TUAN TU tren mot ket noi:
-     gui truy van → cho ket qua → gui truy van tiep
+   Giao thức database thường TUẦN TỰ trên một kết nối:
+     gửi truy vấn → chờ kết quả → gửi truy vấn tiếp
 
-   → khong co nhieu luong song song de bi chan
-   → tru khi dung pipelining, ma it thu vien lam
+   → không có nhiều luồng song song để bị chặn
+   → trừ khi dùng pipelining, mà ít thư viện làm
 ```
 
 ### 4. UDP hay bị chặn và không được tối ưu
 
 ```text
-   • Nhieu tuong lua doanh nghiep chan UDP tren cac cong khong chuan
-   • NAT xu ly UDP kem hon TCP
-   • Ngan xep TCP da duoc toi uu HANG CHUC NAM trong nhan he dieu hanh
-   • QUIC chay o KHONG GIAN NGUOI DUNG → ton CPU hon dang ke
+   • Nhiều tường lửa doanh nghiệp chặn UDP trên các cổng không chuẩn
+   • NAT xử lý UDP kém hơn TCP
+   • Ngăn xếp TCP đã được tối ưu HÀNG CHỤC NĂM trong nhân hệ điều hành
+   • QUIC chạy ở KHÔNG GIAN NGƯỜI DÙNG → tốn CPU hơn đáng kể
 ```
 
 Điểm cuối đáng nói: các phép đo cho thấy QUIC tốn CPU **gấp 2-3 lần** TCP cho cùng lượng dữ liệu, vì xử lý gói tin diễn ra ở không gian người dùng thay vì trong nhân.
@@ -113,13 +113,13 @@ Trong mạng LAN (~0,5 ms RTT) thì tiết kiệm 0,5 ms — không đáng kể.
 ## Khi nào QUIC sẽ có ý nghĩa cho database
 
 ```text
-   ✔ Database o BIEN, client la thiet bi di dong
-     → di chuyen ket noi rat co gia tri
-   ✔ Nhan ban XUYEN LUC DIA
-     → do tre cao, mat goi nhieu → chong nghen dau dong co ich
-   ✔ Database-as-a-Service qua Internet cong khai
-     → bat tay 0-RTT giup ket noi ngan
-   ✔ Kien truc serverless (ket noi rat ngan, rat nhieu)
+   ✔ Database ở BIÊN, client là thiết bị di động
+     → di chuyển kết nối rất có giá trị
+   ✔ Nhân bản XUYÊN LỤC ĐỊA
+     → độ trễ cao, mất gói nhiều → chống nghẽn đầu dòng có ích
+   ✔ Database-as-a-Service qua Internet công khai
+     → bắt tay 0-RTT giúp kết nối ngắn
+   ✔ Kiến trúc serverless (kết nối rất ngắn, rất nhiều)
 ```
 
 Một số hệ đã thử nghiệm: **MongoDB** đã thảo luận về QUIC, **Cloudflare** dùng QUIC cho một số dịch vụ dữ liệu ở biên.
@@ -129,18 +129,18 @@ Một số hệ đã thử nghiệm: **MongoDB** đã thảo luận về QUIC, *
 Đây mới là phần đáng giá nhất của phần I:
 
 ```text
-   Khi danh gia mot cong nghe moi, hoi ba cau:
+   Khi đánh giá một công nghệ mới, hỏi ba câu:
 
    1. NO GIAI QUYET VAN DE GI?
-      QUIC: do tre cao, mat goi, doi mang
+      QUIC: độ trễ cao, mất gói, đổi mạng
 
    2. TOI CO VAN DE DO KHONG?
-      Ung dung ↔ database trong mang noi bo: KHONG
+      Ứng dụng ↔ database trong mạng nội bộ: KHÔNG
 
    3. NO DEM LAI VAN DE GI MOI?
-      Ton CPU hon, UDP bi chan, ngan xep chua truong thanh
+      Tốn CPU hơn, UDP bị chặn, ngăn xếp chưa trưởng thành
 
-   → Neu cau 2 tra loi "khong" thi cau 1 va 3 khong con quan trong.
+   → Nếu câu 2 trả lời "không" thì câu 1 và 3 không còn quan trọng.
 ```
 
 Rất nhiều quyết định công nghệ sai bắt đầu bằng việc bỏ qua câu hỏi số 2.
@@ -157,8 +157,8 @@ Rất nhiều quyết định công nghệ sai bắt đầu bằng việc bỏ q
    Database A:  UPDATE accounts SET balance = balance - 100 WHERE id = 1;
    Database B:  UPDATE accounts SET balance = balance + 100 WHERE id = 2;
 
-   Khong co COMMIT chung.
-   ⚡ A thanh cong, B that bai → TIEN BOC HOI
+   Không có COMMIT chung.
+   ⚡ A thành công, B thất bại → TIỀN BỐC HƠI
 ```
 
 Đây chính là tình huống "100 nghìn bốc hơi" ở [phase-2 bài 1](../phase-2/01-acid-va-transaction.md), nhưng lần này **database không cứu được** vì đó là hai tiến trình độc lập.
@@ -174,12 +174,12 @@ Rất nhiều quyết định công nghệ sai bắt đầu bằng việc bỏ q
 
    PHA 2 — COMMIT
    ┌───────────────┐
-   │ DIEU PHOI VIEN│ ──"commit"──────────▶ Database A  → xong (mo khoa)
-   │               │ ──"commit"──────────▶ Database B  → xong (mo khoa)
+   │ ĐIỀU PHỐI VIÊN│ ──"commit"──────────▶ Database A  → xong (mở khoá)
+   │               │ ──"commit"──────────▶ Database B  → xong (mở khoá)
    └───────────────┘
 
-   Neu BAT KY ai tra loi "khong san sang" o pha 1
-     → dieu phoi vien gui "huy" cho TAT CA
+   Nếu BẤT KỲ ai trả lời "không sẵn sàng" ở pha 1
+     → điều phối viên gửi "huỷ" cho TẤT CẢ
 ```
 
 Trong PostgreSQL:
@@ -190,14 +190,14 @@ BEGIN;
 UPDATE accounts SET balance = balance - 100 WHERE id = 1;
 PREPARE TRANSACTION 'chuyen_tien_12345';    -- ← pha 1: san sang, GIU KHOA
 
--- Sau khi MOI database deu san sang:
+-- Sau khi MỌI database đều sẵn sàng:
 COMMIT PREPARED 'chuyen_tien_12345';        -- ← pha 2
 -- hoac
 ROLLBACK PREPARED 'chuyen_tien_12345';
 ```
 
 ```sql
--- Xem cac transaction dang o trang thai "chuan bi"
+-- Xem các transaction đang ở trạng thái "chuẩn bị"
 SELECT gid, prepared, owner, database FROM pg_prepared_xacts;
 ```
 
@@ -205,31 +205,31 @@ Cần bật trước:
 
 ```sql
 ALTER SYSTEM SET max_prepared_transactions = 100;   -- mac dinh 0 = TAT
--- can khoi dong lai
+-- cần khởi động lại
 ```
 
 ### Ba vấn đề nghiêm trọng của 2PC
 
 ```text
    1. GIAO THUC CHAN
-      Neu DIEU PHOI VIEN CHET giua pha 1 va pha 2:
-        → cac database VAN GIU KHOA
-        → cho MAI MAI cho lenh khong bao gio toi
-        → phai co nguoi vao go bang tay
+      Nếu ĐIỀU PHỐI VIÊN CHẾT giữa pha 1 và pha 2:
+        → các database VẪN GIỮ KHOÁ
+        → chờ MÃI MÃI cho lệnh không bao giờ tới
+        → phải có người vào gỡ bằng tay
 
    2. GIU KHOA LAU
-      Khoa duoc giu suot CA HAI pha, cong do tre mang.
-      → thong luong sup khi co tranh chap
+      Khoá được giữ suốt CẢ HAI pha, cộng độ trễ mạng.
+      → thông lượng sụp khi có tranh chấp
 
    3. CHAN VACUUM
-      Trong PostgreSQL, transaction "chuan bi" bi bo quen
-      CHAN `VACUUM` don rac tren TOAN BO database — VO THOI HAN.
+      Trong PostgreSQL, transaction "chuẩn bị" bị bỏ quên
+      CHẶN `VACUUM` dọn rác trên TOÀN BỘ database — VÔ THỜI HẠN.
 ```
 
 Vấn đề thứ ba là lý do PostgreSQL **tắt `max_prepared_transactions` theo mặc định**. Một transaction chuẩn bị sẵn bị bỏ quên là một quả bom hẹn giờ.
 
 ```sql
--- Canh bao BAT BUOC phai co neu dung 2PC
+-- Cảnh báo BẮT BUỘC phải có nếu dùng 2PC
 SELECT gid, prepared, age(now(), prepared) AS bao_lau
 FROM pg_prepared_xacts WHERE age(now(), prepared) > interval '5 minutes';
 ```
@@ -242,14 +242,14 @@ Thay vì một transaction phân tán, dùng **chuỗi transaction cục bộ**,
    THUAN LOI
    ─────────
    Buoc 1: tru tien tai khoan A     (transaction cuc bo, COMMIT)
-   Buoc 2: cong tien tai khoan B    (transaction cuc bo, COMMIT)
+   Bước 2: cộng tiền tài khoản B    (transaction cục bộ, COMMIT)
    → xong
 
    CO LOI O BUOC 2
    ───────────────
-   Buoc 1: tru tien A               ✔ da commit
-   Buoc 2: cong tien B              ✘ that bai
-   Buoc 1': BU TRU — cong tra tien cho A
+   Bước 1: trừ tiền A               ✔ đã commit
+   Bước 2: cộng tiền B              ✘ thất bại
+   Bước 1': BÙ TRỪ — cộng trả tiền cho A
 ```
 
 ```python
@@ -274,16 +274,16 @@ Dòng cuối rất quan trọng: **bước bù trừ cũng có thể thất bạ
 
 ```text
    ✘ KHONG CO CO LAP
-     Giua buoc 1 va buoc 2, nguoi khac NHIN THAY trang thai nua voi:
-       tai khoan A da bi tru, tai khoan B chua duoc cong
-       → tong tien trong he thong TAM THOI SAI
+     Giữa bước 1 và bước 2, người khác NHÌN THẤY trạng thái nửa vời:
+       tài khoản A đã bị trừ, tài khoản B chưa được cộng
+       → tổng tiền trong hệ thống TẠM THỜI SAI
 
    ✘ Buoc bu tru KHONG PHAI LA ROLLBACK THAT
-     "Da gui email xac nhan" → khong bu tru duoc
-     → chi gui duoc email thu hai xin loi
+     "Đã gửi email xác nhận" → không bù trừ được
+     → chỉ gửi được email thứ hai xin lỗi
 
    ✘ Do phuc tap chuyen sang UNG DUNG
-     Phai tu viet moi buoc bu tru, hang doi thu lai, theo doi trang thai
+     Phải tự viết mọi bước bù trừ, hàng đợi thử lại, theo dõi trạng thái
 ```
 
 Điểm "không có cô lập" đáng nhấn mạnh: Saga cho **tính nguyên tử cuối cùng** nhưng **không cho tính cô lập**. Với nghiệp vụ mà trạng thái trung gian nhìn thấy được là chấp nhận được (đặt vé, xử lý đơn hàng), nó ổn. Với nghiệp vụ kế toán, nó không ổn.
@@ -294,16 +294,16 @@ Dòng cuối rất quan trọng: **bước bù trừ cũng có thể thất bạ
 
 ```text
    1. GOM DU LIEU LIEN QUAN VAO CUNG MOT DATABASE
-      → transaction cuc bo, ACID day du, khong can gi them
-      → chinh la "nhom cung vi tri" o [phase-7 bai 1]
+      → transaction cục bộ, ACID đầy đủ, không cần gì thêm
+      → chính là "nhóm cùng vị trí" ở [phase-7 bài 1]
 
    2. HOP THU DI (transactional outbox)
-      Ghi du lieu VA su kien trong CUNG transaction cuc bo;
-      mot tien trinh rieng doc bang su kien roi gui di.
-      → dam bao "ghi du lieu" va "gui su kien" khong bao gio lech nhau
+      Ghi dữ liệu VÀ sự kiện trong CÙNG transaction cục bộ;
+      một tiến trình riêng đọc bảng sự kiện rồi gửi đi.
+      → đảm bảo "ghi dữ liệu" và "gửi sự kiện" không bao giờ lệch nhau
 
    3. CHAP NHAN NHAT QUAN CUOI CUNG
-      Voi rat nhieu nghiep vu, tre vai giay la chap nhan duoc.
+      Với rất nhiều nghiệp vụ, trễ vài giây là chấp nhận được.
 ```
 
 ### Mẫu hộp thư đi — chi tiết
@@ -313,28 +313,28 @@ BEGIN;
   UPDATE accounts SET balance = balance - 100 WHERE id = 1;
   INSERT INTO outbox (loai, payload, created_at)
   VALUES ('chuyen_tien', '{"tu":1,"sang":2,"so_tien":100}', now());
-COMMIT;    -- ← MOT transaction cuc bo, ACID day du
+COMMIT;    -- ← MỘT transaction cục bộ, ACID đầy đủ
 ```
 
 ```python
-# Tien trinh rieng doc outbox va gui di
+# Tiến trình riêng đọc outbox và gửi đi
 while True:
     rows = db.query("""SELECT id, payload FROM outbox
                         WHERE sent_at IS NULL
                         ORDER BY id LIMIT 100
                         FOR UPDATE SKIP LOCKED""")
     for r in rows:
-        gui_su_kien(r['payload'])       # phai BAT BIEN truoc lap lai
+        gui_su_kien(r['payload'])       # phải BẤT BIẾN trước lặp lại
         db.execute("UPDATE outbox SET sent_at = now() WHERE id = %s", (r['id'],))
     db.commit()
 ```
 
 ```text
    VI SAO MAU NAY DUNG:
-     • Ghi du lieu va ghi su kien nam trong CUNG transaction
-       → khong the co "da tru tien nhung chua ghi su kien"
-     • Tien trinh gui co the chay lai an toan (SKIP LOCKED + idempotent)
-     • Khong can 2PC, khong can dieu phoi vien
+     • Ghi dữ liệu và ghi sự kiện nằm trong CÙNG transaction
+       → không thể có "đã trừ tiền nhưng chưa ghi sự kiện"
+     • Tiến trình gửi có thể chạy lại an toàn (SKIP LOCKED + idempotent)
+     • Không cần 2PC, không cần điều phối viên
 ```
 
 Đây là mẫu được dùng rộng rãi nhất trong kiến trúc microservice hiện đại, và nó thay thế được phần lớn nhu cầu 2PC.
@@ -354,13 +354,13 @@ while True:
 ## Ba hệ giải quyết sẵn
 
 ```text
-   • Google Spanner   — dong ho nguyen tu (TrueTime) → transaction phan tan that
-   • CockroachDB      — Raft + 2PC toi uu, tuong thich PostgreSQL
-   • YugabyteDB       — tuong tu, tuong thich PostgreSQL cao hon
-   • FoundationDB     — transaction phan tan lam nen cho cac he khac
+   • Google Spanner   — đồng hồ nguyên tử (TrueTime) → transaction phân tán thật
+   • CockroachDB      — Raft + 2PC tối ưu, tương thích PostgreSQL
+   • YugabyteDB       — tương tự, tương thích PostgreSQL cao hơn
+   • FoundationDB     — transaction phân tán làm nền cho các hệ khác
 
-   → Neu THAT SU can transaction phan tan manh,
-     dung mot he DA GIAI QUYET no, dung tu viet 2PC.
+   → Nếu THẬT SỰ cần transaction phân tán mạnh,
+     dùng một hệ ĐÃ GIẢI QUYẾT nó, đừng tự viết 2PC.
 ```
 
 ## Bẫy thường gặp

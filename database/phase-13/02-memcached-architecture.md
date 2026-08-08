@@ -4,15 +4,15 @@ Memcached ra đời năm 2003 cho LiveJournal, và hai mươi năm sau vẫn ch�
 
 ```text
    MEMCACHED KHONG CO:
-     ✘ Luu xuong dia         ✘ Nhan ban
-     ✘ Kieu du lieu          ✘ Transaction
-     ✘ Truy van              ✘ Xac thuc manh
-     ✘ Cum tich hop san      ✘ Bien co / thong bao
+     ✘ Lưu xuống đĩa         ✘ Nhân bản
+     ✘ Kiểu dữ liệu          ✘ Transaction
+     ✘ Truy vấn              ✘ Xác thực mạnh
+     ✘ Cụm tích hợp sẵn      ✘ Biến cố / thông báo
 
    MEMCACHED CO:
-     ✔ get / set / delete tren chuoi byte
+     ✔ get / set / delete trên chuỗi byte
      ✔ TTL
-     ✔ Nhanh, on dinh, du doan duoc
+     ✔ Nhanh, ổn định, dự đoán được
 ```
 
 Danh sách "không có" dài hơn danh sách "có". Đó là chủ đích thiết kế, và bài này giải thích vì sao nó lại thành công.
@@ -48,17 +48,17 @@ client = HashClient([
     ('memcd2', 11211),
     ('memcd3', 11211),
 ])
-client.set('user:42', 'du lieu')     # thu vien tu chon may
+client.set('user:42', 'du lieu')     # thư viện tự chọn máy
 ```
 
 Lợi ích của thiết kế này:
 
 ```text
-   ✔ Khong co diem chet don
-   ✔ Them may = them dung luong TUYEN TINH, khong can cau hinh gi
-   ✔ Mot may chet → chi mat 1/N cache, cac may khac khong biet
-   ✔ Khong co chi phi dong bo
-   ✔ Van hanh cuc ky don gian
+   ✔ Không có điểm chết đơn
+   ✔ Thêm máy = thêm dung lượng TUYẾN TÍNH, không cần cấu hình gì
+   ✔ Một máy chết → chỉ mất 1/N cache, các máy khác không biết
+   ✔ Không có chi phí đồng bộ
+   ✔ Vận hành cực kỳ đơn giản
 ```
 
 ---
@@ -70,14 +70,14 @@ Lợi ích của thiết kế này:
 ### Vấn đề: phân mảnh bộ nhớ
 
 ```text
-   Neu dung malloc/free thong thuong:
+   Nếu dùng malloc/free thông thường:
      cap 100 byte, giai phong
      cap 340 byte, giai phong
      cap  27 byte, giai phong
      ...
-   → bo nho day cac lo trong kich thuoc le
-   → cap mot khoi 500 byte → khong co lo nao vua
-   → PHAN MANH: con nhieu bo nho trong nhung KHONG DUNG DUOC
+   → bộ nhớ đầy các lỗ trống kích thước lẻ
+   → cấp một khối 500 byte → không có lỗ nào vừa
+   → PHÂN MẢNH: còn nhiều bộ nhớ trống nhưng KHÔNG DÙNG ĐƯỢC
 ```
 
 Với một tiến trình chạy nhiều tháng và cấp phát hàng tỷ lần, phân mảnh sẽ giết nó.
@@ -86,7 +86,7 @@ Với một tiến trình chạy nhiều tháng và cấp phát hàng tỷ lần
 
 ```text
    BO NHO CHIA THANH CAC TRANG (SLAB PAGE) 1 MB
-   Moi trang thuoc mot LOP (slab class) voi kich thuoc chunk CO DINH
+   Mỗi trang thuộc một LỚP (slab class) với kích thước chunk CỐ ĐỊNH
 
    Lop 1  : chunk  96 byte  →  1 MB / 96   = 10.922 chunk
    Lop 2  : chunk 120 byte  →  1 MB / 120  =  8.738 chunk
@@ -95,21 +95,21 @@ Với một tiến trình chạy nhiều tháng và cấp phát hàng tỷ lần
    ...
    Lop 42 : chunk 1 MB
 
-   He so tang mac dinh: 1,25 (moi lop lon hon lop truoc 25%)
+   Hệ số tăng mặc định: 1,25 (mỗi lớp lớn hơn lớp trước 25%)
 ```
 
 Lưu một giá trị:
 
 ```text
    Gia tri 130 byte
-     → tim lop nho nhat VUA: lop 3 (152 byte)
-     → dat vao mot chunk trong cua lop 3
+     → tìm lớp nhỏ nhất VỪA: lớp 3 (152 byte)
+     → đặt vào một chunk trống của lớp 3
      → LANG PHI 22 byte  (152 − 130)
 ```
 
 ```text
    ƯU:  cap phat va giai phong O(1), KHONG BAO GIO phan manh
-   NHUOC: lang phi trung binh ~10-25% (goi la "slab overhead")
+   NHƯỢC: lãng phí trung bình ~10-25% (gọi là "slab overhead")
 ```
 
 ### Cái bẫy: nghẽn lớp (slab calcification)
@@ -117,20 +117,20 @@ Lưu một giá trị:
 Đây là vấn đề vận hành thật, và rất khó chẩn đoán nếu không biết trước:
 
 ```text
-   Ngay 1: ung dung luu toan gia tri ~100 byte
-           → gan het bo nho duoc CAP CHO LOP 2
+   Ngày 1: ứng dụng lưu toàn giá trị ~100 byte
+           → gần hết bộ nhớ được CẤP CHO LỚP 2
            ┌────────────────────────────────────┐
            │ Lop 2: 60 GB   Lop 8: 4 GB         │
            └────────────────────────────────────┘
 
-   Ngay 30: ung dung doi sang luu gia tri ~5 KB (lop 8)
-           → lop 8 DAY, bat dau xoa du lieu (evict)
-           → lop 2 con 60 GB TRONG nhung KHONG TRA LAI DUOC
+   Ngày 30: ứng dụng đổi sang lưu giá trị ~5 KB (lớp 8)
+           → lớp 8 ĐẦY, bắt đầu xoá dữ liệu (evict)
+           → lớp 2 còn 60 GB TRỐNG nhưng KHÔNG TRẢ LẠI ĐƯỢC
            ┌────────────────────────────────────┐
-           │ Lop 2: 60 GB (trong!)  Lop 8: DAY  │
+           │ Lớp 2: 60 GB (trống!)  Lớp 8: ĐẦY  │
            └────────────────────────────────────┘
 
-   → Ti le trung cache SUP, du con 60 GB RAM chua dung
+   → Tỉ lệ trúng cache SỤP, dù còn 60 GB RAM chưa dùng
 ```
 
 Chẩn đoán:
@@ -141,12 +141,12 @@ echo "stats slabs" | nc localhost 11211
 
 ```text
 STAT 2:chunk_size 120
-STAT 2:total_pages 61440          ← 60 GB cap cho lop 2
-STAT 2:used_chunks 1204           ← ma chi dung 1.204 chunk!
+STAT 2:total_pages 61440          ← 60 GB cấp cho lớp 2
+STAT 2:used_chunks 1204           ← mà chỉ dùng 1.204 chunk!
 STAT 8:chunk_size 5920
 STAT 8:total_pages 4096
 STAT 8:used_chunks 177234
-STAT 8:evicted 8842119            ← lop 8 dang xoa dien cuong
+STAT 8:evicted 8842119            ← lớp 8 đang xoá điên cuồng
 ```
 
 Hai con số cạnh nhau — lớp 2 gần như rỗng, lớp 8 đang xoá hàng triệu mục — là dấu hiệu rõ ràng.
@@ -154,10 +154,10 @@ Hai con số cạnh nhau — lớp 2 gần như rỗng, lớp 8 đang xoá hàng
 Cách chữa:
 
 ```bash
-# Bat tai phan bo trang giua cac lop (mac dinh TAT o ban cu)
+# Bật tái phân bổ trang giữa các lớp (mặc định TẮT ở bản cũ)
 memcached -o slab_reassign,slab_automove=1
 
-# Hoac dieu chinh he so tang de it lop hon, moi lop rong hon
+# Hoặc điều chỉnh hệ số tăng để ít lớp hơn, mỗi lớp rộng hơn
 memcached -f 1.5
 ```
 
@@ -168,23 +168,23 @@ Từ Memcached 1.5, `slab_automove` bật mặc định — nhưng rất nhiều
 ## LRU và cách xoá mục
 
 ```text
-   MOI LOP co danh sach LRU RIENG.
-   Khi lop day → xoa muc IT DUOC DUNG NHAT trong LOP DO.
+   MỖI LỚP có danh sách LRU RIÊNG.
+   Khi lớp đầy → xoá mục ÍT ĐƯỢC DÙNG NHẤT trong LỚP ĐÓ.
 
-   → Muc bi xoa KHONG PHAI muc it dung nhat toan cuc,
-     ma la muc it dung nhat TRONG LOP KICH THUOC DO.
+   → Mục bị xoá KHÔNG PHẢI mục ít dùng nhất toàn cục,
+     mà là mục ít dùng nhất TRONG LỚP KÍCH THƯỚC ĐÓ.
 ```
 
 Memcached 1.5 cải tiến thành **LRU phân đoạn**:
 
 ```text
-   HOT   →  muc vua duoc truy cap
-   WARM  →  muc duoc truy cap lai it nhat mot lan
-   COLD  →  ung vien bi xoa
-   TEMP  →  muc co TTL rat ngan, khong len HOT
+   HOT   →  mục vừa được truy cập
+   WARM  →  mục được truy cập lại ít nhất một lần
+   COLD  →  ứng viên bị xoá
+   TEMP  →  mục có TTL rất ngắn, không lên HOT
 
-   Mot luong nen di chuyen muc giua cac doan
-   → tranh duoc hien tuong mot dot quet lam troi sach cache
+   Một luồng nền di chuyển mục giữa các đoạn
+   → tránh được hiện tượng một đợt quét làm trôi sạch cache
 ```
 
 Đoạn `TEMP` giải quyết một vấn đề thực tế: các mục có TTL 5 giây không nên đẩy các mục có TTL 1 giờ ra khỏi cache.
@@ -198,12 +198,12 @@ Memcached 1.5 cải tiến thành **LRU phân đoạn**:
 ```text
    MEMCACHED                          REDIS
    ═════════                          ═════
-   NHIEU LUONG (mac dinh 4)           MOT LUONG cho lenh
-   → tan dung nhieu loi CPU           → don gian, khong can khoa
-   → can khoa noi bo                  → nhung gioi han o 1 loi
+   NHIỀU LUỒNG (mặc định 4)           MỘT LUỒNG cho lệnh
+   → tận dụng nhiều lõi CPU           → đơn giản, không cần khoá
+   → cần khoá nội bộ                  → nhưng giới hạn ở 1 lõi
 
-   → Memcached thuong cho THONG LUONG cao hon tren may nhieu loi
-     cho cac thao tac get/set thuan tuy
+   → Memcached thường cho THÔNG LƯỢNG cao hơn trên máy nhiều lõi
+     cho các thao tác get/set thuần tuý
 ```
 
 ```bash
@@ -215,16 +215,16 @@ Số luồng quá cao gây tranh chấp khoá nội bộ; con số thực dụng
 ### Hai giao thức
 
 ```text
-   VAN BAN (de go loi, de doc)
+   VĂN BẢN (dễ gỡ lỗi, dễ đọc)
      set user:42 0 3600 5\r\n
      hello\r\n
      → STORED
 
-   NHI PHAN (nho hon, nhanh hon)
+   NHỊ PHÂN (nhỏ hơn, nhanh hơn)
      header 24 byte + payload
 
-   → Nen dung nhi phan trong san pham that.
-     Van ban rat tien de chan doan bang telnet/nc.
+   → Nên dùng nhị phân trong sản phẩm thật.
+     Văn bản rất tiện để chẩn đoán bằng telnet/nc.
 ```
 
 Chẩn đoán nhanh không cần công cụ gì:
@@ -259,18 +259,18 @@ echo "stats items" | nc localhost 11211
 
 ```text
    ✔ Chi can cache thuan tuy: get/set/delete
-   ✔ Gia tri co kich thuoc TUONG TU nhau (tranh nghen lop)
-   ✔ May nhieu loi, can thong luong toi da
-   ✔ Muon van hanh don gian nhat co the
-   ✔ Cache RAT LON (hang tram GB) — Memcached xu ly tot
+   ✔ Giá trị có kích thước TƯƠNG TỰ nhau (tránh nghẽn lớp)
+   ✔ Máy nhiều lõi, cần thông lượng tối đa
+   ✔ Muốn vận hành đơn giản nhất có thể
+   ✔ Cache RẤT LỚN (hàng trăm GB) — Memcached xử lý tốt
 ```
 
 ### Khi nào Redis tốt hơn
 
 ```text
-   ✔ Can cau truc du lieu (hang doi, bang xep hang, tap hop)
-   ✔ Can du lieu song sot qua khoi dong lai
-   ✔ Can nhan ban / san sang cao
+   ✔ Cần cấu trúc dữ liệu (hàng đợi, bảng xếp hạng, tập hợp)
+   ✔ Cần dữ liệu sống sót qua khởi động lại
+   ✔ Cần nhân bản / sẵn sàng cao
    ✔ Can pub/sub hoac stream
    ✔ Can thao tac nguyen tu phuc tap (script Lua)
 ```
@@ -302,25 +302,25 @@ def lay_nguoi_dung(user_id):
 ### Chống dồn dập khi cache hết hạn
 
 ```text
-   VAN DE: mot khoa NONG het han
-     → 10.000 request cung luc thay cache truot
-     → 10.000 truy van dong thoi xuong database
+   VẤN ĐỀ: một khoá NÓNG hết hạn
+     → 10.000 request cùng lúc thấy cache trượt
+     → 10.000 truy vấn đồng thời xuống database
      → DATABASE SUP
 
-   Goi la "dam dong sam set" (thundering herd) hoac "cache stampede"
+   Gọi là "đám đông sấm sét" (thundering herd) hoặc "cache stampede"
 ```
 
 Ba cách chống:
 
 ```python
-# CACH 1 — Khoa: chi MOT request duoc di lay du lieu
+# CÁCH 1 — Khoá: chỉ MỘT request được đi lấy dữ liệu
 def lay_co_khoa(khoa, ham_lay, ttl=3600):
     du_lieu = mc.get(khoa)
     if du_lieu is not None:
         return json.loads(du_lieu)
 
     khoa_lock = f'lock:{khoa}'
-    if mc.add(khoa_lock, '1', expire=10):        # `add` chi thanh cong neu CHUA CO
+    if mc.add(khoa_lock, '1', expire=10):        # `add` chỉ thành công nếu CHƯA CÓ
         try:
             du_lieu = ham_lay()
             mc.set(khoa, json.dumps(du_lieu), expire=ttl)
@@ -328,19 +328,19 @@ def lay_co_khoa(khoa, ham_lay, ttl=3600):
         finally:
             mc.delete(khoa_lock)
     else:
-        time.sleep(0.05)                          # nguoi khac dang lay, cho chut
+        time.sleep(0.05)                          # người khác đang lấy, chờ chút
         return lay_co_khoa(khoa, ham_lay, ttl)
 ```
 
 ```python
-# CACH 2 — Lam moi som: lam moi TRUOC khi het han
+# CÁCH 2 — Làm mới sớm: làm mới TRƯỚC khi hết hạn
 def lay_lam_moi_som(khoa, ham_lay, ttl=3600, som=300):
     goi = mc.get(khoa)
     if goi:
         d = json.loads(goi)
         if d['het_han'] - time.time() > som:
-            return d['gia_tri']                   # con xa han, dung luon
-        # sap het han → mot so request di lam moi, so con lai dung ban cu
+            return d['gia_tri']                   # còn xa hạn, dùng luôn
+        # sắp hết hạn → một số request đi làm mới, số còn lại dùng bản cũ
         if random.random() < 0.1:
             d['gia_tri'] = ham_lay()
             mc.set(khoa, json.dumps({'gia_tri': d['gia_tri'],
@@ -350,7 +350,7 @@ def lay_lam_moi_som(khoa, ham_lay, ttl=3600, som=300):
 ```
 
 ```python
-# CACH 3 — TTL co nhieu ngau nhien: khong de nhieu khoa het han cung luc
+# CÁCH 3 — TTL có nhiễu ngẫu nhiên: không để nhiều khoá hết hạn cùng lúc
 mc.set(khoa, du_lieu, expire=3600 + random.randint(0, 600))
 ```
 
@@ -360,10 +360,10 @@ Cách 3 rẻ nhất và nên áp dụng **mặc định** cho mọi khoá — n�
 
 ```text
    ┌──────────────────────────────────────────────┐
-   │  L1: bo nho trong tien trinh (LRU, ~10 MB)   │  ~0,001 ms
-   │      → khoa NONG NHAT, TTL rat ngan (5-30s)  │
+   │  L1: bộ nhớ trong tiến trình (LRU, ~10 MB)   │  ~0,001 ms
+   │      → khoá NÓNG NHẤT, TTL rất ngắn (5-30s)  │
    ├──────────────────────────────────────────────┤
-   │  L2: Memcached (chung, hang tram GB)         │  ~0,3 ms
+   │  L2: Memcached (chung, hàng trăm GB)         │  ~0,3 ms
    ├──────────────────────────────────────────────┤
    │  L3: Database                                │  ~5 ms
    └──────────────────────────────────────────────┘
@@ -389,11 +389,11 @@ STAT get_misses 4118822
    → ti le trung = 88.412.993 / (88.412.993 + 4.118.822) = 95,5%
 
 STAT evictions 12849
-   → so muc bi XOA vi het bo nho.  Tang deu = CAN THEM RAM
+   → số mục bị XOÁ vì hết bộ nhớ.  Tăng đều = CẦN THÊM RAM
 
 STAT bytes 61203847168
 STAT limit_maxbytes 68719476736
-   → 61,2 GB / 64 GB = 89% da dung
+   → 61,2 GB / 64 GB = 89% đã dùng
 
 STAT curr_connections 1842
 STAT threads 8
