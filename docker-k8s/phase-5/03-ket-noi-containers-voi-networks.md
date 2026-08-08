@@ -186,4 +186,92 @@ React Frontend:     CÓ publish (-p 3000:3000)
 
 ---
 
+## Quy tắc phân biệt: code chạy Ở ĐÂU
+
+Bẫy React ở trên không phải chuyện riêng của React. Nó là một quy tắc chung, và nắm được thì bạn không bao giờ mắc lại:
+
+```text
+   CÂU HỎI DUY NHẤT CẦN HỎI:
+   "Đoạn code này chạy trong CONTAINER, hay chạy trong TRÌNH DUYỆT?"
+
+   ┌──────────────────────────────────────────────────────────┐
+   │  Chạy trong CONTAINER                                     │
+   │  → gọi được TÊN CONTAINER                                 │
+   │                                                            │
+   │  • Node.js server (index.js, routes)                      │
+   │  • Next.js getServerSideProps, API routes                 │
+   │  • React SSR ở phía máy chủ                               │
+   │  • Câu lệnh kết nối database                              │
+   ├──────────────────────────────────────────────────────────┤
+   │  Chạy trong TRÌNH DUYỆT                                   │
+   │  → CHỈ gọi được localhost hoặc tên miền công khai         │
+   │                                                            │
+   │  • fetch/axios trong component React                      │
+   │  • Bất cứ gì trong thẻ <script>                           │
+   │  • Next.js code phía client (useEffect)                   │
+   └──────────────────────────────────────────────────────────┘
+```
+
+Điều gây nhầm lẫn: **cùng một dự án React có cả hai loại code**. Với Next.js thì thậm chí cùng một file có thể chứa cả hai:
+
+```javascript
+// Next.js — CÙNG MỘT FILE
+export async function getServerSideProps() {
+  // Chạy TRONG CONTAINER → dùng được tên container
+  const res = await fetch('http://backend:80/goals');
+  return { props: { goals: await res.json() } };
+}
+
+export default function Page({ goals }) {
+  useEffect(() => {
+    // Chạy TRONG TRÌNH DUYỆT → PHẢI dùng localhost hoặc tên miền
+    fetch('http://localhost:80/goals');
+  }, []);
+}
+```
+
+Cách kiểm tra nhanh khi nghi ngờ: mở tab **Network** của trình duyệt. Nếu bạn thấy request đó ở đó, nó chạy ở trình duyệt.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Triệu chứng | Cách xử lý |
+|---|---|---|
+| Dùng tên container trong code React | `ERR_NAME_NOT_RESOLVED` ở tab Network | Code trình duyệt phải gọi `localhost` hoặc tên miền công khai |
+| Sửa code backend mà không build lại image | Vẫn kết nối `localhost` như cũ | Code nằm trong image — phải `docker build` lại |
+| Quên `--network` cho một trong các container | `getaddrinfo ENOTFOUND mongodb` | Cả hai container phải cùng network |
+| Gọi cổng đã publish thay vì cổng thật | Backend gọi `mongodb:27017` đúng, nhưng nếu publish `-p 27018:27017` mà gọi `27018` thì hỏng | Trong network dùng **cổng bên trong** |
+| Vẫn publish cổng MongoDB sau khi đã có network | Database phơi ra ngoài không cần thiết | Bỏ `-p` cho MongoDB |
+| Thứ tự khởi động sai | Backend chết vì database chưa sẵn sàng | Docker không đảm bảo thứ tự — cần logic thử lại, hoặc `depends_on` + healthcheck ở [Phase 6](../phase-6/03-cau-hinh-services-chi-tiet.md) |
+
+Dòng cuối đáng lưu ý: **Docker không chờ database sẵn sàng rồi mới chạy backend**. Ngay cả `depends_on` của Compose cũng chỉ đảm bảo **thứ tự khởi động**, không đảm bảo dịch vụ đã **sẵn sàng nhận kết nối**. Cách đúng là để ứng dụng **tự thử lại**:
+
+```javascript
+async function ketNoiVoiThuLai(retries = 10) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await mongoose.connect(process.env.MONGODB_URI);
+    } catch (e) {
+      console.log(`Chưa kết nối được, thử lại sau 3 giây (${i + 1}/${retries})`);
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+  throw new Error('Không kết nối được database sau nhiều lần thử');
+}
+```
+
+---
+
+## Tóm tắt bài 3
+
+- Docker network cho phép container gọi nhau **bằng tên**, không cần đi vòng qua máy thật và không cần `-p`.
+- **Bẫy lớn nhất của phase này**: code React chạy ở **trình duyệt**, không chạy trong container — nên nó **không** phân giải được tên container.
+- Quy tắc để không bao giờ nhầm lại: hỏi **"đoạn code này chạy trong container hay trong trình duyệt?"**. Cùng một dự án Next.js có thể có cả hai loại trong **cùng một file**.
+- Kiểm tra nhanh: nếu request hiện ở tab **Network** của trình duyệt thì nó chạy ở trình duyệt.
+- Chỉ publish cổng cho thứ **trình duyệt cần gọi**. Database thì không.
+- **Docker không đảm bảo database sẵn sàng trước khi backend chạy.** Ứng dụng phải tự có logic thử lại.
+
+---
+
 **Bài kế tiếp** → [Bài 4: Data Persistence và Hot-Reload](04-persistence-va-hot-reload.md)

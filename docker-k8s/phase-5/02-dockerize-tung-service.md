@@ -162,4 +162,46 @@ Tất cả đang giao tiếp qua **localhost** (host machine). Bước tiếp th
 
 ---
 
+## Bẫy thường gặp
+
+| Bẫy | Triệu chứng | Cách xử lý |
+|---|---|---|
+| Backend dùng `mongodb://localhost:27017` | `ECONNREFUSED 127.0.0.1:27017` sau khi dockerize | `localhost` trong container là **chính container đó**. Dùng `host.docker.internal`, rồi sau đó là tên container |
+| **React container tự dừng ngay** | `docker ps` không thấy gì | React dev server cần TTY. Thêm **`-it`** |
+| Sửa code xong không thấy đổi | Trang vẫn nội dung cũ | Code nằm trong image từ lúc build. Phải **build lại** — hoặc dùng bind mount ở [bài 4](04-persistence-va-hot-reload.md) |
+| Publish cổng MongoDB ra ngoài ở production | **Database phơi ra Internet** | Chỉ publish trong lúc chưa dockerize xong backend; sau đó bỏ đi |
+| Quên `EXPOSE` rồi tưởng đó là lý do không truy cập được | — | `EXPOSE` chỉ là ghi chú. `-p` mới là thứ có tác dụng |
+| Build backend mà `node_modules` từ máy thật bị copy vào | Image phình, và có thể lỗi kiến trúc CPU | Thêm `node_modules` vào `.dockerignore` |
+| Ba container ba lệnh `docker run` dài dòng | Gõ sai một cờ là hỏng, khó chia sẻ cho đồng nghiệp | Đây chính là lý do có **Docker Compose** ([Phase 6](../phase-6/01-docker-compose-la-gi.md)) |
+
+### Vì sao React cần `-it` — giải thích ngắn
+
+```text
+   React dev server (webpack/vite) được thiết kế để chạy TƯƠNG TÁC:
+   nó chờ bạn nhấn phím ('r' để reload, 'q' để thoát).
+
+   Không có TTY (-t)  →  server thấy đầu vào đã đóng
+                      →  tự kết luận "không ai dùng nữa"
+                      →  THOÁT NGAY
+                      →  container Exited (0)
+
+   -i  giữ đầu vào chuẩn mở
+   -t  cấp một terminal giả
+   → cả hai cùng cần
+```
+
+Đây cũng là lý do lệnh chạy React phải là `docker run -it`, trong khi backend Node chỉ cần `docker run -d`.
+
+---
+
+## Tóm tắt bài 2
+
+- Dockerize theo thứ tự: **database trước** (dùng image chính thức, publish cổng tạm thời), rồi **backend**, rồi **frontend**.
+- **`localhost` trong container không phải máy thật.** Đây là lỗi đầu tiên ai cũng gặp khi chuyển backend vào container.
+- **React container tự thoát nếu thiếu `-it`** — vì dev server cần TTY. Không phải container hỏng.
+- Ở giai đoạn này mọi thứ còn đi vòng qua máy thật. Bài sau thay bằng **Docker network** để container gọi thẳng nhau.
+- Ba lệnh `docker run` dài dòng chính là động lực cho **Docker Compose** ở Phase 6.
+
+---
+
 **Bài kế tiếp** → [Bài 3: Kết nối Containers với Docker Networks](03-ket-noi-containers-voi-networks.md)

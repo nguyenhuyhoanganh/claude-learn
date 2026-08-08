@@ -152,4 +152,48 @@ docker run -d --name redis redis:alpine
 
 ---
 
+## Bẫy thường gặp
+
+| Bẫy | Triệu chứng | Cách xử lý |
+|---|---|---|
+| Dùng `localhost` trong container để gọi máy thật | `ECONNREFUSED 127.0.0.1:5432` | Trong container, `localhost` là **chính container đó**. Dùng `host.docker.internal` |
+| **`host.docker.internal` không chạy trên Linux** | Không phân giải được tên | Nó chỉ có sẵn trên macOS/Windows. Trên Linux phải thêm `--add-host=host.docker.internal:host-gateway` |
+| Dùng `localhost` để gọi container khác | Không kết nối được | Mỗi container có mạng riêng. Dùng **tên container** trong cùng network |
+| Gọi container khác bằng IP | Chạy được hôm nay, hỏng ngày mai | IP đổi mỗi lần container tạo lại. Dùng tên |
+| Quên `-p` rồi tưởng ứng dụng lỗi | Trình duyệt không vào được | Container chạy đúng, chỉ là chưa mở đường vào |
+| Tưởng phải `-p` để hai container nói chuyện với nhau | Mở cổng ra ngoài không cần thiết | Trong cùng network thì gọi thẳng nhau, **không cần `-p`** |
+| Container gọi Internet không được | Timeout | Hiếm khi do Docker. Kiểm tra DNS của máy chủ, tường lửa, hoặc proxy công ty |
+
+Dòng thứ hai đáng nói thêm vì nó làm nhiều dự án chạy trên Mac nhưng gãy trên Linux:
+
+```bash
+# macOS / Windows — dùng được ngay
+docker run --rm alpine ping -c1 host.docker.internal
+
+# Linux — phải khai báo tường minh
+docker run --rm --add-host=host.docker.internal:host-gateway \
+  alpine ping -c1 host.docker.internal
+```
+
+Trong `docker-compose.yml`:
+
+```yaml
+services:
+  api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+---
+
+## Tóm tắt bài 1
+
+- Ba hướng giao tiếp cần ba cách xử lý khác nhau: **ra Internet** (không cần làm gì), **vào máy thật** (dùng `host.docker.internal`), **giữa các container** (dùng Docker network).
+- **`localhost` trong container luôn là chính container đó** — đây là gốc của phần lớn lỗi kết nối khi mới học.
+- **`host.docker.internal` chỉ có sẵn trên macOS/Windows.** Trên Linux phải thêm `--add-host=host.docker.internal:host-gateway`, nếu không dự án sẽ chạy trên máy này mà gãy trên máy khác.
+- **Hai container trong cùng network gọi nhau không cần `-p`.** Cờ `-p` chỉ để mở đường từ **máy thật** vào container.
+- Mỗi container làm **một việc** — đó là điều kiện để scale, cập nhật và thay thế từng phần độc lập.
+
+---
+
 **Bài kế tiếp** → [Bài 2: Docker Networks — Kết nối Containers với nhau](02-docker-networks.md)
