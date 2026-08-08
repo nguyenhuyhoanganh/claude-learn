@@ -77,7 +77,7 @@ SELECT pg_size_pretty(pg_relation_size('employees'))          AS bang,
 ```
 
 ```text
-   bảng   | index_pk | so_page
+   bang   | index_pk | so_page
 ----------+----------+---------
  517 MB   | 236 MB   |   66200
 ```

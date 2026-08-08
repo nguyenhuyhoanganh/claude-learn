@@ -99,7 +99,7 @@ Nguyên tắc quen thuộc lại xuất hiện: **mỗi đảm bảo đều có 
 Trong MySQL, mỗi bảng chọn engine riêng:
 
 ```sql
-CREATE TABLE orders     (...) ENGINE = InnoDB;    -- can transaction
+CREATE TABLE orders     (...) ENGINE = InnoDB;    -- cần transaction
 CREATE TABLE page_views (...) ENGINE = MyISAM;    -- chỉ đọc, đếm nhanh
 CREATE TABLE cache_tmp  (...) ENGINE = MEMORY;    -- trong RAM, mất khi restart
 CREATE TABLE audit_log  (...) ENGINE = ARCHIVE;   -- nén mạnh, chỉ nối thêm

@@ -411,7 +411,7 @@ BEGIN
             EXECUTE format(
                 'CREATE TABLE %I PARTITION OF %I FOR VALUES FROM (%L) TO (%L)',
                 ten_manh, ten_bang, bat_dau, ket_thuc);
-            RAISE NOTICE 'Da tao manh %', ten_manh;
+            RAISE NOTICE 'Đã tạo mảnh %', ten_manh;
         END IF;
     END LOOP;
 END;
@@ -423,9 +423,9 @@ SELECT tao_manh_thang_toi('events');
 ```
 
 ```text
-NOTICE:  Da tao manh events_2026_10
-NOTICE:  Da tao manh events_2026_11
-NOTICE:  Da tao manh events_2026_12
+NOTICE:  Đã tạo mảnh events_2026_10
+NOTICE:  Đã tạo mảnh events_2026_11
+NOTICE:  Đã tạo mảnh events_2026_12
 ```
 
 Tham số `so_thang_truoc = 3` là chủ ý: **luôn tạo dư vài kỳ**. Nếu job chạy hàng ngày mà chết mất một tuần, bạn vẫn còn mảnh dùng.
@@ -456,7 +456,7 @@ BEGIN
           AND to_date(right(c.relname, 7), 'YYYY_MM') < nguong
     LOOP
         EXECUTE format('DROP TABLE %I', r.relname);
-        RAISE NOTICE 'Da xoa manh %', r.relname;
+        RAISE NOTICE 'Đã xoá mảnh %', r.relname;
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;

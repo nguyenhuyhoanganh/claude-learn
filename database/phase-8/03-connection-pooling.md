@@ -318,7 +318,7 @@ server_idle_timeout = 600
 Theo dõi:
 
 ```sql
--- ket noi toi PgBouncer bang psql, database dac biet `pgbouncer`
+-- kết nối tới PgBouncer bằng psql, database đặc biệt `pgbouncer`
 SHOW POOLS;
 ```
 
@@ -357,7 +357,7 @@ Ba cách xử lý:
 ## Theo dõi kết nối
 
 ```sql
--- Tong quan
+-- Tổng quan
 SELECT count(*)                                        AS tong,
        count(*) FILTER (WHERE state = 'active')        AS dang_chay,
        count(*) FILTER (WHERE state = 'idle')          AS ranh,
@@ -379,7 +379,7 @@ FROM pg_stat_activity;
 - **`ranh_trong_transaction = 7`: đây là con số nguy hiểm.** Mỗi kết nối như vậy đang giữ khoá và **chặn `VACUUM` dọn rác trên toàn database**.
 
 ```sql
--- San ket noi bo quen trong transaction
+-- Săn kết nối bỏ quên trong transaction
 SELECT pid, now() - xact_start AS mo_bao_lau, left(query, 50) AS cau_lenh_cuoi
 FROM pg_stat_activity
 WHERE state = 'idle in transaction'

@@ -177,7 +177,7 @@ Cách 2 đơn giản nhất và thường là câu trả lời đúng trong th�
 ```text
    MỘT KẾT NỐI POSTGRES CÓ TRẠNG THÁI:
      • transaction hiện tại
-     • bien phien (SET search_path, SET timezone, SET role...)
+     • biến phiên (SET search_path, SET timezone, SET role...)
      • bảng tạm
      • câu lệnh chuẩn bị sẵn
      • con trỏ đang mở
@@ -207,7 +207,7 @@ Vì thế pool tốt phải **dọn dẹp khi trả kết nối**:
 
 ```text
    PgBouncer transaction mode:
-     • tu chay DISCARD ALL (hoac server_reset_query)
+     • tự chạy DISCARD ALL (hoặc server_reset_query)
      • → xoá bảng tạm, câu lệnh chuẩn bị, biến phiên
 
    HikariCP:
@@ -307,7 +307,7 @@ Lý do nằm ở mô hình MVCC:
 ```text
    PostgreSQL KHÔNG SỬA TẠI CHỖ.
    `UPDATE` = tạo một PHIÊN BẢN MỚI của dòng ở vị trí KHÁC.
-   → ctid doi tu (0,1) sang (0,4)
+   → ctid đổi từ (0,1) sang (0,4)
 
    Mà MỌI index của PostgreSQL đều trỏ tới `ctid`.
    → dòng đổi chỗ → mọi index phải trỏ lại chỗ mới

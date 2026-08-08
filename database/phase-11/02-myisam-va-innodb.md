@@ -47,7 +47,7 @@ Có thể **chép ba file này sang máy khác** và bảng hoạt động ngay.
 **Mọi index đều trỏ thẳng tới offset byte.** Kể cả khoá chính — trong MyISAM, khoá chính chỉ là một index duy nhất, không có gì đặc biệt.
 
 ```text
-   ƯU: tra index xong là NHAY THANG toi du lieu — mot buoc duy nhat.
+   ƯU: tra index xong là NHẢY THẲNG tới dữ liệu — một bước duy nhất.
        Không có "clustered vs secondary" như InnoDB.
 ```
 
@@ -103,7 +103,7 @@ SELECT * FROM t;
 +----+-----+
 | id | val |
 +----+-----+
-|  1 | 999 |     ← ROLLBACK KHONG LAM GI CA
+|  1 | 999 |     ← ROLLBACK KHÔNG LÀM GÌ CẢ
 +----+-----+
 ```
 
@@ -240,7 +240,7 @@ Hai thành phần đáng nói riêng:
 ### Ba tham số quan trọng nhất
 
 ```ini
-# 1. Kich thuoc buffer pool — QUAN TRONG NHAT
+# 1. Kích thước buffer pool — QUAN TRỌNG NHẤT
 innodb_buffer_pool_size = 12G        # 50-75% RAM máy
 
 # 2. Mức độ bền vững khi commit
@@ -250,7 +250,7 @@ innodb_flush_log_at_trx_commit = 1   # 1 = ACID đầy đủ (mặc định)
 
 # 3. Phương thức ghi
 innodb_flush_method = O_DIRECT       # bỏ qua cache của hệ điều hành
-                                     # → tranh cache HAI LAN (buffer pool + OS)
+                                     # → tránh cache HAI LẦN (buffer pool + OS)
 ```
 
 `innodb_buffer_pool_size` là tham số có tác động lớn nhất trong toàn bộ MySQL. Mặc định chỉ **128 MB** — con số từ thời máy chủ có 1 GB RAM.
@@ -314,7 +314,7 @@ SELECT 'innodb', val FROM t_innodb;
 +--------+------+
 | engine | val  |
 +--------+------+
-| myisam |  999 |    ← ROLLBACK BI BO QUA
+| myisam |  999 |    ← ROLLBACK BỊ BỎ QUA
 | innodb |  100 |    ← hoàn tác đúng
 +--------+------+
 ```
@@ -405,7 +405,7 @@ Trên bảng lớn, `ALTER TABLE` khoá bảng rất lâu — dùng công cụ c
 
 ```bash
 pt-online-schema-change --alter "ENGINE=InnoDB" D=lab,t=users --execute
-# hoac
+# hoặc
 gh-ost --table=users --alter="ENGINE=InnoDB" --execute
 ```
 

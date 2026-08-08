@@ -244,11 +244,11 @@ class VongBam {
 
     timShard(khoa) {
         const h = this.bam(khoa);
-        // di theo chieu kim dong ho: vi tri dau tien >= h
+        // đi theo chiều kim đồng hồ: vị trí đầu tiên >= h
         for (const vt of this.viTriSapXep) {
             if (vt >= h) return this.vong.get(vt);
         }
-        return this.vong.get(this.viTriSapXep[0]);   // vong lai dau
+        return this.vong.get(this.viTriSapXep[0]);   // vòng lại đầu
     }
 }
 ```
@@ -270,7 +270,7 @@ console.log(`Doi cho: ${(doiCho / 1000).toFixed(1)}%`);
 ```
 
 ```text
-Doi cho: 24.8%
+Đổi chỗ: 24.8%
 ```
 
 So với 75% của phép chia lấy dư. Trên 2 TB dữ liệu, đó là chênh lệch giữa **500 GB** và **1,5 TB** phải di chuyển.
