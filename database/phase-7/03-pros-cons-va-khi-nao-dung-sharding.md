@@ -220,26 +220,26 @@ Cái thang ở trên là một trục. Nhưng có một trục thứ hai vuông 
 
 ```text
    ┌─────────────────────────────────────────────────────────────────┐
-   │  TRUC 1 — GIAM VIEC PHAI LAM                                    │
+   │  TRỤC 1 — GIẢM VIỆC PHẢI LÀM                                    │
    │                                                                 │
-   │  Bang 1 ty dong, tim mot dong:                                  │
-   │    khong index  →  quet 1 TY dong                               │
-   │    co index     →  quet ~4 PAGE          ← giam 250 trieu lan   │
-   │    + partition  →  index nho hon, chi dung 1 manh               │
+   │  Bảng 1 tỷ dòng, tìm một dòng:                                  │
+   │    không index  →  quét 1 TỶ dòng                               │
+   │    có index     →  quét ~4 PAGE          ← giảm 250 triệu lần   │
+   │    + partition  →  index nhỏ hơn, chỉ đụng 1 mảnh               │
    │                                                                 │
-   │  → Cong cu: INDEX, PARTITION, bang tong hop, cache              │
-   │  → Luon thu truc nay TRUOC                                      │
+   │  → Công cụ: INDEX, PARTITION, bảng tổng hợp, cache              │
+   │  → Luôn thử trục này TRƯỚC                                      │
    ├─────────────────────────────────────────────────────────────────┤
-   │  TRUC 2 — CHIA VIEC RA NHIEU NOI                                │
+   │  TRỤC 2 — CHIA VIỆC RA NHIỀU NƠI                                │
    │                                                                 │
-   │  Bang 1 ty dong, phai quet HET (bao cao, ETL, huan luyen):      │
-   │    mot luong    →  1 ty dong tuan tu                            │
-   │    8 luong      →  moi luong 125 trieu     ← nhanh ~6 lan       │
-   │    8 may        →  moi may 125 trieu       ← nhanh ~8 lan       │
+   │  Bảng 1 tỷ dòng, phải quét HẾT (báo cáo, ETL, huấn luyện):      │
+   │    một luồng    →  1 tỷ dòng tuần tự                            │
+   │    8 luồng      →  mỗi luồng 125 triệu     ← nhanh ~6 lần       │
+   │    8 máy        →  mỗi máy 125 triệu       ← nhanh ~8 lần       │
    │                                                                 │
-   │  → Cong cu: truy van song song, worker chia khoang, MapReduce,  │
+   │  → Công cụ: truy vấn song song, worker chia khoảng, MapReduce,  │
    │             SHARDING                                            │
-   │  → Chi can khi KHONG THE giam viec duoc nua                     │
+   │  → Chỉ cần khi KHÔNG THỂ giảm việc được nữa                     │
    └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -254,7 +254,7 @@ Nguyên tắc rút ra:
 Điểm quan trọng: **chia việc ra nhiều nơi không đồng nghĩa với chia dữ liệu ra nhiều máy**. Có ba mức, và sharding là mức đắt nhất:
 
 ```sql
--- MUC 1: song song hoa TRONG MOT MAY — PostgreSQL lam san
+-- MỨC 1: song song hoá TRONG MỘT MÁY — PostgreSQL làm sẵn
 SET max_parallel_workers_per_gather = 8;
 EXPLAIN ANALYZE SELECT count(*) FROM events WHERE created_at > '2026-01-01';
 ```
@@ -262,24 +262,24 @@ EXPLAIN ANALYZE SELECT count(*) FROM events WHERE created_at > '2026-01-01';
 ```text
 Gather  (actual time=2418.882..2511.117 rows=1 loops=1)
   Workers Planned: 8
-  Workers Launched: 8              ← 8 tien trinh cung quet
+  Workers Launched: 8              ← 8 tiến trình cùng quét
   ->  Parallel Seq Scan on events
 ```
 
 ```python
-# MUC 2: worker cua UNG DUNG chia khoang — khong doi gi o database
+# MỨC 2: worker của ỨNG DỤNG chia khoảng — không đổi gì ở database
 def worker(phan, tong):
     lo, hi = phan * BUOC, (phan + 1) * BUOC
     cur.execute("SELECT ... FROM events WHERE id >= %s AND id < %s", (lo, hi))
-    # ... xu ly ...
+    # ... xử lý ...
 
 with ThreadPoolExecutor(8) as pool:
     pool.map(lambda p: worker(p, 8), range(8))
 ```
 
 ```text
-   MUC 3: SHARDING — chia du lieu ra nhieu MAY
-          → chi khi muc 1 va 2 da cham tran cua MOT MAY
+   MỨC 3: SHARDING — chia dữ liệu ra nhiều MÁY
+          → chỉ khi mức 1 và 2 đã chạm trần của MỘT MÁY
 ```
 
 Mức 1 và mức 2 **không đòi hỏi thay đổi kiến trúc nào** và có thể triển khai trong một buổi chiều. Rất nhiều đội nhảy thẳng tới mức 3 mà chưa từng thử hai mức đầu.
@@ -387,13 +387,13 @@ Nếu đã xác định cần sharding, gần như luôn nên dùng một hệ �
 Với hệ đang chạy PostgreSQL, **Citus** thường là đường đi ít đau nhất:
 
 ```sql
--- Bien mot bang thanh bang phan tan
+-- Biến một bảng thành bảng phân tán
 SELECT create_distributed_table('users', 'user_id');
 
--- Nhom cung vi tri — cac bang lien quan dung CUNG cot phan tan
+-- Nhóm cùng vị trí — các bảng liên quan dùng CÙNG cột phân tán
 SELECT create_distributed_table('orders', 'user_id', colocate_with => 'users');
 
--- Bang tham chieu — nhan ban sang MOI shard de JOIN cuc bo
+-- Bảng tham chiếu — nhân bản sang MỌI shard để JOIN cục bộ
 SELECT create_reference_table('countries');
 ```
 

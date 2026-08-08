@@ -89,7 +89,7 @@ Vì sao bắt buộc phải hiểu bước này:
 Đây là một trong những cách làm chết database PostgreSQL phổ biến nhất. Phòng thủ:
 
 ```sql
--- PostgreSQL 13+: gioi han dung luong WAL giu lai cho moi khe
+-- PostgreSQL 13+: giới hạn dung lượng WAL giữ lại cho mỗi khe
 ALTER SYSTEM SET max_slot_wal_keep_size = '10GB';
 SELECT pg_reload_conf();
 ```
@@ -179,7 +179,7 @@ FROM pg_stat_replication;
 Thử ghi rồi đọc:
 
 ```bash
-# Ghi tren PRIMARY
+# Ghi trên PRIMARY
 docker exec pg-primary psql -U postgres -c \
   "INSERT INTO orders (user_id, total) VALUES (999999, 12345) RETURNING id;"
 ```
@@ -191,7 +191,7 @@ docker exec pg-primary psql -U postgres -c \
 ```
 
 ```bash
-# Doc tren REPLICA
+# Đọc trên REPLICA
 docker exec pg-replica psql -U postgres -c \
   "SELECT * FROM orders WHERE user_id = 999999;"
 ```
@@ -222,7 +222,7 @@ Replica vật lý **luôn chỉ đọc**, không có cách nào bật ghi.
 Câu lệnh chuẩn để đưa vào hệ thống theo dõi:
 
 ```sql
--- Chay tren PRIMARY
+-- Chạy trên PRIMARY
 SELECT application_name,
        state,
        pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), sent_lsn))  AS chua_gui,
@@ -238,7 +238,7 @@ FROM pg_stat_replication;
 ```
 
 ```sql
--- Chay tren REPLICA
+-- Chạy trên REPLICA
 SELECT CASE WHEN pg_last_wal_receive_lsn() = pg_last_wal_replay_lsn() THEN 0
             ELSE EXTRACT(epoch FROM now() - pg_last_xact_replay_timestamp())
        END AS tre_giay;
@@ -247,7 +247,7 @@ SELECT CASE WHEN pg_last_wal_receive_lsn() = pg_last_wal_replay_lsn() THEN 0
 ### Cố tình làm nó tụt lại
 
 ```bash
-# Ghi nang tren primary
+# Ghi nặng trên primary
 docker exec pg-primary psql -U postgres -c "
   INSERT INTO orders (user_id, total)
   SELECT (random()*10000)::BIGINT, (random()*1000000)::BIGINT
@@ -271,11 +271,11 @@ done
 14 MB
 31 MB
 48 MB
-52 MB      ← tre nhat
+52 MB      ← trễ nhất
 38 MB
 21 MB
 4816 kB
-0 bytes    ← bat kip
+0 bytes    ← bắt kịp
 ```
 
 Quan sát: replica tụt lại tới 52 MB rồi bắt kịp. Với 3 triệu dòng chèn trong ~15 giây, độ trễ đỉnh khoảng **2-3 giây**.
@@ -288,8 +288,8 @@ Trên **replica**:
 
 ```sql
 BEGIN;
-SELECT count(*) FROM orders;      -- giu transaction mo
--- KHONG commit
+SELECT count(*) FROM orders;      -- giữ transaction mở
+-- KHÔNG commit
 ```
 
 Trên **primary**:
@@ -315,19 +315,19 @@ DETAIL:  User query might have needed to see row versions that must be removed.
 Hai cách chỉnh, và cả hai đều có giá:
 
 ```bash
-# Cach 1: cho replica tam dung ap dung WAL toi 30 giay
+# Cách 1: cho replica tạm dừng áp dụng WAL tới 30 giây
 docker exec pg-replica psql -U postgres -c \
   "ALTER SYSTEM SET max_standby_streaming_delay = '30s'; SELECT pg_reload_conf();"
 
-# Cach 2: bao primary biet replica dang doc gi
+# Cách 2: báo primary biết replica đang đọc gì
 docker exec pg-replica psql -U postgres -c \
   "ALTER SYSTEM SET hot_standby_feedback = on; SELECT pg_reload_conf();"
 ```
 
 ```text
-   Cach 1: truy van chay duoc, nhung REPLICA TUT LAI toi 30 giay
-   Cach 2: truy van chay duoc, nhung PRIMARY khong VACUUM duoc
-           → theo doi n_dead_tup tren primary!
+   Cách 1: truy vấn chạy được, nhưng REPLICA TỤT LẠI tới 30 giây
+   Cách 2: truy vấn chạy được, nhưng PRIMARY không VACUUM được
+           → theo dõi n_dead_tup trên primary!
 ```
 
 ---
@@ -348,7 +348,7 @@ docker exec pg-primary psql -U postgres -c \
 ```text
  application_name | sync_state
 ------------------+------------
- pg-replica       | sync         ← doi tu async
+ pg-replica       | sync         ← đổi từ async
 ```
 
 Đo chênh lệch độ trễ ghi:
@@ -375,9 +375,9 @@ remote_apply : Time: 112.883 ms
 ```
 
 ```text
-   off  →  remote_apply :  38 ms  →  113 ms   (CHAM HON ~3 LAN)
+   off  →  remote_apply :  38 ms  →  113 ms   (CHẬM HƠN ~3 LẦN)
 
-   Doi lai: voi remote_apply, doc tu replica LUON thay du lieu vua ghi.
+   Đổi lại: với remote_apply, đọc từ replica LUÔN thấy dữ liệu vừa ghi.
 ```
 
 ### Cái bẫy: replica chết thì primary ngừng nhận ghi
@@ -390,7 +390,7 @@ docker exec pg-primary psql -U postgres -c \
 ```
 
 ```text
-(treo — khong tra ve gi)
+(treo — không trả về gì)
 ```
 
 Primary đang chờ một xác nhận không bao giờ tới. **Toàn bộ lệnh ghi bị chặn.**
@@ -421,7 +421,7 @@ Cách chữa khẩn cấp khi đang bị treo:
 
 ```sql
 ALTER SYSTEM SET synchronous_standby_names = '';
-SELECT pg_reload_conf();      -- moi lenh ghi dang cho duoc giai phong ngay
+SELECT pg_reload_conf();      -- mọi lệnh ghi đang chờ được giải phóng ngay
 ```
 
 ```bash
@@ -433,7 +433,7 @@ docker start pg-replica
 ## Lab 4 — Chuyển đổi khi primary chết
 
 ```bash
-# Mo phong primary chet dot ngot
+# Mô phỏng primary chết đột ngột
 docker kill pg-primary
 ```
 
@@ -470,7 +470,7 @@ docker exec pg-replica psql -U postgres -c "SELECT pg_is_in_recovery();"
 ```text
  pg_is_in_recovery
 -------------------
- f                    ← khong con la replica, gio la PRIMARY
+ f                    ← không còn là replica, giờ là PRIMARY
 ```
 
 Kiểm tra ghi được:
@@ -530,7 +530,7 @@ Trên **bên phát** (dùng `pg-replica` đang là primary):
 
 ```sql
 ALTER SYSTEM SET wal_level = 'logical';
--- can khoi dong lai
+-- cần khởi động lại
 ```
 
 ```bash
@@ -590,14 +590,14 @@ INSERT 0 1
 ### Cái bẫy: DDL không được nhân bản
 
 ```bash
-# Them cot BEN PHAT
+# Thêm cột BÊN PHÁT
 docker exec pg-replica psql -U postgres -c "ALTER TABLE orders ADD COLUMN note TEXT;"
 
-# Ghi mot dong co cot moi
+# Ghi một dòng có cột mới
 docker exec pg-replica psql -U postgres -c \
   "INSERT INTO orders (user_id, total, note) VALUES (1, 1, 'test');"
 
-# Xem ben nhan
+# Xem bên nhận
 sleep 5
 docker exec pg-logical psql -U postgres -c \
   "SELECT * FROM pg_stat_subscription;"
@@ -639,10 +639,10 @@ Nhân bản tự động tiếp tục sau đó.
 Bước 7 quan trọng: **nhân bản logic không đồng bộ giá trị sequence**. Quên bước này thì `INSERT` đầu tiên trên máy mới sẽ báo trùng khoá chính.
 
 ```sql
--- Tren ben phat: lay gia tri hien tai
+-- Trên bên phát: lấy giá trị hiện tại
 SELECT last_value FROM orders_id_seq;
--- Tren ben nhan: dat lai
-SELECT setval('orders_id_seq', <gia_tri> + 1000);   -- cong du an toan
+-- Trên bên nhận: đặt lại
+SELECT setval('orders_id_seq', <gia_tri> + 1000);   -- cộng dư an toàn
 ```
 
 ---
@@ -650,21 +650,21 @@ SELECT setval('orders_id_seq', <gia_tri> + 1000);   -- cong du an toan
 ## Câu lệnh theo dõi nên đưa vào hệ thống cảnh báo
 
 ```sql
--- 1. Do tre nhan ban (chay tren PRIMARY)
+-- 1. Độ trễ nhân bản (chạy trên PRIMARY)
 SELECT application_name, state, sync_state,
        pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS tre_byte,
        replay_lag
 FROM pg_stat_replication;
 
--- 2. Khe nhan ban giu bao nhieu WAL  ← NGUY HIEM NHAT
+-- 2. Khe nhân bản giữ bao nhiêu WAL  ← NGUY HIỂM NHẤT
 SELECT slot_name, active, wal_status,
        pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS wal_giu_lai
 FROM pg_replication_slots;
 
--- 3. Dung luong thu muc WAL
+-- 3. Dung lượng thư mục WAL
 SELECT pg_size_pretty(sum(size)) FROM pg_ls_waldir();
 
--- 4. Trang thai nhan ban logic (chay tren BEN NHAN)
+-- 4. Trạng thái nhân bản logic (chạy trên BÊN NHẬN)
 SELECT subname, pid, received_lsn, latest_end_lsn, latest_end_time
 FROM pg_stat_subscription;
 ```

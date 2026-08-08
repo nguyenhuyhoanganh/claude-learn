@@ -80,42 +80,42 @@ Lý do thứ ba đáng nhấn mạnh: một truy vấn phân tích quét toàn b
 Đặt replica gần người dùng không chỉ là chuyện độ trễ mạng cộng thêm một lần. Giao thức database **chattier hơn HTTP rất nhiều**:
 
 ```text
-   MOT LAN GOI API HTTP:  1 vong mang
-   MOT LAN CHAY TRUY VAN: nhieu hon the
+   MỘT LẦN GỌI API HTTP:  1 vòng mạng
+   MỘT LẦN CHẠY TRUY VẤN: nhiều hơn thế
 
-     mo ket noi   : bat tay TCP (1) + TLS (2) + xac thuc (2)  = 5 vong
-     chuan bi     : Parse → ParseComplete                     = 1 vong
-     chay         : Bind/Execute/Sync → ket qua                = 1 vong
-     ket qua lon  : chia thanh NHIEU goi TCP, MOI goi phai duoc xac nhan
+     mở kết nối   : bắt tay TCP (1) + TLS (2) + xác thực (2)  = 5 vòng
+     chuẩn bị     : Parse → ParseComplete                     = 1 vòng
+     chạy         : Bind/Execute/Sync → kết quả                = 1 vòng
+     kết quả lớn  : chia thành NHIỀU gói TCP, MỖI gói phải được xác nhận
 ```
 
 ```text
-   UNG DUNG O SINGAPORE, DATABASE O VIRGINIA (RTT ~230 ms)
+   ỨNG DỤNG Ở SINGAPORE, DATABASE Ở VIRGINIA (RTT ~230 ms)
 
-   Mot trang goi 10 truy van tuan tu:
-     10 × 230 ms = 2,3 GIAY  — chi rieng do tre mang
-     (chua tinh thoi gian database thuc su xu ly)
+   Một trang gọi 10 truy vấn tuần tự:
+     10 × 230 ms = 2,3 GIÂY  — chỉ riêng độ trễ mạng
+     (chưa tính thời gian database thực sự xử lý)
 
-   Cung ung dung, database o CUNG VUNG (RTT ~0,5 ms):
+   Cùng ứng dụng, database ở CÙNG VÙNG (RTT ~0,5 ms):
      10 × 0,5 ms = 5 mili-giay
-                                 → NHANH HON 460 LAN
+                                 → NHANH HƠN 460 LẦN
 ```
 
 Ba hệ quả thực dụng:
 
 ```text
-   1. "Dat ung dung gan nguoi dung, va dat DATABASE GAN HON NUA."
-      Ung dung ↔ database phai o CUNG VUNG. Khong co ngoai le.
-      Nguoi dung ↔ ung dung thi CDN va edge lo duoc.
+   1. "Đặt ứng dụng gần người dùng, và đặt DATABASE GẦN HƠN NỮA."
+      Ứng dụng ↔ database phải ở CÙNG VÙNG. Không có ngoại lệ.
+      Người dùng ↔ ứng dụng thì CDN và edge lo được.
 
-   2. Neu bat buoc phai goi xuyen vung → GOM TRUY VAN
-      10 truy van tuan tu → 1 truy van co JOIN, hoac 1 stored procedure
-      → tu 2,3 giay xuong 230 ms
+   2. Nếu bắt buộc phải gọi xuyên vùng → GOM TRUY VẤN
+      10 truy vấn tuần tự → 1 truy vấn có JOIN, hoặc 1 stored procedure
+      → từ 2,3 giây xuống 230 ms
 
-   3. Ket qua LON cang te hon
-      1 MB ket qua chia thanh ~700 goi TCP, moi goi phai duoc xac nhan
-      → do tre KHONG chi la mot RTT, ma la nhieu RTT chong len nhau
-      → day cung la ly do cau SQL DAI cham, xem [phase-14 bai 1]
+   3. Kết quả LỚN càng tệ hơn
+      1 MB kết quả chia thành ~700 gói TCP, mỗi gói phải được xác nhận
+      → độ trễ KHÔNG chỉ là một RTT, mà là nhiều RTT chồng lên nhau
+      → đây cũng là lý do câu SQL DÀI chậm, xem [phase-14 bài 1]
 ```
 
 Đây là lý do replica theo vùng có giá trị lớn hơn con số "giảm độ trễ" nghe qua: nó không tiết kiệm **một** vòng mạng, nó tiết kiệm **mọi** vòng mạng của mọi truy vấn.
@@ -218,14 +218,14 @@ SET synchronous_commit = 'on';   -- hoặc off, local, remote_write, remote_appl
 Điểm mạnh nhất: **vặn được theo từng transaction**.
 
 ```sql
--- Chuyen tien: an toan tuyet doi
+-- Chuyển tiền: an toàn tuyệt đối
 BEGIN;
 SET LOCAL synchronous_commit = 'remote_apply';
 UPDATE accounts SET balance = balance - 100000 WHERE id = 1;
 UPDATE accounts SET balance = balance + 100000 WHERE id = 2;
 COMMIT;
 
--- Ghi log su kien: nhanh la duoc
+-- Ghi log sự kiện: nhanh là được
 BEGIN;
 SET LOCAL synchronous_commit = 'off';
 INSERT INTO event_logs (payload) VALUES ('...');
@@ -310,10 +310,10 @@ Dòng "không nhân bản DDL" là cái bẫy phổ biến: bạn `ALTER TABLE A
 Nguyên nhân thứ hai đặc biệt phản trực giác: **chạy báo cáo nặng trên replica làm chính replica đó tụt lại**. PostgreSQL cho hai lựa chọn:
 
 ```conf
-# Cho phep tam dung ap dung WAL toi 30 giay de truy van chay xong
+# Cho phép tạm dừng áp dụng WAL tới 30 giây để truy vấn chạy xong
 max_standby_streaming_delay = 30s
 
-# Hoac: cho primary biet replica dang doc gi, de no khong don rac som
+# Hoặc: cho primary biết replica đang đọc gì, để nó không dọn rác sớm
 hot_standby_feedback = on
 ```
 
@@ -335,7 +335,7 @@ Không có lựa chọn nào miễn phí. Với replica dành riêng cho phân t
 ### Đo độ trễ
 
 ```sql
--- Chay tren REPLICA: tre bao nhieu giay
+-- Chạy trên REPLICA: trễ bao nhiêu giây
 SELECT CASE WHEN pg_last_wal_receive_lsn() = pg_last_wal_replay_lsn()
             THEN 0
             ELSE EXTRACT(epoch FROM now() - pg_last_xact_replay_timestamp())
@@ -343,7 +343,7 @@ SELECT CASE WHEN pg_last_wal_receive_lsn() = pg_last_wal_replay_lsn()
 ```
 
 ```sql
--- Chay tren PRIMARY: tre bao nhieu BYTE
+-- Chạy trên PRIMARY: trễ bao nhiêu BYTE
 SELECT client_addr,
        state,
        pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), sent_lsn))   AS chua_gui,
@@ -409,12 +409,12 @@ def sau_khi_ghi(user_id):
 Cách 3 với PostgreSQL:
 
 ```sql
--- Tren PRIMARY sau khi ghi
+-- Trên PRIMARY sau khi ghi
 SELECT pg_current_wal_insert_lsn();     -- → 0/3A2B4C8
 
--- Tren REPLICA truoc khi doc
+-- Trên REPLICA trước khi đọc
 SELECT pg_wal_replay_wait('0/3A2B4C8');  -- PostgreSQL 18+
--- Ban cu hon: kiem tra pg_last_wal_replay_lsn() >= LSN, khong thi doc primary
+-- Bản cũ hơn: kiểm tra pg_last_wal_replay_lsn() >= LSN, không thì đọc primary
 ```
 
 ---

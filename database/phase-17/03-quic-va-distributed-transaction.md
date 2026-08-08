@@ -11,7 +11,7 @@ Hai chủ đề trong bài này đều là câu hỏi mở — loại câu hỏi
 **QUIC** là giao thức truyền tải do Google phát triển, nay là chuẩn IETF và là nền của **HTTP/3**.
 
 ```text
-   ┌─ NGAN XEP CU (HTTP/2) ────┐    ┌─ NGAN XEP MOI (HTTP/3) ───┐
+   ┌─ NGĂN XẾP CŨ (HTTP/2) ────┐    ┌─ NGĂN XẾP MỚI (HTTP/3) ───┐
    │  HTTP/2                   │    │  HTTP/3                   │
    │  TLS 1.3                  │    │  QUIC  (đã bao gồm TLS 1.3)│
    │  TCP                      │    │  UDP                      │
@@ -38,7 +38,7 @@ Bốn đặc tính chính:
    SYN → SYN-ACK → ACK   (1 RTT)     ClientHello + dữ liệu  (1 RTT)
    ClientHello → ...     (1 RTT)     hoặc 0-RTT nếu đã nối trước đó
    ────────────────────────────
-   TONG: 2 RTT                       TONG: 1 RTT, hoac 0-RTT
+   TỔNG: 2 RTT                       TỔNG: 1 RTT, hoặc 0-RTT
 ```
 
 Trong mạng LAN (~0,5 ms RTT) thì tiết kiệm 0,5 ms — không đáng kể. Xuyên lục địa (~150 ms RTT) thì tiết kiệm 150-300 ms — rất đáng kể.
@@ -62,7 +62,7 @@ Trong mạng LAN (~0,5 ms RTT) thì tiết kiệm 0,5 ms — không đáng kể.
 
 ```text
    TCP: kết nối = (IP nguồn, cổng nguồn, IP đích, cổng đích)
-        → doi WiFi sang 4G → doi IP → KET NOI DUT
+        → đổi WiFi sang 4G → đổi IP → KẾT NỐI ĐỨT
 
    QUIC: kết nối = một ID độc lập với địa chỉ mạng
         → đổi mạng → kết nối VẪN SỐNG
@@ -131,13 +131,13 @@ Một số hệ đã thử nghiệm: **MongoDB** đã thảo luận về QUIC, *
 ```text
    Khi đánh giá một công nghệ mới, hỏi ba câu:
 
-   1. NO GIAI QUYET VAN DE GI?
+   1. NÓ GIẢI QUYẾT VẤN ĐỀ GÌ?
       QUIC: độ trễ cao, mất gói, đổi mạng
 
-   2. TOI CO VAN DE DO KHONG?
+   2. TÔI CÓ VẤN ĐỀ ĐÓ KHÔNG?
       Ứng dụng ↔ database trong mạng nội bộ: KHÔNG
 
-   3. NO DEM LAI VAN DE GI MOI?
+   3. NÓ ĐEM LẠI VẤN ĐỀ GÌ MỚI?
       Tốn CPU hơn, UDP bị chặn, ngăn xếp chưa trưởng thành
 
    → Nếu câu 2 trả lời "không" thì câu 1 và 3 không còn quan trọng.
@@ -152,7 +152,7 @@ Rất nhiều quyết định công nghệ sai bắt đầu bằng việc bỏ q
 ## Vấn đề
 
 ```text
-   Chuyen tien giua hai TAI KHOAN o HAI DATABASE KHAC NHAU:
+   Chuyển tiền giữa hai TÀI KHOẢN ở HAI DATABASE KHÁC NHAU:
 
    Database A:  UPDATE accounts SET balance = balance - 100 WHERE id = 1;
    Database B:  UPDATE accounts SET balance = balance + 100 WHERE id = 2;
@@ -166,10 +166,10 @@ Rất nhiều quyết định công nghệ sai bắt đầu bằng việc bỏ q
 ## Cách 1 — Two-Phase Commit (2PC)
 
 ```text
-   PHA 1 — CHUAN BI
+   PHA 1 — CHUẨN BỊ
    ┌───────────────┐
-   │ DIEU PHOI VIEN│ ──"san sang chua?"──▶ Database A  → "san sang" (KHOA)
-   │               │ ──"san sang chua?"──▶ Database B  → "san sang" (KHOA)
+   │ ĐIỀU PHỐI VIÊN│ ──"sẵn sàng chưa?"──▶ Database A  → "sẵn sàng" (KHOÁ)
+   │               │ ──"sẵn sàng chưa?"──▶ Database B  → "sẵn sàng" (KHOÁ)
    └───────────────┘
 
    PHA 2 — COMMIT
@@ -185,14 +185,14 @@ Rất nhiều quyết định công nghệ sai bắt đầu bằng việc bỏ q
 Trong PostgreSQL:
 
 ```sql
--- Tren MOI database
+-- Trên MỖI database
 BEGIN;
 UPDATE accounts SET balance = balance - 100 WHERE id = 1;
-PREPARE TRANSACTION 'chuyen_tien_12345';    -- ← pha 1: san sang, GIU KHOA
+PREPARE TRANSACTION 'chuyen_tien_12345';    -- ← pha 1: sẵn sàng, GIỮ KHOÁ
 
 -- Sau khi MỌI database đều sẵn sàng:
 COMMIT PREPARED 'chuyen_tien_12345';        -- ← pha 2
--- hoac
+-- hoặc
 ROLLBACK PREPARED 'chuyen_tien_12345';
 ```
 
@@ -204,24 +204,24 @@ SELECT gid, prepared, owner, database FROM pg_prepared_xacts;
 Cần bật trước:
 
 ```sql
-ALTER SYSTEM SET max_prepared_transactions = 100;   -- mac dinh 0 = TAT
+ALTER SYSTEM SET max_prepared_transactions = 100;   -- mặc định 0 = TẮT
 -- cần khởi động lại
 ```
 
 ### Ba vấn đề nghiêm trọng của 2PC
 
 ```text
-   1. GIAO THUC CHAN
+   1. GIAO THỨC CHẶN
       Nếu ĐIỀU PHỐI VIÊN CHẾT giữa pha 1 và pha 2:
         → các database VẪN GIỮ KHOÁ
         → chờ MÃI MÃI cho lệnh không bao giờ tới
         → phải có người vào gỡ bằng tay
 
-   2. GIU KHOA LAU
+   2. GIỮ KHOÁ LÂU
       Khoá được giữ suốt CẢ HAI pha, cộng độ trễ mạng.
       → thông lượng sụp khi có tranh chấp
 
-   3. CHAN VACUUM
+   3. CHẶN VACUUM
       Trong PostgreSQL, transaction "chuẩn bị" bị bỏ quên
       CHẶN `VACUUM` dọn rác trên TOÀN BỘ database — VÔ THỜI HẠN.
 ```
@@ -239,13 +239,13 @@ FROM pg_prepared_xacts WHERE age(now(), prepared) > interval '5 minutes';
 Thay vì một transaction phân tán, dùng **chuỗi transaction cục bộ**, mỗi bước có một **bước bù trừ**:
 
 ```text
-   THUAN LOI
+   THUẬN LỢI
    ─────────
-   Buoc 1: tru tien tai khoan A     (transaction cuc bo, COMMIT)
+   Bước 1: trừ tiền tài khoản A     (transaction cục bộ, COMMIT)
    Bước 2: cộng tiền tài khoản B    (transaction cục bộ, COMMIT)
    → xong
 
-   CO LOI O BUOC 2
+   CÓ LỖI Ở BƯỚC 2
    ───────────────
    Bước 1: trừ tiền A               ✔ đã commit
    Bước 2: cộng tiền B              ✘ thất bại
@@ -264,7 +264,7 @@ async def chuyen_tien_saga(tu_id, sang_id, so_tien):
                            (so_tien, sang_id))
     except Exception:
         for buoc in reversed(buoc_da_lam):
-            await day_vao_hang_doi_bu_tru(buoc)   # ← PHAI BEN VUNG
+            await day_vao_hang_doi_bu_tru(buoc)   # ← PHẢI BỀN VỮNG
         raise
 ```
 
@@ -273,16 +273,16 @@ Dòng cuối rất quan trọng: **bước bù trừ cũng có thể thất bạ
 ### Cái giá của Saga
 
 ```text
-   ✘ KHONG CO CO LAP
+   ✘ KHÔNG CÓ CÔ LẬP
      Giữa bước 1 và bước 2, người khác NHÌN THẤY trạng thái nửa vời:
        tài khoản A đã bị trừ, tài khoản B chưa được cộng
        → tổng tiền trong hệ thống TẠM THỜI SAI
 
-   ✘ Buoc bu tru KHONG PHAI LA ROLLBACK THAT
+   ✘ Bước bù trừ KHÔNG PHẢI LÀ ROLLBACK THẬT
      "Đã gửi email xác nhận" → không bù trừ được
      → chỉ gửi được email thứ hai xin lỗi
 
-   ✘ Do phuc tap chuyen sang UNG DUNG
+   ✘ Độ phức tạp chuyển sang ỨNG DỤNG
      Phải tự viết mọi bước bù trừ, hàng đợi thử lại, theo dõi trạng thái
 ```
 
@@ -293,16 +293,16 @@ Dòng cuối rất quan trọng: **bước bù trừ cũng có thể thất bạ
 Đây gần như luôn là câu trả lời đúng:
 
 ```text
-   1. GOM DU LIEU LIEN QUAN VAO CUNG MOT DATABASE
+   1. GOM DỮ LIỆU LIÊN QUAN VÀO CÙNG MỘT DATABASE
       → transaction cục bộ, ACID đầy đủ, không cần gì thêm
       → chính là "nhóm cùng vị trí" ở [phase-7 bài 1]
 
-   2. HOP THU DI (transactional outbox)
+   2. HỘP THƯ ĐI (transactional outbox)
       Ghi dữ liệu VÀ sự kiện trong CÙNG transaction cục bộ;
       một tiến trình riêng đọc bảng sự kiện rồi gửi đi.
       → đảm bảo "ghi dữ liệu" và "gửi sự kiện" không bao giờ lệch nhau
 
-   3. CHAP NHAN NHAT QUAN CUOI CUNG
+   3. CHẤP NHẬN NHẤT QUÁN CUỐI CÙNG
       Với rất nhiều nghiệp vụ, trễ vài giây là chấp nhận được.
 ```
 
@@ -330,7 +330,7 @@ while True:
 ```
 
 ```text
-   VI SAO MAU NAY DUNG:
+   VÌ SAO MẪU NÀY ĐÚNG:
      • Ghi dữ liệu và ghi sự kiện nằm trong CÙNG transaction
        → không thể có "đã trừ tiền nhưng chưa ghi sự kiện"
      • Tiến trình gửi có thể chạy lại an toàn (SKIP LOCKED + idempotent)

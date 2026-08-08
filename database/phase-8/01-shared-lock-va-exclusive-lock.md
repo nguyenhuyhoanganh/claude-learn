@@ -308,17 +308,17 @@ PostgreSQL chờ 1 giây trước khi dò vì việc dò vòng tốn CPU, và ph
 Áp dụng trong code:
 
 ```python
-# SAI — thu tu phu thuoc dau vao
+# SAI — thứ tự phụ thuộc đầu vào
 def chuyen_tien(tu_id, sang_id, so_tien):
     khoa_va_tru(tu_id)
     khoa_va_cong(sang_id)
 
-# DUNG — luon khoa theo thu tu ID tang dan
+# ĐÚNG — luôn khoá theo thứ tự ID tăng dần
 def chuyen_tien(tu_id, sang_id, so_tien):
     thu_nhat, thu_hai = sorted([tu_id, sang_id])
     cur.execute("SELECT * FROM accounts WHERE id IN (%s,%s) ORDER BY id FOR UPDATE",
                 (thu_nhat, thu_hai))
-    # bay gio moi tru/cong
+    # bây giờ mới trừ/cộng
 ```
 
 Chỉ cần **một dòng `sorted()`** là loại bỏ hoàn toàn một lớp lỗi.
@@ -347,14 +347,14 @@ from psycopg2 import errors
 def chay_co_thu_lai(conn, cong_viec, so_lan_toi_da=3):
     for lan in range(so_lan_toi_da):
         try:
-            with conn:                      # QUY TAC 1: thu lai CA transaction
+            with conn:                      # QUY TẮC 1: thử lại CẢ transaction
                 with conn.cursor() as cur:
                     cong_viec(cur)
             return
-        except errors.DeadlockDetected:     # QUY TAC 2: bat DUNG loai loi
+        except errors.DeadlockDetected:     # QUY TẮC 2: bắt ĐÚNG loại lỗi
             if lan == so_lan_toi_da - 1:
                 raise
-            # QUY TAC 3: backoff luy thua + QUY TAC 4: nhieu ngau nhien
+            # QUY TẮC 3: backoff luỹ thừa + QUY TẮC 4: nhiễu ngẫu nhiên
             time.sleep((2 ** lan) * 0.05 * (1 + random.random()))
 ```
 
@@ -386,15 +386,15 @@ Hai triết lý xử lý tranh chấp:
 Khoá lạc quan cài bằng một cột phiên bản:
 
 ```sql
--- Doc
+-- Đọc
 SELECT id, so_luong, version FROM inventory WHERE id = 7;
 -- → so_luong=10, version=5
 
--- Ghi: chi thanh cong neu KHONG AI sua trong luc do
+-- Ghi: chỉ thành công nếu KHÔNG AI sửa trong lúc đó
 UPDATE inventory
    SET so_luong = 9, version = 6
  WHERE id = 7 AND version = 5;
--- → neu tra ve 0 dong: co nguoi da sua truoc → THU LAI
+-- → nếu trả về 0 dòng: có người đã sửa trước → THỬ LẠI
 ```
 
 Quy tắc chọn:
@@ -411,7 +411,7 @@ Quy tắc chọn:
 Hai biến thể rất hữu dụng nhưng ít được biết:
 
 ```sql
--- NOWAIT: khong cho, that bai ngay
+-- NOWAIT: không chờ, thất bại ngay
 SELECT * FROM seats WHERE id = 14 FOR UPDATE NOWAIT;
 ```
 
@@ -422,7 +422,7 @@ ERROR:  could not obtain lock on row in relation "seats"
 Dùng khi bạn muốn trả lời người dùng "ghế này đang có người xử lý, thử lại sau" thay vì để họ chờ 30 giây.
 
 ```sql
--- SKIP LOCKED: bo qua dong dang bi khoa, lay dong khac
+-- SKIP LOCKED: bỏ qua dòng đang bị khoá, lấy dòng khác
 SELECT * FROM jobs
  WHERE status = 'pending'
  ORDER BY created_at
@@ -433,12 +433,12 @@ SELECT * FROM jobs
 Đây là **nền tảng của mọi hàng đợi công việc xây trên database**. Nhiều worker cùng chạy câu này sẽ nhận **các tập công việc khác nhau**, không ai chờ ai, không ai lấy trùng.
 
 ```text
-   KHONG CO SKIP LOCKED               CO SKIP LOCKED
+   KHÔNG CÓ SKIP LOCKED               CÓ SKIP LOCKED
    ══════════════════════             ═══════════════
    worker 1: lay job 1-10             worker 1: lay job 1-10
-   worker 2: CHO worker 1             worker 2: bo qua 1-10, lay 11-20
+   worker 2: CHỜ worker 1             worker 2: bỏ qua 1-10, lấy 11-20
    worker 3: CHO                      worker 3: lay 21-30
-   → chi 1 worker lam viec            → moi worker deu lam viec
+   → chỉ 1 worker làm việc            → mọi worker đều làm việc
 ```
 
 ## Khoá tư vấn (advisory lock)
@@ -446,7 +446,7 @@ SELECT * FROM jobs
 Khoá không gắn với dòng hay bảng nào — bạn tự đặt nghĩa cho nó:
 
 ```sql
--- Khoa theo mot con so tu chon, giu toi khi COMMIT
+-- Khoá theo một con số tự chọn, giữ tới khi COMMIT
 SELECT pg_advisory_xact_lock(hashtext('job:gui-bao-cao-thang'));
 ```
 
@@ -455,7 +455,7 @@ Dùng cho: đảm bảo chỉ một tiến trình chạy một job định kỳ,
 ```python
 cur.execute("SELECT pg_try_advisory_xact_lock(%s)", (hash_job,))
 if not cur.fetchone()[0]:
-    return    # may khac dang chay job nay roi
+    return    # máy khác đang chạy job này rồi
 chay_job()
 ```
 

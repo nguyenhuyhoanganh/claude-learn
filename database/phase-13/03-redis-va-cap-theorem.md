@@ -9,15 +9,15 @@ Bài này nhìn Redis từ góc **nội tại lưu trữ** — vì sao nó nhanh
 Bốn lý do, và lý do thứ tư là lý do phản trực giác nhất:
 
 ```text
-   1. TOAN BO DU LIEU TRONG RAM
+   1. TOÀN BỘ DỮ LIỆU TRONG RAM
       → không bao giờ chạm đĩa trong đường đọc/ghi
       → ~100 nanogiay thay vi ~100 microgiay
 
-   2. CAU TRUC DU LIEU TOI UU SAN
+   2. CẤU TRÚC DỮ LIỆU TỐI ƯU SẴN
       → không phải phân tích SQL, không lập kế hoạch, không tối ưu
       → GET là một lần tra bảng băm: O(1)
 
-   3. GIAO THUC RESP CUC GON
+   3. GIAO THỨC RESP CỰC GỌN
       → phân tích rất nhanh, không có đóng gói nặng nề
 
    4. MỘT LUỒNG CHO LỆNH   ← phản trực giác
@@ -30,12 +30,12 @@ Bốn lý do, và lý do thứ tư là lý do phản trực giác nhất:
 Điểm 4 xứng đáng nói kỹ. Trực giác nói "nhiều luồng thì nhanh hơn", nhưng với thao tác chỉ mất **vài trăm nanogiây**, chi phí lấy khoá và chuyển ngữ cảnh **lớn hơn chính công việc**.
 
 ```text
-   THAO TAC MAT 200 ns
+   THAO TÁC MẤT 200 ns
    ═══════════════════
    Lấy/trả khoá mutex   : ~20-100 ns    → 10-50% chi phí thuần tuý
    Chuyển ngữ cảnh      : ~1.000-3.000 ns → GẤP 5-15 LẦN công việc
 
-   → Voi thao tac cuc ngan, MOT LUONG THANG.
+   → Với thao tác cực ngắn, MỘT LUỒNG THẮNG.
 ```
 
 Từ Redis 6.0 có **I/O đa luồng** — nhưng chỉ cho việc **đọc/ghi socket và phân tích giao thức**. Việc **thực thi lệnh vẫn một luồng**, và đó là chủ đích.
@@ -48,7 +48,7 @@ Từ Redis 6.0 có **I/O đa luồng** — nhưng chỉ cho việc **đọc/ghi 
    SMEMBERS            trên set 5 triệu    →  ~1 giây
    Script Lua vòng lặp dài                 →  bao lâu tuỳ script
 
-   → TRONG SUOT THOI GIAN DO, MOI CLIENT KHAC BI CHAN.
+   → TRONG SUỐT THỜI GIAN ĐÓ, MỌI CLIENT KHÁC BỊ CHẶN.
    → Độ trễ p99 tăng vọt, và không có cảnh báo nào trước.
 ```
 
@@ -70,7 +70,7 @@ redis-cli SLOWLOG GET 10
 Và luôn dùng `SCAN` thay `KEYS`:
 
 ```text
-   KEYS pattern   →  O(n), CHAN toan bo server
+   KEYS pattern   →  O(n), CHẶN toàn bộ server
    SCAN cursor    →  lặp dần, mỗi lần trả về một phần, KHÔNG chặn
 ```
 
@@ -81,9 +81,9 @@ Và luôn dùng `SCAN` thay `KEYS`:
 Đây là phần nội tại thú vị nhất và có tác động lớn nhất tới bộ nhớ.
 
 ```text
-   MOT KIEU DU LIEU (vi du: Hash) CO NHIEU MA HOA BEN TRONG
+   MỘT KIỂU DỮ LIỆU (ví dụ: Hash) CÓ NHIỀU MÃ HOÁ BÊN TRONG
 
-   Nho  →  listpack   : mang phang, quet tuyen tinh O(n)
+   Nhỏ  →  listpack   : mảng phẳng, quét tuyến tính O(n)
                         → RẤT gọn, tốt với ít phần tử
    Lớn →  hashtable  : bảng băm thật, O(1)
                         → tốn hơn nhiều, nhưng nhanh với nhiều phần tử
@@ -131,7 +131,7 @@ redis-cli OBJECT ENCODING h1
 ```
 
 ```text
-"hashtable"        ← VAN LA hashtable, KHONG quay ve listpack
+"hashtable"        ← VẪN LÀ hashtable, KHÔNG quay về listpack
 ```
 
 ```text
@@ -170,7 +170,7 @@ Ngưỡng 44 byte của `embstr` cũng đáng nhớ: chuỗi ≤ 44 byte đượ
 redis-cli --bigkeys          # tìm khoá lớn nhất mỗi kiểu
 redis-cli --memkeys          # tìm khoá tốn bộ nhớ nhất
 redis-cli MEMORY USAGE khoa  # bộ nhớ THẬT của một khoá
-redis-cli MEMORY DOCTOR      # goi y tu Redis
+redis-cli MEMORY DOCTOR      # gợi ý từ Redis
 redis-cli INFO memory
 ```
 
@@ -275,7 +275,7 @@ redis-cli -c MSET "user:{42}:name" An "user:{42}:email" an@x.com
    1. Client ghi vào primary → primary trả về OK NGAY
    2. Primary chết TRƯỚC KHI kịp nhân bản
    3. Replica được thăng cấp
-   → LENH GHI DO BIEN MAT
+   → LỆNH GHI ĐÓ BIẾN MẤT
 ```
 
 Redis ghi rõ điều này trong tài liệu. Nếu cần đảm bảo mạnh hơn:
@@ -300,14 +300,14 @@ Bây giờ tới khung tư duy tổng quát cho **mọi** hệ phân tán.
         A — Availability (khả dụng) : mọi yêu cầu đều được trả lời
         P — Partition tolerance     : hệ vẫn chạy khi mạng đứt
 
-   → P KHONG PHAI LUA CHON. Mang SE dut.
+   → P KHÔNG PHẢI LỰA CHỌN. Mạng SẼ đứt.
    → Nên thực tế chỉ là: chọn C hay chọn A khi P xảy ra.
 ```
 
 ### Diễn bằng ví dụ
 
 ```text
-   BINH THUONG                        MANG DUT
+   BÌNH THƯỜNG                        MẠNG ĐỨT
    ═══════════                        ════════
    ┌─────┐  ◀──▶  ┌─────┐             ┌─────┐   ✂   ┌─────┐
    │ NUT A│        │ NUT B│            │ NUT A│      │ NUT B│
@@ -316,7 +316,7 @@ Bây giờ tới khung tư duy tổng quát cho **mọi** hệ phân tán.
                                           ▲            ▲
                                      ghi x=9      đọc x = ?
 
-   CHON C (nhat quan):  nut B TU CHOI tra loi
+   CHỌN C (nhất quán):  nút B TỪ CHỐI trả lời
                         → "tôi không chắc mình có dữ liệu mới nhất"
                         → hệ KHÔNG KHẢ DỤNG với B
 
@@ -355,7 +355,7 @@ CAP chỉ nói về lúc mạng đứt. Nhưng mạng đứt là chuyện **hi�
      PostgreSQL đồng bộ : PC / EC   — luôn ưu tiên nhất quán
      Cassandra          : PA / EL   — luôn ưu tiên khả dụng và độ trễ
      MongoDB            : PC / EC   — nhưng điều chỉnh được
-     DynamoDB           : PA / EL   — mac dinh
+     DynamoDB           : PA / EL   — mặc định
 ```
 
 PACELC hữu dụng hơn CAP trong thực tế, vì phần "EL" — đánh đổi giữa **độ trễ** và **nhất quán** khi mạng **bình thường** — mới là thứ bạn đối mặt hàng ngày.
