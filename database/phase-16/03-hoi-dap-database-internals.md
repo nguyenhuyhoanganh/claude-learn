@@ -8,21 +8,21 @@ Tám câu hỏi về cơ chế bên trong và về những quyết định thi�
 
 ```sql
 SELECT pg_size_pretty(pg_relation_size('events'));   -- 42 GB
-DELETE FROM events WHERE created_at < '2025-01-01';  -- xoa 30 trieu dong
+DELETE FROM events WHERE created_at < '2025-01-01';  -- xoá 30 triệu dòng
 SELECT pg_size_pretty(pg_relation_size('events'));   -- VAN 42 GB
 ```
 
 Vì `DELETE` **không xoá byte nào**:
 
 ```text
-   DELETE chi ghi mot dau: "tuple nay chet tu transaction XID 12345"
-     → dat `xmax` cua tuple
-     → tuple VAN NAM DO, chiem nguyen cho
+   DELETE chỉ ghi một dấu: "tuple này chết từ transaction XID 12345"
+     → đặt `xmax` của tuple
+     → tuple VẪN NẰM ĐÓ, chiếm nguyên chỗ
 
-   Vi sao phai vay?  Vi MVCC:
-     Transaction khac dang chay CO THE van can thay dong do
-     (neu no bat dau TRUOC khi xoa)
-     → khong duoc phep xoa that ngay
+   Vì sao phải vậy?  Vì MVCC:
+     Transaction khác đang chạy CÓ THỂ vẫn cần thấy dòng đó
+     (nếu nó bắt đầu TRƯỚC khi xoá)
+     → không được phép xoá thật ngay
 ```
 
 Ba mức dọn dẹp:
@@ -34,7 +34,7 @@ Ba mức dọn dẹp:
 | `pg_repack` | Như `VACUUM FULL` nhưng không chặn | Nhẹ (trừ vài giây cuối) | **Có** |
 
 ```sql
--- Xem co bao nhieu rac
+-- Xem có bao nhiêu rác
 SELECT relname,
        n_live_tup                                                AS dong_song,
        n_dead_tup                                                AS dong_chet,
@@ -54,7 +54,7 @@ ORDER BY n_dead_tup DESC;
 Ngưỡng thực dụng: **trên 20% là đáng lo**. Nó nghĩa là mọi truy vấn đang đọc thêm 20% page chứa xác chết.
 
 ```bash
-# Khong chan bang, khuyen nghi cho production
+# Không chặn bảng, khuyến nghị cho production
 pg_repack -t events -d mydb
 ```
 
@@ -72,10 +72,10 @@ SHOW autovacuum_vacuum_threshold;      -- 50
 ```text
    NGUONG KICH HOAT =  threshold  +  scale_factor × so_dong
 
-   Bang 1.000 dong    →  50 + 0,2×1.000     =        250 dong chet
-   Bang 100 trieu dong→  50 + 0,2×100.000.000 = 20.000.050 dong chet
+   Bảng 1.000 dòng    →  50 + 0,2×1.000     =        250 dòng chết
+   Bảng 100 triệu dòng→  50 + 0,2×100.000.000 = 20.000.050 dòng chết
                                                  ▲
-                        PHAI CO 20 TRIEU dong chet moi chay!
+                        PHẢI CÓ 20 TRIỆU dòng chết mới chạy!
 ```
 
 Đây là vấn đề: **công thức tỉ lệ phần trăm không hợp với bảng lớn**. Bảng 100 triệu dòng tích tụ 20 triệu xác chết (20% phình) trước khi autovacuum động tay.
@@ -86,8 +86,8 @@ Cách chữa — đặt riêng cho bảng lớn:
 ALTER TABLE events SET (
     autovacuum_vacuum_scale_factor = 0.01,      -- 1% thay vi 20%
     autovacuum_vacuum_threshold    = 1000,
-    autovacuum_analyze_scale_factor = 0.005,    -- ANALYZE con thuong xuyen hon
-    autovacuum_vacuum_cost_delay   = 2          -- chay nhanh hon (mac dinh 2ms tu PG12)
+    autovacuum_analyze_scale_factor = 0.005,    -- ANALYZE còn thường xuyên hơn
+    autovacuum_vacuum_cost_delay   = 2          -- chạy nhanh hơn (mặc định 2ms từ PG12)
 );
 ```
 
@@ -103,24 +103,24 @@ FROM pg_stat_activity WHERE query LIKE 'autovacuum%';
 Đây là nguyên nhân số một khiến bảng phình dù autovacuum vẫn chạy:
 
 ```sql
--- 1. Transaction dang mo lau
+-- 1. Transaction đang mở lâu
 SELECT pid, now()-xact_start AS mo_bao_lau, state, left(query,50)
 FROM pg_stat_activity WHERE xact_start IS NOT NULL
 ORDER BY xact_start LIMIT 5;
 
--- 2. Khe nhan ban khong hoat dong
+-- 2. Khe nhân bản không hoạt động
 SELECT slot_name, active, wal_status,
        pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS wal_giu
 FROM pg_replication_slots;
 
--- 3. Transaction chuan bi san bi bo quen
+-- 3. Transaction chuẩn bị sẵn bị bỏ quên
 SELECT gid, prepared, owner FROM pg_prepared_xacts;
 ```
 
 ```text
-   VACUUM chi don duoc tuple ma KHONG transaction nao con can thay.
-   → Mot transaction mo tu 3 gio truoc chan viec don MOI THU sau do
-   → tren TOAN BO database, khong chi bang do
+   VACUUM chỉ dọn được tuple mà KHÔNG transaction nào còn cần thấy.
+   → Một transaction mở từ 3 giờ trước chặn việc dọn MỌI THỨ sau đó
+   → trên TOÀN BỘ database, không chỉ bảng đó
 ```
 
 Phòng thủ:
@@ -136,15 +136,15 @@ ALTER SYSTEM SET idle_in_transaction_session_timeout = '5min';
 **Trong PostgreSQL: hoàn toàn như nhau về hiệu năng.**
 
 ```text
-   `TEXT`, `VARCHAR(n)`, `VARCHAR` deu dung CUNG mot kieu luu tru ben trong.
-   `VARCHAR(n)` chi them mot rang buoc kiem tra do dai.
-   → KHONG co khac biet ve toc do hay dung luong.
+   `TEXT`, `VARCHAR(n)`, `VARCHAR` đều dùng CÙNG một kiểu lưu trữ bên trong.
+   `VARCHAR(n)` chỉ thêm một ràng buộc kiểm tra độ dài.
+   → KHÔNG có khác biệt về tốc độ hay dung lượng.
 ```
 
 Lời khuyên thực dụng:
 
 ```sql
--- NEN: dung TEXT, va CHECK neu that su can gioi han nghiep vu
+-- NÊN: dùng TEXT, và CHECK nếu thật sự cần giới hạn nghiệp vụ
 CREATE TABLE users (
     email TEXT NOT NULL CHECK (length(email) <= 254),
     bio   TEXT
@@ -155,22 +155,22 @@ Vì sao `CHECK` tốt hơn `VARCHAR(n)`:
 
 ```text
    Doi VARCHAR(50) thanh VARCHAR(100):
-     → PostgreSQL 9.2+ khong viet lai bang, nhung VAN lay ACCESS EXCLUSIVE
+     → PostgreSQL 9.2+ không viết lại bảng, nhưng VẪN lấy ACCESS EXCLUSIVE
 
    Doi CHECK:
      ALTER TABLE ... DROP CONSTRAINT ..., ADD CONSTRAINT ... NOT VALID;
      ALTER TABLE ... VALIDATE CONSTRAINT ...;
-     → khoa NHE hon nhieu
+     → khoá NHẸ hơn nhiều
 ```
 
 **Với MySQL thì khác:**
 
 ```text
-   VARCHAR(n)  →  luu trong dong, danh index duoc day du
-   TEXT        →  co the luu NGOAI dong, index chi duoc TIEN TO 767/3072 byte
-                  va khong dung duoc cho mot so thao tac
+   VARCHAR(n)  →  lưu trong dòng, đánh index được đầy đủ
+   TEXT        →  có thể lưu NGOÀI dòng, index chỉ được TIỀN TỐ 767/3072 byte
+                  và không dùng được cho một số thao tác
 
-   → Tren MySQL, VARCHAR(n) thuong la lua chon dung.
+   → Trên MySQL, VARCHAR(n) thường là lựa chọn đúng.
 ```
 
 Đây là ví dụ điển hình cho lời khuyên xuyên suốt khoá này: **lời khuyên đúng cho hệ này có thể sai cho hệ khác**.
@@ -184,26 +184,26 @@ Có, theo ba hướng — và hướng thứ hai là hướng ít người biế
 ### Hướng 1 — `NULL` chiếm rất ít chỗ
 
 ```text
-   PostgreSQL luu mot BITMAP NULL o dau moi tuple:
-     1 bit cho moi cot
-     → cot NULL KHONG chiem byte du lieu nao
+   PostgreSQL lưu một BITMAP NULL ở đầu mỗi tuple:
+     1 bit cho mỗi cột
+     → cột NULL KHÔNG chiếm byte dữ liệu nào
 
    Bang 20 cot, 15 cot NULL:
-     Voi NULL      : 23 byte header + 3 byte bitmap + 5 cot du lieu
-     Voi chuoi rong: 23 byte header + 20 cot du lieu
-   → NULL GON HON dang ke
+     Với NULL      : 23 byte header + 3 byte bitmap + 5 cột dữ liệu
+     Với chuỗi rỗng: 23 byte header + 20 cột dữ liệu
+   → NULL GỌN HƠN đáng kể
 ```
 
 ### Hướng 2 — Index bỏ qua được `NULL`
 
 ```sql
--- Bang 100 trieu dong, chi 50.000 dong co `deleted_at` khac NULL
+-- Bảng 100 triệu dòng, chỉ 50.000 dòng có `deleted_at` khác NULL
 CREATE INDEX idx_deleted ON orders (deleted_at) WHERE deleted_at IS NOT NULL;
 ```
 
 ```text
-   Index day du     : 2,1 GB
-   Index bo phan    : 1,8 MB      → NHO HON ~1.200 LAN
+   Index đầy đủ     : 2,1 GB
+   Index bộ phận    : 1,8 MB      → NHỎ HƠN ~1.200 LẦN
 ```
 
 Đây là kỹ thuật rất hiệu quả cho các cột "hiếm khi có giá trị": `deleted_at`, `error_message`, `cancelled_at`.
@@ -212,17 +212,17 @@ CREATE INDEX idx_deleted ON orders (deleted_at) WHERE deleted_at IS NOT NULL;
 
 ```sql
 SELECT * FROM users WHERE status <> 'active';
--- → KHONG tra ve dong co status IS NULL!
+-- → KHÔNG trả về dòng có status IS NULL!
 ```
 
 ```text
-   NULL <> 'active'  →  NULL  (khong phai TRUE)
-   WHERE chi giu dong co dieu kien TRUE
-   → dong NULL bi BO QUA am tham
+   NULL <> 'active'  →  NULL  (không phải TRUE)
+   WHERE chỉ giữ dòng có điều kiện TRUE
+   → dòng NULL bị BỎ QUA âm thầm
 ```
 
 ```sql
--- Cach dung
+-- Cách đúng
 WHERE status IS DISTINCT FROM 'active';
 -- hoac
 WHERE status <> 'active' OR status IS NULL;
@@ -233,7 +233,7 @@ Toán tử `IS DISTINCT FROM` xử lý `NULL` như một giá trị bình thư�
 Tương tự với `NOT IN`:
 
 ```sql
--- BAY: neu subquery tra ve BAT KY NULL nao, ket qua LUON RONG
+-- BẪY: nếu subquery trả về BẤT KỲ NULL nào, kết quả LUÔN RỖNG
 SELECT * FROM orders WHERE user_id NOT IN (SELECT id FROM banned_users);
 
 -- AN TOAN
@@ -252,36 +252,36 @@ SELECT * FROM orders o WHERE NOT EXISTS (
 
 ```text
    ✔ BIGINT (BIGSERIAL / IDENTITY)
-     • Ung dung mot database
-     • Khong can sinh khoa o client
-     • Nho nhat (8 byte), nhanh nhat, khong phinh index
+     • Ứng dụng một database
+     • Không cần sinh khoá ở client
+     • Nhỏ nhất (8 byte), nhanh nhất, không phình index
 
-   ✔ UUID v7  (KHONG phai v4)
-     • Can sinh khoa o nhieu noi
+   ✔ UUID v7  (KHÔNG phải v4)
+     • Cần sinh khoá ở nhiều nơi
      • Khong muon lo quy mo kinh doanh
-     • TANG DAN theo thoi gian → khong gay tach page
+     • TĂNG DẦN theo thời gian → không gây tách page
 
    ✘ UUID v4
      • Ngau nhien hoan toan → tach page lien tuc
-     • Do that tren PostgreSQL: chen CHAM HON 3,7 LAN, index LON HON 2,1 LAN
-     • Tren InnoDB con te hon vi bang cung sap theo khoa chinh
+     • Đo thật trên PostgreSQL: chèn CHẬM HƠN 3,7 LẦN, index LỚN HƠN 2,1 LẦN
+     • Trên InnoDB còn tệ hơn vì bảng cũng sắp theo khoá chính
 ```
 
 Và quy tắc lưu trữ:
 
 ```text
-   PostgreSQL : kieu UUID (16 byte)         — KHONG dung TEXT
-   MySQL      : BINARY(16)                  — KHONG dung CHAR(36)
+   PostgreSQL : kiểu UUID (16 byte)         — KHÔNG dùng TEXT
+   MySQL      : BINARY(16)                  — KHÔNG dùng CHAR(36)
 
    CHAR(36) lang phi 20 byte MOI GIA TRI,
-   va tren InnoDB con bi NHAN LEN trong MOI index phu.
+   và trên InnoDB còn bị NHÂN LÊN trong MỌI index phụ.
 ```
 
 Mẫu tách đôi khi cần cả hai:
 
 ```sql
 CREATE TABLE orders (
-    id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- ky thuat, noi bo
+    id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- kỹ thuật, nội bộ
     order_no UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE     -- doi ngoai
 );
 ```
@@ -310,16 +310,16 @@ UPDATE orders SET deleted_at = now() WHERE id = 42;
 Ba vấn đề của xoá mềm, và cách xử lý:
 
 ```sql
--- VAN DE 1: quen `WHERE deleted_at IS NULL` o mot cho nao do
--- → Giai: dung VIEW hoac Row Level Security
+-- VẤN ĐỀ 1: quên `WHERE deleted_at IS NULL` ở một chỗ nào đó
+-- → Giải: dùng VIEW hoặc Row Level Security
 CREATE VIEW active_orders AS SELECT * FROM orders WHERE deleted_at IS NULL;
 
 -- VAN DE 2: UNIQUE gay
 -- → Giai: index BO PHAN
 CREATE UNIQUE INDEX idx_email_active ON users (email) WHERE deleted_at IS NULL;
 
--- VAN DE 3: bang phinh mai
--- → Giai: chuyen dong da xoa sang bang luu tru dinh ky
+-- VẤN ĐỀ 3: bảng phình mãi
+-- → Giải: chuyển dòng đã xoá sang bảng lưu trữ định kỳ
 ```
 
 Mẫu thực dụng thường tốt hơn cả hai: **xoá thật + bảng lưu trữ**.
@@ -332,10 +332,10 @@ COMMIT;
 ```
 
 ```text
-   ✔ Bang chinh gon, moi truy van nhanh
-   ✔ Khong can nho `WHERE deleted_at IS NULL` o dau ca
-   ✔ UNIQUE va khoa ngoai hoat dong binh thuong
-   ✔ Van khoi phuc duoc
+   ✔ Bảng chính gọn, mọi truy vấn nhanh
+   ✔ Không cần nhớ `WHERE deleted_at IS NULL` ở đâu cả
+   ✔ UNIQUE và khoá ngoại hoạt động bình thường
+   ✔ Vẫn khôi phục được
 ```
 
 Chủ đề này được đào sâu ở [sql-interview/phase-6](../../sql-interview/phase-6/03-soft-delete-hay-xoa-that.md).
@@ -350,54 +350,54 @@ Chủ đề này được đào sâu ở [sql-interview/phase-6](../../sql-inter
    ┌─────────────────────────────────────────────────────────┐
    │ NEN O DATABASE — BAT BIEN VE DU LIEU                    │
    │   • Rang buoc: NOT NULL, CHECK, UNIQUE, FOREIGN KEY     │
-   │   • Kieu du lieu dung (dung TEXT cho moi thu)           │
+   │   • Kiểu dữ liệu đúng (đừng TEXT cho mọi thứ)           │
    │   • Cach ly tenant (Row Level Security)                 │
-   │   → VI: chung KHONG THE bi bo qua, ke ca khi ung dung   │
-   │     co bug, hoac khi co ung dung THU HAI ghi vao        │
+   │   → VÌ: chúng KHÔNG THỂ bị bỏ qua, kể cả khi ứng dụng   │
+   │     có bug, hoặc khi có ứng dụng THỨ HAI ghi vào        │
    ├─────────────────────────────────────────────────────────┤
    │ NEN O UNG DUNG — QUY TAC NGHIEP VU                      │
-   │   • Quy trinh, luong trang thai                          │
+   │   • Quy trình, luồng trạng thái                          │
    │   • Tinh toan gia, khuyen mai                            │
    │   • Goi dich vu ngoai                                    │
-   │   → VI: de kiem thu, de doc, de trien khai, dung tay    │
-   │     nghe cua doi ngu                                     │
+   │   → VÌ: dễ kiểm thử, dễ đọc, dễ triển khai, đúng tay    │
+   │     nghề của đội ngũ                                     │
    └─────────────────────────────────────────────────────────┘
 ```
 
 ### Vì sao ràng buộc phải ở database
 
 ```text
-   Ung dung kiem tra: "email phai duy nhat"
-   → nhung co:
-       • mot dich vu THU HAI cung ghi vao bang do
-       • mot job di tru chay truc tiep bang SQL
-       • mot ky su sua tay luc khan cap
-       • mot dieu kien tranh chap giua hai request
-   → MOT trong nhung duong do se pha vo quy tac
+   Ứng dụng kiểm tra: "email phải duy nhất"
+   → nhưng có:
+       • một dịch vụ THỨ HAI cũng ghi vào bảng đó
+       • một job di trú chạy trực tiếp bằng SQL
+       • một kỹ sư sửa tay lúc khẩn cấp
+       • một điều kiện tranh chấp giữa hai request
+   → MỘT trong những đường đó sẽ phá vỡ quy tắc
 
-   Rang buoc o database: KHONG DUONG NAO pha duoc.
+   Ràng buộc ở database: KHÔNG ĐƯỜNG NÀO phá được.
 ```
 
 ### Vì sao quy trình không nên ở database
 
 ```text
    Stored procedure:
-     ✘ Kho kiem thu tu dong
-     ✘ Kho quan ly phien ban trong git
+     ✘ Khó kiểm thử tự động
+     ✘ Khó quản lý phiên bản trong git
      ✘ Kho go loi
-     ✘ Kho trien khai dan (khong co canary)
-     ✘ Khoa chat vao mot he quan tri
+     ✘ Khó triển khai dần (không có canary)
+     ✘ Khoá chặt vào một hệ quản trị
 ```
 
 ### Vùng xám: trigger
 
 ```text
    ✔ HOP: bo dem phi chuan hoa, ghi audit, cap nhat updated_at
-     → nhung viec PHAI luon xay ra, khong duoc quen
+     → những việc PHẢI luôn xảy ra, không được quên
 
    ✘ KHONG HOP: logic nghiep vu phuc tap, goi dich vu ngoai
-     → logic AN, doc code ung dung khong thay no ton tai
-     → gay ra "hanh vi ma thuat" rat kho go
+     → logic ẨN, đọc code ứng dụng không thấy nó tồn tại
+     → gây ra "hành vi ma thuật" rất khó gỡ
 ```
 
 Quy tắc thực dụng: **trigger chỉ nên làm những việc mà mọi đường ghi đều phải làm, và phải rất ngắn**.
@@ -407,8 +407,8 @@ Quy tắc thực dụng: **trigger chỉ nên làm những việc mà mọi đư
 ## Câu 8 — Khi nào nên phi chuẩn hoá?
 
 ```text
-   CHUAN HOA la mac dinh dung.  Phi chuan hoa la TOI UU CO CHU DICH.
-   → Chi lam khi CO SO DO chung minh la can.
+   CHUẨN HOÁ là mặc định đúng.  Phi chuẩn hoá là TỐI ƯU CÓ CHỦ ĐÍCH.
+   → Chỉ làm khi CÓ SỐ ĐO chứng minh là cần.
 ```
 
 Ba dạng phi chuẩn hoá, xếp theo mức độ rủi ro:
@@ -416,16 +416,16 @@ Ba dạng phi chuẩn hoá, xếp theo mức độ rủi ro:
 ```text
    1. CỘT ĐẾM SẴN  (rui ro VUA)
       users.follower_count, posts.comment_count
-      → phai co job doi soat
+      → phải có job đối soát
 
    2. CỘT CHÉP SANG  (rui ro CAO)
       orders.customer_name chep tu customers.name
-      → doi ten khach hang phai cap nhat hang trieu don
-      → TRU KHI la CO CHU DICH: giu ten LUC DAT HANG
+      → đổi tên khách hàng phải cập nhật hàng triệu đơn
+      → TRỪ KHI là CÓ CHỦ ĐÍCH: giữ tên LÚC ĐẶT HÀNG
 
    3. BẢNG TỔNG HỢP  (rui ro THAP)
       daily_sales tinh san tu orders
-      → tinh lai duoc bat cu luc nao tu nguon su that
+      → tính lại được bất cứ lúc nào từ nguồn sự thật
       → AN TOAN NHAT
 ```
 
@@ -435,11 +435,11 @@ Quy tắc bắt buộc:
 
 ```text
    MOI cot phi chuan hoa PHAI di kem MOT TRUY VAN DOI SOAT.
-   Neu khong viet duoc truy van doi soat → dung phi chuan hoa cot do.
+   Nếu không viết được truy vấn đối soát → đừng phi chuẩn hoá cột đó.
 ```
 
 ```sql
--- Vi du truy van doi soat
+-- Ví dụ truy vấn đối soát
 SELECT p.id, p.comment_count AS ghi_trong_bang, count(c.id) AS dem_that
 FROM posts p LEFT JOIN comments c ON c.post_id = p.id
 GROUP BY p.id, p.comment_count
@@ -453,9 +453,9 @@ CREATE MATERIALIZED VIEW daily_sales AS
 SELECT date(created_at) AS ngay, count(*) AS so_don, sum(total) AS doanh_thu
 FROM orders GROUP BY 1;
 
-CREATE UNIQUE INDEX ON daily_sales (ngay);      -- bat buoc cho CONCURRENTLY
+CREATE UNIQUE INDEX ON daily_sales (ngay);      -- bắt buộc cho CONCURRENTLY
 
-REFRESH MATERIALIZED VIEW CONCURRENTLY daily_sales;   -- khong chan doc
+REFRESH MATERIALIZED VIEW CONCURRENTLY daily_sales;   -- không chặn đọc
 ```
 
 ## Bảng tra nhanh

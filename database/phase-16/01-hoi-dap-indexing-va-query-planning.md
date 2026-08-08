@@ -40,11 +40,11 @@ SELECT name, setting FROM pg_settings WHERE name LIKE '%_cost';
 Mọi thứ được quy về "đọc tuần tự một page = 1,0". Kiểm chứng bằng tay:
 
 ```text
-   Bang grades:  8.334 page,  1.000.000 dong
+   Bảng grades:  8.334 page,  1.000.000 dòng
 
    Chi phi Seq Scan = (so_page × seq_page_cost)
                     + (so_dong × cpu_tuple_cost)
-                    + (so_dong × cpu_operator_cost)     ← danh gia dieu kien WHERE
+                    + (so_dong × cpu_operator_cost)     ← đánh giá điều kiện WHERE
                     = 8.334 × 1,0
                     + 1.000.000 × 0,01
                     + 1.000.000 × 0,0025
@@ -57,15 +57,15 @@ Con số PostgreSQL đưa ra là 17.709 — sai lệch vì `cpu_operator_cost` c
 Ba hệ quả thực dụng:
 
 ```text
-   1. "cost = 5.000" KHONG cho biet nhanh hay cham.
-      Chi co nghia khi so voi cost cua ke hoach KHAC cho CUNG cau truy van.
+   1. "cost = 5.000" KHÔNG cho biết nhanh hay chậm.
+      Chỉ có nghĩa khi so với cost của kế hoạch KHÁC cho CÙNG câu truy vấn.
 
-   2. cost KHONG ti le tuyen tinh voi thoi gian.
-      Ke hoach cost 100 co the cham hon ke hoach cost 1.000
-      neu du lieu nam san trong cache.
+   2. cost KHÔNG tỉ lệ tuyến tính với thời gian.
+      Kế hoạch cost 100 có thể chậm hơn kế hoạch cost 1.000
+      nếu dữ liệu nằm sẵn trong cache.
 
-   3. `random_page_cost = 4` la mac dinh tu THOI O DIA QUAY.
-      Tren SSD nen dat 1,1 — neu khong optimizer bo index qua som.
+   3. `random_page_cost = 4` là mặc định từ THỜI Ổ ĐĨA QUAY.
+      Trên SSD nên đặt 1,1 — nếu không optimizer bỏ index quá sớm.
 ```
 
 ---
@@ -77,7 +77,7 @@ Ba hệ quả thực dụng:
 ### Nguyên nhân 1 — Quét toàn bảng thật sự rẻ hơn
 
 ```sql
-EXPLAIN SELECT * FROM grades WHERE g < 90;   -- khop ~90% bang
+EXPLAIN SELECT * FROM grades WHERE g < 90;   -- khớp ~90% bảng
 ```
 
 ```text
@@ -86,12 +86,12 @@ Seq Scan on grades  (cost=0.00..17709.00 rows=899471 width=19)
 ```
 
 ```text
-   Lay 90% so dong bang index nghia la:
+   Lấy 90% số dòng bằng index nghĩa là:
      • tra index 900.000 lan
-     • nhay vao heap 900.000 lan (I/O NGAU NHIEN)
-   → dat hon nhieu so voi doc thang 8.334 page tuan tu
+     • nhảy vào heap 900.000 lần (I/O NGẪU NHIÊN)
+   → đắt hơn nhiều so với đọc thẳng 8.334 page tuần tự
 
-   → Optimizer chon DUNG. Diem lat thuong o 5-20% so dong.
+   → Optimizer chọn ĐÚNG. Điểm lật thường ở 5-20% số dòng.
 ```
 
 ### Nguyên nhân 2 — Thống kê cũ
@@ -103,7 +103,7 @@ EXPLAIN ANALYZE SELECT * FROM fresh WHERE val = 500;
 ```text
 Seq Scan on fresh  (cost=0.00..42.55 rows=1 ...) (actual ... rows=5000 ...)
                                     ▲                              ▲
-                              uoc luong 1                    thuc te 5.000
+                              ước lượng 1                    thực tế 5.000
 ```
 
 Lệch 5.000 lần nghĩa là thống kê sai. Chữa: `ANALYZE fresh;` — chi tiết ở [phase-4 bài 3](../phase-4/03-composite-index-va-optimizer.md).
@@ -111,10 +111,10 @@ Lệch 5.000 lần nghĩa là thống kê sai. Chữa: `ANALYZE fresh;` — chi 
 ### Nguyên nhân 3 — Hàm hoặc ép kiểu trên cột
 
 ```sql
-WHERE UPPER(name) = 'AN'      -- index tren `name` KHONG dung duoc
-WHERE id::TEXT = '5'          -- ep kieu la mot ham
+WHERE UPPER(name) = 'AN'      -- index trên `name` KHÔNG dùng được
+WHERE id::TEXT = '5'          -- ép kiểu là một hàm
 WHERE created_at::DATE = ...  -- ep kieu
-WHERE age + 1 = 30            -- bieu thuc
+WHERE age + 1 = 30            -- biểu thức
 ```
 
 Chữa: index trên biểu thức, hoặc viết lại điều kiện:
@@ -129,14 +129,14 @@ WHERE created_at >= '2026-08-01' AND created_at < '2026-08-02'   -- thay vi ::DA
 
 ```sql
 CREATE INDEX idx ON t (a, b);
-WHERE b = 5                   -- KHONG dung duoc
+WHERE b = 5                   -- KHÔNG dùng được
 ```
 
 ### Nguyên nhân 5 — Kiểu dữ liệu không khớp
 
 ```sql
--- cot user_id la BIGINT, tham so gui vao la TEXT
-WHERE user_id = '42'          -- co the phai ep kieu → mat index
+-- cột user_id là BIGINT, tham số gửi vào là TEXT
+WHERE user_id = '42'          -- có thể phải ép kiểu → mất index
 ```
 
 Đây là bẫy phổ biến với ORM cấu hình sai. Kiểm tra bằng cách xem `EXPLAIN` có hiện `::text` hay không.
@@ -144,7 +144,7 @@ WHERE user_id = '42'          -- co the phai ep kieu → mat index
 ### Nguyên nhân 6 — Bảng quá nhỏ
 
 ```sql
-EXPLAIN SELECT * FROM small_table WHERE id = 5;   -- bang co 50 dong
+EXPLAIN SELECT * FROM small_table WHERE id = 5;   -- bảng có 50 dòng
 ```
 
 ```text
@@ -157,7 +157,7 @@ Bảng 50 dòng nằm trong **một page**. Đọc một page rẻ hơn tra inde
 
 ```sql
 CREATE INDEX ON t (a);
-WHERE a = 1 OR b = 2          -- b khong co index → phai quet toan bang
+WHERE a = 1 OR b = 2          -- b không có index → phải quét toàn bảng
 ```
 
 Chữa: tạo index cho `b`, khi đó `BitmapOr` hoạt động.
@@ -165,23 +165,23 @@ Chữa: tạo index cho `b`, khi đó `BitmapOr` hoạt động.
 ### Quy trình chẩn đoán
 
 ```sql
--- 1. Ep dung index de so sanh
+-- 1. Ép dùng index để so sánh
 SET enable_seqscan = off;
-EXPLAIN ANALYZE <cau truy van>;
+EXPLAIN ANALYZE <câu truy vấn>;
 RESET enable_seqscan;
 ```
 
 ```text
-   Ep index NHANH HON  →  optimizer sai → nghi thong ke hoac random_page_cost
-   Ep index CHAM HON   →  optimizer dung → tim cach khac
+   Ép index NHANH HƠN  →  optimizer sai → nghi thống kê hoặc random_page_cost
+   Ép index CHẬM HƠN   →  optimizer đúng → tìm cách khác
 ```
 
 ```sql
--- 2. So uoc luong voi thuc te
-EXPLAIN ANALYZE <cau truy van>;   -- xem rows= o hai cho co lech nhieu khong
+-- 2. So ước lượng với thực tế
+EXPLAIN ANALYZE <câu truy vấn>;   -- xem rows= ở hai chỗ có lệch nhiều không
 
--- 3. Kiem tra dinh dang dieu kien
-EXPLAIN (VERBOSE) <cau truy van>; -- xem co ep kieu an khong
+-- 3. Kiểm tra định dạng điều kiện
+EXPLAIN (VERBOSE) <câu truy vấn>; -- xem có ép kiểu ẩn không
 ```
 
 ---
@@ -189,7 +189,7 @@ EXPLAIN (VERBOSE) <cau truy van>; -- xem co ep kieu an khong
 ## Câu 3 — Index trên cột có nhiều giá trị trùng hoạt động thế nào?
 
 ```sql
--- Cot `status` chi co 3 gia tri, tren bang 10 trieu dong
+-- Cột `status` chỉ có 3 giá trị, trên bảng 10 triệu dòng
 CREATE INDEX idx_status ON orders (status);
 ```
 
@@ -202,10 +202,10 @@ Trong B+Tree, các khoá trùng nhau **nằm liền nhau ở tầng lá**:
 ```
 
 ```text
-   → Tim WHERE status = 'paid' → nhay toi khoi 'paid', doc lien tiep
-   → Nhung khoi do co 7 TRIEU muc
-   → Doc het roi nhay vao heap 7 trieu lan → dat hon quet toan bang
-   → Optimizer se BO INDEX
+   → Tìm WHERE status = 'paid' → nhảy tới khối 'paid', đọc liên tiếp
+   → Nhưng khối đó có 7 TRIỆU mục
+   → Đọc hết rồi nhảy vào heap 7 triệu lần → đắt hơn quét toàn bảng
+   → Optimizer sẽ BỎ INDEX
 ```
 
 **Từ PostgreSQL 13, có khử trùng lặp** giúp index nhỏ đi rất nhiều:
@@ -214,7 +214,7 @@ Trong B+Tree, các khoá trùng nhau **nằm liền nhau ở tầng lá**:
    TRUOC PG13                        TU PG13
    ══════════                        ═══════
    'paid' → ctid1                    'paid' → [ctid1, ctid2, ctid3, ...]
-   'paid' → ctid2                            ▲ MOT muc, danh sach con tro
+   'paid' → ctid2                            ▲ MỘT mục, danh sách con trỏ
    'paid' → ctid3
    ... × 7 trieu
 
@@ -226,15 +226,15 @@ Nhưng nhỏ hơn **không** làm nó hữu ích hơn cho `WHERE status = 'paid'
 Ba cách làm nó hữu ích:
 
 ```sql
--- 1. INDEX BO PHAN — chi danh index phan hiem
+-- 1. INDEX BỘ PHẬN — chỉ đánh index phần hiếm
 CREATE INDEX idx_pending ON orders (created_at) WHERE status = 'pending';
---    'pending' chi co 5.000 dong → index 200 KB thay vi 380 MB
+--    'pending' chỉ có 5.000 dòng → index 200 KB thay vì 380 MB
 
--- 2. INDEX COMPOSITE — dat cot chon loc THAP truoc cot chon loc CAO
+-- 2. INDEX COMPOSITE — đặt cột chọn lọc THẤP trước cột chọn lọc CAO
 CREATE INDEX idx_status_user ON orders (status, user_id);
---    WHERE status='paid' AND user_id=42 → rat hieu qua
+--    WHERE status='paid' AND user_id=42 → rất hiệu quả
 
--- 3. COVERING INDEX — tranh nhay vao heap
+-- 3. COVERING INDEX — tránh nhảy vào heap
 CREATE INDEX idx_status_cover ON orders (status) INCLUDE (total, created_at);
 ```
 
@@ -256,8 +256,8 @@ SELECT s.relname                                    AS bang,
 FROM pg_stat_user_indexes s
 JOIN pg_index i ON i.indexrelid = s.indexrelid
 WHERE s.idx_scan = 0
-  AND NOT i.indisunique                              -- ← bo qua UNIQUE
-  AND NOT i.indisprimary                             -- ← bo qua PRIMARY KEY
+  AND NOT i.indisunique                              -- ← bỏ qua UNIQUE
+  AND NOT i.indisprimary                             -- ← bỏ qua PRIMARY KEY
 ORDER BY pg_relation_size(s.indexrelid) DESC;
 ```
 
@@ -265,17 +265,17 @@ ORDER BY pg_relation_size(s.indexrelid) DESC;
 
 ```text
    1. THONG KE DA DU DAI CHUA?
-      Neu vua pg_stat_reset() tuan truoc thi bao cao cuoi quy CHUA CHAY.
-      → Quan sat it nhat MOT CHU KY NGHIEP VU day du (thuong 1 quy).
+      Nếu vừa pg_stat_reset() tuần trước thì báo cáo cuối quý CHƯA CHẠY.
+      → Quan sát ít nhất MỘT CHU KỲ NGHIỆP VỤ đầy đủ (thường 1 quý).
 
    2. NO CO DANG THUC THI RANG BUOC KHONG?
-      Index cua PRIMARY KEY va UNIQUE luon hien idx_scan = 0
-      nhung TUYET DOI khong duoc xoa.
-      → Cau truy van tren da loc san.
+      Index của PRIMARY KEY và UNIQUE luôn hiện idx_scan = 0
+      nhưng TUYỆT ĐỐI không được xoá.
+      → Câu truy vấn trên đã lọc sẵn.
 
    3. NO CO DUOC DUNG TREN REPLICA KHONG?
-      pg_stat_user_indexes la thong ke CUA TUNG MAY.
-      Index khong dung tren primary co the dang phuc vu bao cao tren replica.
+      pg_stat_user_indexes là thống kê CỦA TỪNG MÁY.
+      Index không dùng trên primary có thể đang phục vụ báo cáo trên replica.
       → Phai kiem tra TREN MOI MAY.
 ```
 
@@ -284,13 +284,13 @@ ORDER BY pg_relation_size(s.indexrelid) DESC;
 ### Cách xoá an toàn
 
 ```sql
--- 1. Vo hieu hoa TRUOC (PG chua ho tro truc tiep, dung meo nay)
+-- 1. Vô hiệu hoá TRƯỚC (PG chưa hỗ trợ trực tiếp, dùng mẹo này)
 UPDATE pg_index SET indisvalid = false
 WHERE indexrelid = 'idx_nghi_ngo'::regclass;
--- → planner khong dung nua, nhung index VAN duoc cap nhat
--- → theo doi vai ngay xem co truy van nao cham di khong
+-- → planner không dùng nữa, nhưng index VẪN được cập nhật
+-- → theo dõi vài ngày xem có truy vấn nào chậm đi không
 
--- 2. Neu on, xoa that
+-- 2. Nếu ổn, xoá thật
 DROP INDEX CONCURRENTLY idx_nghi_ngo;
 ```
 
@@ -300,10 +300,10 @@ Mẹo ở bước 1 rất hữu dụng: nó cho phép **quay lại tức thì** 
 
 ```text
    • Ton dia
-   • Lam cham MOI lenh INSERT/UPDATE/DELETE
-   • Tranh cho voi index huu ich trong buffer pool
-   • Lam cham VACUUM va REINDEX
-   • Lam CHAM VIEC LAP KE HOACH — planner phai xet no moi lan
+   • Làm chậm MỌI lệnh INSERT/UPDATE/DELETE
+   • Tranh chỗ với index hữu ích trong buffer pool
+   • Làm chậm VACUUM và REINDEX
+   • Làm CHẬM VIỆC LẬP KẾ HOẠCH — planner phải xét nó mỗi lần
 ```
 
 Dòng cuối ít người biết: mỗi index thừa làm tăng thời gian lập kế hoạch của **mọi** truy vấn trên bảng đó.
@@ -319,23 +319,23 @@ Nó lấp khoảng trống giữa `Index Scan` và `Seq Scan`:
    (< ~1%)              (1-20%)               (> ~20%)
    ─────────            ────────              ──────────────
    Index Scan           Bitmap Scan           Seq Scan
-   nhay tung dong       gom truoc roi doc     doc thang toan bang
-                        moi page MOT LAN
+   nhảy từng dòng       gom trước rồi đọc     đọc thẳng toàn bảng
+                        mỗi page MỘT LẦN
 ```
 
 Ba giá trị cụ thể:
 
 ```text
    1. MOI PAGE CHI DOC MOT LAN
-      Index Scan: 10.000 muc khop → co the doc mot page 50 lan
-      Bitmap    : gom lai → moi page doc dung mot lan
+      Index Scan: 10.000 mục khớp → có thể đọc một page 50 lần
+      Bitmap    : gom lại → mỗi page đọc đúng một lần
 
    2. DOC HEAP THEO THU TU TANG DAN
-      → gan voi I/O TUAN TU, tan dung duoc doc truoc cua he dieu hanh
+      → gần với I/O TUẦN TỰ, tận dụng được đọc trước của hệ điều hành
 
    3. KET HOP NHIEU INDEX (BitmapAnd / BitmapOr)
-      → hai index rieng le HOP TAC duoc voi nhau
-      → khong can tao index composite cho moi to hop
+      → hai index riêng lẻ HỢP TÁC được với nhau
+      → không cần tạo index composite cho mọi tổ hợp
 ```
 
 Chi tiết cơ chế ở [phase-4 bài 2](../phase-4/02-index-scan-va-covering-index.md).
@@ -353,8 +353,8 @@ Chú ý dòng `lossy` trong kế hoạch:
 ## Câu 6 — `EXPLAIN ANALYZE` thật sự làm gì?
 
 ```text
-   EXPLAIN            →  chi LAP KE HOACH, KHONG chay.  An toan.
-   EXPLAIN ANALYZE    →  CHAY THAT, do thoi gian tung buoc.
+   EXPLAIN            →  chỉ LẬP KẾ HOẠCH, KHÔNG chạy.  An toàn.
+   EXPLAIN ANALYZE    →  CHẠY THẬT, đo thời gian từng bước.
 ```
 
 **Cảnh báo nghiêm túc:**
@@ -390,30 +390,30 @@ EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS, WAL, FORMAT TEXT) <query>;
 
 ```text
    `EXPLAIN ANALYZE` GOI DONG HO CHO MOI DONG o MOI NUT.
-   Voi truy van tra ve hang trieu dong, chi phi do co the
-   lam truy van CHAM HON 2-3 LAN so voi khi chay binh thuong.
+   Với truy vấn trả về hàng triệu dòng, chi phí đo có thể
+   làm truy vấn CHẬM HƠN 2-3 LẦN so với khi chạy bình thường.
 
-   → `Execution Time` trong EXPLAIN ANALYZE co the CAO HON thuc te.
+   → `Execution Time` trong EXPLAIN ANALYZE có thể CAO HƠN thực tế.
 ```
 
 Cách đo chính xác hơn:
 
 ```sql
 EXPLAIN (ANALYZE, TIMING OFF, BUFFERS) <query>;
--- van biet so dong va so page, nhung khong do thoi gian tung nut
+-- vẫn biết số dòng và số page, nhưng không đo thời gian từng nút
 ```
 
 ### Ba con số cần đọc
 
 ```text
    1. rows= UOC LUONG  vs  rows= THUC TE
-      Lech > 100 lan → thong ke sai
+      Lệch > 100 lần → thống kê sai
 
    2. Buffers: shared hit=X read=Y
-      `read` cao → dang cham dia; `hit` cao → dang trong cache
+      `read` cao → đang chạm đĩa; `hit` cao → đang trong cache
 
    3. Rows Removed by Filter
-      Cao → dang doc roi vut di → thieu index
+      Cao → đang đọc rồi vứt đi → thiếu index
 ```
 
 ---
@@ -423,11 +423,11 @@ EXPLAIN (ANALYZE, TIMING OFF, BUFFERS) <query>;
 **Có**, và lý do rất căn bản:
 
 ```text
-   Index duoc dung tu MOT ANH CHUP du lieu.
-   Neu co dong moi chen vao giua chung, index se THIEU dong do.
-   Index thieu du lieu con TE HON khong co index — truy van tra ve SAI.
+   Index được dựng từ MỘT ẢNH CHỤP dữ liệu.
+   Nếu có dòng mới chèn vào giữa chừng, index sẽ THIẾU dòng đó.
+   Index thiếu dữ liệu còn TỆ HƠN không có index — truy vấn trả về SAI.
 
-   → Phai chan ghi de dam bao anh chup khong doi.
+   → Phải chặn ghi để đảm bảo ảnh chụp không đổi.
 ```
 
 `CREATE INDEX` giữ khoá `SHARE`: cho đọc, chặn mọi lệnh ghi. Với bảng 400 triệu dòng, đó là hàng chục phút.
@@ -450,19 +450,19 @@ Ba lý do, xếp theo mức độ căn bản:
 
 ```text
    1. PHAN CUNG KHONG CHO DOC MOT BYTE
-      SSD doc theo trang 4-16 KB; HDD doc theo cung 512 byte.
-      Doc 1 byte va doc 8.192 byte ton GAN NHU BANG NHAU.
-      → doc le la lang phi thuan tuy
+      SSD đọc theo trang 4-16 KB; HDD đọc theo cung 512 byte.
+      Đọc 1 byte và đọc 8.192 byte tốn GẦN NHƯ BẰNG NHAU.
+      → đọc lẻ là lãng phí thuần tuý
 
    2. TINH CUC BO
-      Du lieu duoc doc cung nhau thuong nam canh nhau.
-      Doc ca page = "khuyen mai" cac dong ke ben, thuong dung tiep ngay.
+      Dữ liệu được đọc cùng nhau thường nằm cạnh nhau.
+      Đọc cả page = "khuyến mãi" các dòng kế bên, thường dùng tiếp ngay.
 
    3. QUAN LY BO NHO DEM DON GIAN
-      Buffer pool quan ly cac o CO DINH 8 KB → cap phat va thay the
-      cuc ky don gian, khong bao gio phan manh.
-      Neu quan ly theo dong (kich thuoc thay doi) → bai toan phan manh
-      giong het slab allocator o [phase-13 bai 2].
+      Buffer pool quản lý các ô CỐ ĐỊNH 8 KB → cấp phát và thay thế
+      cực kỳ đơn giản, không bao giờ phân mảnh.
+      Nếu quản lý theo dòng (kích thước thay đổi) → bài toán phân mảnh
+      giống hệt slab allocator ở [phase-13 bài 2].
 ```
 
 Hệ quả thực tế đã phân tích ở [phase-3 bài 1](../phase-3/01-page-heap-va-io.md): **`SELECT name` vẫn đọc đủ số page như `SELECT *`** — vì bạn không thể yêu cầu đĩa đưa cho riêng một cột.
@@ -476,7 +476,7 @@ EXPLAIN ANALYZE SELECT g FROM grades WHERE g = 50;
 ```
 
 ```text
-Index Scan using idx_grades_g on grades      ← tai sao khong "Only"?
+Index Scan using idx_grades_g on grades      ← tại sao không "Only"?
 ```
 
 Có **ba** nguyên nhân.
@@ -484,7 +484,7 @@ Có **ba** nguyên nhân.
 ### Nguyên nhân 1 — Cột cần không nằm trong index
 
 ```sql
-SELECT g, name FROM grades WHERE g = 50;   -- `name` khong co trong index
+SELECT g, name FROM grades WHERE g = 50;   -- `name` không có trong index
 ```
 
 Chữa: `CREATE INDEX ... (g) INCLUDE (name)`.
@@ -499,16 +499,16 @@ EXPLAIN (ANALYZE) SELECT g FROM grades WHERE g BETWEEN 95 AND 100;
 
 ```text
 Index Only Scan using idx_grades_g on grades
-  Heap Fetches: 29882           ← van dang cham heap!
+  Heap Fetches: 29882           ← vẫn đang chạm heap!
 ```
 
 ```text
-   Index KHONG luu thong tin MVCC — no khong biet dong nao con song.
-   PostgreSQL dua vao VISIBILITY MAP: mot bit moi page,
-   bat len nghia la "moi dong trong page nay deu nhin thay duoc".
+   Index KHÔNG lưu thông tin MVCC — nó không biết dòng nào còn sống.
+   PostgreSQL dựa vào VISIBILITY MAP: một bit mỗi page,
+   bật lên nghĩa là "mọi dòng trong page này đều nhìn thấy được".
 
-   CHI `VACUUM` moi bat bit do.
-   → Vua ghi nhieu → nhieu page chua co bit → phai vao heap kiem tra
+   CHỈ `VACUUM` mới bật bit đó.
+   → Vừa ghi nhiều → nhiều page chưa có bit → phải vào heap kiểm tra
 ```
 
 ```sql
@@ -522,7 +522,7 @@ VACUUM grades;   -- → Heap Fetches tro ve 0
 ```sql
 CREATE INDEX ON grades (g);
 SELECT g FROM grades WHERE g = 50 AND name LIKE 'a%';
---                                    ▲ phai vao heap de kiem tra
+--                                    ▲ phải vào heap để kiểm tra
 ```
 
 ---

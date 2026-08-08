@@ -24,15 +24,15 @@ Bảy câu hỏi về transaction và kết nối. Ba câu đầu là những c�
 ```text
    READ COMMITTED
      → MOI CAU LENH lay MOT ANH CHUP MOI
-     → nen cau lenh thu hai thay duoc thay doi ma cau thu nhat khong thay
+     → nên câu lệnh thứ hai thấy được thay đổi mà câu thứ nhất không thấy
 
    REPEATABLE READ
-     → MOT ANH CHUP duy nhat, chup luc cau lenh DAU TIEN chay
-     → dung cho toan bo transaction
+     → MỘT ẢNH CHỤP duy nhất, chụp lúc câu lệnh ĐẦU TIÊN chạy
+     → dùng cho toàn bộ transaction
 
    SERIALIZABLE (PostgreSQL)
-     → nhu REPEATABLE READ, CONG THEM theo doi phu thuoc doc-ghi
-     → phat hien duoc chu ky phu thuoc → HUY mot transaction (loi 40001)
+     → như REPEATABLE READ, CỘNG THÊM theo dõi phụ thuộc đọc-ghi
+     → phát hiện được chu kỳ phụ thuộc → HUỶ một transaction (lỗi 40001)
 ```
 
 ### Tầng 3 — Thực tế từng hệ
@@ -49,14 +49,14 @@ Bảy câu hỏi về transaction và kết nối. Ba câu đầu là những c�
 Vì sao PostgreSQL `REPEATABLE READ` chặn được phantom:
 
 ```text
-   CACH CHUAN ANSI HINH DUNG:  khoa cac DONG da doc
-     → khe trong giua cac dong KHONG khoa duoc
-     → ai do INSERT vao khe → PHANTOM lot vao
+   CÁCH CHUẨN ANSI HÌNH DUNG:  khoá các DÒNG đã đọc
+     → khe trống giữa các dòng KHÔNG khoá được
+     → ai đó INSERT vào khe → PHANTOM lọt vào
 
-   CACH POSTGRESQL LAM:  ghi nho minh bat dau o thoi diem nao,
-                          roi LOC BO moi dong sinh ra sau do
-     → dong moi co xmin > snapshot cua toi → VO HINH
-     → phantom khong lot duoc, va khong can khoa gi ca
+   CÁCH POSTGRESQL LÀM:  ghi nhớ mình bắt đầu ở thời điểm nào,
+                          rồi LỌC BỎ mọi dòng sinh ra sau đó
+     → dòng mới có xmin > snapshot của tôi → VÔ HÌNH
+     → phantom không lọt được, và không cần khoá gì cả
 ```
 
 Nó **không cố** chặn phantom — cơ chế snapshot **tình cờ** chặn luôn. Nói được câu này là dấu hiệu hiểu cơ chế chứ không thuộc bảng.
@@ -71,40 +71,40 @@ Câu trả lời phụ thuộc vào **hệ nào**:
 
 ```text
    TRONG POSTGRESQL:  KHONG KHAC GI CA.
-     PostgreSQL cai dat REPEATABLE READ BANG snapshot isolation.
-     Hai ten goi, mot co che.
+     PostgreSQL cài đặt REPEATABLE READ BẰNG snapshot isolation.
+     Hai tên gọi, một cơ chế.
 
    TRONG SQL SERVER:  LA HAI MUC KHAC NHAU.
-     REPEATABLE READ  → dung KHOA
-     SNAPSHOT         → dung phien ban (giong Postgres)
-     → phai bat rieng: ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION ON
+     REPEATABLE READ  → dùng KHOÁ
+     SNAPSHOT         → dùng phiên bản (giống Postgres)
+     → phải bật riêng: ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION ON
 
    TRONG LY THUYET:
      Snapshot Isolation MANH HON Repeatable Read chuan ANSI
-     (vi no chan luon phantom), nhung YEU HON Serializable
-     (vi no khong chan write skew).
+     (vì nó chặn luôn phantom), nhưng YẾU HƠN Serializable
+     (vì nó không chặn write skew).
 ```
 
 ### Bất thường mà Snapshot Isolation **không** chặn: write skew
 
 ```text
-   Quy dinh: ca truc phai co it nhat 1 bac si.
-   Hien co 2: An va Binh.
+   Quy định: ca trực phải có ít nhất 1 bác sĩ.
+   Hiện có 2: An và Bình.
 
-   An:   dem bac si dang truc → 2 → "con Binh, minh xin nghi duoc"
-   Binh: dem bac si dang truc → 2 → "con An, minh xin nghi duoc"
+   An:   đếm bác sĩ đang trực → 2 → "còn Bình, mình xin nghỉ được"
+   Bình: đếm bác sĩ đang trực → 2 → "còn An, mình xin nghỉ được"
    An:   UPDATE ... An nghi      COMMIT
    Binh: UPDATE ... Binh nghi    COMMIT
 
-   → 0 bac si truc. Quy tac nghiep vu bi pha.
+   → 0 bác sĩ trực. Quy tắc nghiệp vụ bị phá.
 ```
 
 ```text
-   Vi sao Snapshot Isolation khong bat duoc:
-     • An va Binh sua HAI DONG KHAC NHAU
-     • khong co ghi de → khong phai lost update
-     • ca hai deu doc dung, ghi dung dong cua minh
-   → Chi SERIALIZABLE moi bat duoc, bang cach theo doi PHU THUOC DOC-GHI
+   Vì sao Snapshot Isolation không bắt được:
+     • An và Bình sửa HAI DÒNG KHÁC NHAU
+     • không có ghi đè → không phải lost update
+     • cả hai đều đọc đúng, ghi đúng dòng của mình
+   → Chỉ SERIALIZABLE mới bắt được, bằng cách theo dõi PHỤ THUỘC ĐỌC-GHI
 ```
 
 Thí nghiệm tái hiện đầy đủ ở [phase-2 bài 5](../phase-2/05-acid-thuc-hanh-voi-postgres.md).
@@ -116,42 +116,42 @@ Thí nghiệm tái hiện đầy đủ ở [phase-2 bài 5](../phase-2/05-acid-t
 Câu hỏi rất hay, và câu trả lời là: **chúng giải hai vấn đề khác nhau**.
 
 ```text
-   SELECT ... FOR UPDATE  →  khoa nhung DONG BAN DA DOC
-   SERIALIZABLE           →  bao ve ca nhung DONG CHUA TON TAI
+   SELECT ... FOR UPDATE  →  khoá những DÒNG BẠN ĐÃ ĐỌC
+   SERIALIZABLE           →  bảo vệ cả những DÒNG CHƯA TỒN TẠI
 ```
 
 ### Trường hợp `FOR UPDATE` bó tay
 
 ```sql
--- Quy dinh: moi phong toi da 3 nguoi
+-- Quy định: mỗi phòng tối đa 3 người
 BEGIN;
-SELECT count(*) FROM members WHERE room_id = 7 FOR UPDATE;   -- dem duoc 2
--- ... hai transaction cung dem duoc 2 ...
+SELECT count(*) FROM members WHERE room_id = 7 FOR UPDATE;   -- đếm được 2
+-- ... hai transaction cùng đếm được 2 ...
 INSERT INTO members (room_id, user_id) VALUES (7, :toi);
 COMMIT;
--- → 4 nguoi trong phong
+-- → 4 người trong phòng
 ```
 
 ```text
-   `FOR UPDATE` khoa 2 DONG DANG CO.
-   Nhung dong SAP DUOC CHEN thi khong ton tai → khong khoa duoc.
-   → Ca hai transaction deu chen thanh cong.
+   `FOR UPDATE` khoá 2 DÒNG ĐANG CÓ.
+   Những dòng SẮP ĐƯỢC CHÈN thì không tồn tại → không khoá được.
+   → Cả hai transaction đều chèn thành công.
 ```
 
 Ba cách chữa:
 
 ```text
    1. SERIALIZABLE
-      → PostgreSQL theo doi phu thuoc doc-ghi va huy mot transaction
+      → PostgreSQL theo dõi phụ thuộc đọc-ghi và huỷ một transaction
       → CAN VONG LAP THU LAI
 
    2. KHOA MOT DONG "CHA" DAI DIEN
-      SELECT * FROM rooms WHERE id = 7 FOR UPDATE;   -- khoa CHINH cai phong
-      → moi nguoi vao phong 7 deu phai xep hang qua dong nay
+      SELECT * FROM rooms WHERE id = 7 FOR UPDATE;   -- khoá CHÍNH cái phòng
+      → mọi người vào phòng 7 đều phải xếp hàng qua dòng này
 
    3. KHOA TU VAN
       SELECT pg_advisory_xact_lock(hashtext('room:7'));
-      → khong can dong that de khoa
+      → không cần dòng thật để khoá
 ```
 
 Cách 2 đơn giản nhất và thường là câu trả lời đúng trong thực tế.
@@ -176,18 +176,18 @@ Cách 2 đơn giản nhất và thường là câu trả lời đúng trong th�
 
 ```text
    MOT KET NOI POSTGRES CO TRANG THAI:
-     • transaction hien tai
+     • transaction hiện tại
      • bien phien (SET search_path, SET timezone, SET role...)
-     • bang tam
-     • cau lenh chuan bi san
-     • con tro dang mo
-     • khoa tu van cap phien
+     • bảng tạm
+     • câu lệnh chuẩn bị sẵn
+     • con trỏ đang mở
+     • khoá tư vấn cấp phiên
 ```
 
 ```text
    Client A: SET search_path = 'tenant_a';
-   Client B (dung chung ket noi): SELECT * FROM users;
-   → B doc du lieu cua TENANT A
+   Client B (dùng chung kết nối): SELECT * FROM users;
+   → B đọc dữ liệu của TENANT A
 ```
 
 Đây không phải giả thuyết — đó là một lớp lỗi bảo mật thật, và nó rất khó truy vì lỗi chỉ xuất hiện khi hai request rơi trúng cùng một kết nối.
@@ -195,12 +195,12 @@ Cách 2 đơn giản nhất và thường là câu trả lời đúng trong th�
 ### Cách đúng: connection pool
 
 ```text
-   Pool KHONG chia se ket noi dong thoi.
-   No CHO MUON: mot client giu ket noi tu luc bat dau toi luc ket thuc
-   mot don vi cong viec, roi TRA LAI.
+   Pool KHÔNG chia sẻ kết nối đồng thời.
+   Nó CHO MƯỢN: một client giữ kết nối từ lúc bắt đầu tới lúc kết thúc
+   một đơn vị công việc, rồi TRẢ LẠI.
 
-   → Khong co hai client dung chung MOT LUC
-   → Nhung TRANG THAI van co the sot lai
+   → Không có hai client dùng chung MỘT LÚC
+   → Nhưng TRẠNG THÁI vẫn có thể sót lại
 ```
 
 Vì thế pool tốt phải **dọn dẹp khi trả kết nối**:
@@ -208,20 +208,20 @@ Vì thế pool tốt phải **dọn dẹp khi trả kết nối**:
 ```text
    PgBouncer transaction mode:
      • tu chay DISCARD ALL (hoac server_reset_query)
-     • → xoa bang tam, cau lenh chuan bi, bien phien
+     • → xoá bảng tạm, câu lệnh chuẩn bị, biến phiên
 
    HikariCP:
-     • rollback transaction chua ket thuc
-     • dat lai autoCommit, readOnly, isolation
+     • rollback transaction chưa kết thúc
+     • đặt lại autoCommit, readOnly, isolation
 ```
 
 Và với PgBouncer transaction mode, quy tắc bắt buộc:
 
 ```sql
--- SAI: dinh lai o ket noi, request sau thua huong
+-- SAI: định lại ở kết nối, request sau thừa hưởng
 SET search_path = 'tenant_a';
 
--- DUNG: chi trong transaction hien tai
+-- ĐÚNG: chỉ trong transaction hiện tại
 SET LOCAL search_path = 'tenant_a';
 ```
 
@@ -239,11 +239,11 @@ Danh sách đầy đủ những gì PgBouncer transaction mode phá vỡ ở [ph
    BAO CAO KHONG CO TRANSACTION
 
    10:00:00.000  SELECT SUM(amount) FROM orders;   → 5.000.000.000
-   10:00:00.100     ⟵ mot don hang 3.000.000 duoc ghi vao
+   10:00:00.100     ⟵ một đơn hàng 3.000.000 được ghi vào
    10:00:00.200  SELECT COUNT(*) FROM orders;      → 12.001
 
    TO BAO CAO IN RA:
-     Tong doanh thu : 5.000.000.000   (tren 12.000 don)
+     Tổng doanh thu : 5.000.000.000   (trên 12.000 đơn)
      So don         : 12.001
    → HAI CON SO KHONG KHOP NHAU
 ```
@@ -253,7 +253,7 @@ BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 SELECT SUM(amount) FROM orders;
 SELECT COUNT(*)   FROM orders;
 COMMIT;
--- → ca hai nhin CUNG MOT anh chup
+-- → cả hai nhìn CÙNG MỘT ảnh chụp
 ```
 
 ### Trường hợp 2 — Cần trạng thái tại một thời điểm
@@ -267,27 +267,27 @@ BEGIN TRANSACTION READ ONLY;
 ```
 
 ```text
-   PostgreSQL biet chac khong co gi de rollback
-   → khong can cap XID ghi
-   → mot so kiem tra duoc bo qua
+   PostgreSQL biết chắc không có gì để rollback
+   → không cần cấp XID ghi
+   → một số kiểm tra được bỏ qua
 ```
 
 ### Khi nào **không** cần
 
 ```text
    ✘ Mot cau SELECT don le
-     → no DA nam trong mot transaction ngam roi (autocommit)
-     → boc them BEGIN/COMMIT chi ton hai vong mang
+     → nó ĐÃ nằm trong một transaction ngầm rồi (autocommit)
+     → bọc thêm BEGIN/COMMIT chỉ tốn hai vòng mạng
 ```
 
 ### Và cái giá phải nhớ
 
 ```text
-   Transaction chi doc VAN GIU MOT ANH CHUP.
-   Anh chup do CHAN `VACUUM` don rac tren TOAN BO database.
+   Transaction chỉ đọc VẪN GIỮ MỘT ẢNH CHỤP.
+   Ảnh chụp đó CHẶN `VACUUM` dọn rác trên TOÀN BỘ database.
 
-   → Bao cao chay 2 gio = VACUUM bi chan 2 gio
-   → Bang bi UPDATE nhieu se phinh len trong 2 gio do
+   → Báo cáo chạy 2 giờ = VACUUM bị chặn 2 giờ
+   → Bảng bị UPDATE nhiều sẽ phình lên trong 2 giờ đó
 ```
 
 Đây là lý do các báo cáo nặng nên chạy trên **replica**, không phải trên primary.
@@ -298,20 +298,20 @@ BEGIN TRANSACTION READ ONLY;
 
 ```sql
 UPDATE users SET last_login = now() WHERE id = 42;
--- Bang co 5 index, khong cai nao chua cot `last_login`
--- → van co the phai cap nhat ca 5
+-- Bảng có 5 index, không cái nào chứa cột `last_login`
+-- → vẫn có thể phải cập nhật cả 5
 ```
 
 Lý do nằm ở mô hình MVCC:
 
 ```text
    PostgreSQL KHONG SUA TAI CHO.
-   `UPDATE` = tao mot PHIEN BAN MOI cua dong o vi tri KHAC.
+   `UPDATE` = tạo một PHIÊN BẢN MỚI của dòng ở vị trí KHÁC.
    → ctid doi tu (0,1) sang (0,4)
 
-   Ma MOI index cua PostgreSQL deu tro toi `ctid`.
-   → dong doi cho → moi index phai tro lai cho moi
-   → KE CA index tren cac cot KHONG HE THAY DOI
+   Mà MỌI index của PostgreSQL đều trỏ tới `ctid`.
+   → dòng đổi chỗ → mọi index phải trỏ lại chỗ mới
+   → KỂ CẢ index trên các cột KHÔNG HỀ THAY ĐỔI
 ```
 
 ### Cơ chế giảm nhẹ: HOT update
@@ -319,11 +319,11 @@ Lý do nằm ở mô hình MVCC:
 **HOT** = *Heap-Only Tuple*. Nếu thoả **cả hai** điều kiện:
 
 ```text
-   1. Phien ban moi nam CUNG PAGE voi phien ban cu
-   2. KHONG cot nao DUOC DANH INDEX bi thay doi
+   1. Phiên bản mới nằm CÙNG PAGE với phiên bản cũ
+   2. KHÔNG cột nào ĐƯỢC ĐÁNH INDEX bị thay đổi
 
    → Index KHONG can cap nhat.
-   → Chi tao mot chuoi lien ket trong chinh page do.
+   → Chỉ tạo một chuỗi liên kết trong chính page đó.
 ```
 
 Kiểm tra tỉ lệ HOT:
@@ -341,18 +341,18 @@ ORDER BY n_tup_upd DESC;
  relname |  tong_update  | update_hot | ti_le_hot
 ---------+---------------+------------+-----------
  users   |       1284993 |    1198442 |      93.3
- orders  |        882117 |     102883 |      11.7    ← THAP, can xem lai
+ orders  |        882117 |     102883 |      11.7    ← THẤP, cần xem lại
 ```
 
 Hai cách tăng tỉ lệ HOT:
 
 ```sql
--- 1. Chua cho trong page de phien ban moi nam cung page
+-- 1. Chừa chỗ trống trong page để phiên bản mới nằm cùng page
 ALTER TABLE orders SET (fillfactor = 80);
-VACUUM FULL orders;      -- can dung lai bang de ap dung
+VACUUM FULL orders;      -- cần dừng lại bảng để áp dụng
 
--- 2. Bo index tren cac cot BI CAP NHAT THUONG XUYEN
-DROP INDEX idx_orders_updated_at;   -- neu it duoc dung
+-- 2. Bỏ index trên các cột BỊ CẬP NHẬT THƯỜNG XUYÊN
+DROP INDEX idx_orders_updated_at;   -- nếu ít được dùng
 ```
 
 Cách 2 phản trực giác nhưng rất hiệu quả: **một index trên cột hay thay đổi làm hỏng HOT cho mọi `UPDATE` của bảng đó**.
@@ -360,10 +360,10 @@ Cách 2 phản trực giác nhưng rất hiệu quả: **một index trên cột
 ### So sánh với InnoDB
 
 ```text
-   INNODB SUA TAI CHO, va index phu tro toi PRIMARY KEY (khong doi).
-   → `UPDATE` mot cot khong duoc danh index → KHONG dung index phu nao
+   INNODB SỬA TẠI CHỖ, và index phụ trỏ tới PRIMARY KEY (không đổi).
+   → `UPDATE` một cột không được đánh index → KHÔNG đụng index phụ nào
 
-   Doi lai: InnoDB phai ghi UNDO LOG, va doc du lieu cu phai tra undo log.
+   Đổi lại: InnoDB phải ghi UNDO LOG, và đọc dữ liệu cũ phải tra undo log.
 ```
 
 Đây là ví dụ tiêu biểu cho nguyên tắc "không có lựa chọn miễn phí": PostgreSQL đổi chi phí đọc dữ liệu cũ lấy chi phí cập nhật index; InnoDB đổi ngược lại.
@@ -373,17 +373,17 @@ Cách 2 phản trực giác nhưng rất hiệu quả: **một index trên cột
 ## Câu 7 — Vì sao `COUNT(*)` trong PostgreSQL chậm?
 
 ```sql
-SELECT count(*) FROM orders;   -- bang 50 trieu dong → ~4 giay
+SELECT count(*) FROM orders;   -- bảng 50 triệu dòng → ~4 giây
 ```
 
 ```text
-   MyISAM luu san so dong trong metadata → tra ve tuc thi.
+   MyISAM lưu sẵn số dòng trong metadata → trả về tức thì.
    PostgreSQL PHAI DEM THAT.
 
    VI SAO?  Vi MVCC:
-     Transaction A dang chay thay 50.000.000 dong
-     Transaction B (bat dau sau) thay 50.000.017 dong
-     → KHONG CO "so dong" duy nhat de luu san
+     Transaction A đang chạy thấy 50.000.000 dòng
+     Transaction B (bắt đầu sau) thấy 50.000.017 dòng
+     → KHÔNG CÓ "số dòng" duy nhất để lưu sẵn
 ```
 
 ### `COUNT(*)` và `COUNT(cột)` **không** giống nhau
@@ -399,12 +399,12 @@ Aggregate  (actual time=1.882..1.883 rows=1 loops=1)
   ->  Index Only Scan using grades_pkey on grades  (rows=3001 loops=1)
         Index Cond: ((id >= 1000) AND (id <= 4000))
         Heap Fetches: 0
-Execution Time: 1.918 ms                              ← KHONG cham heap
+Execution Time: 1.918 ms                              ← KHÔNG chạm heap
 ```
 
 ```sql
 EXPLAIN ANALYZE SELECT count(g) FROM grades WHERE id BETWEEN 1000 AND 4000;
---                        ▲ dem theo MOT COT cu the
+--                        ▲ đếm theo MỘT CỘT cụ thể
 ```
 
 ```text
@@ -418,32 +418,32 @@ Vì sao khác nhau:
 
 ```text
    COUNT(*)     →  "dem SO DONG"
-                   khong can biet gia tri nao ca
-                   → index la du → INDEX ONLY SCAN  ✔
+                   không cần biết giá trị nào cả
+                   → index là đủ → INDEX ONLY SCAN  ✔
 
-   COUNT(cot)   →  "dem so dong co `cot` KHAC NULL"
-                   → PHAI biet gia tri cua `cot`
-                   → neu `cot` khong nam trong index → PHAI VAO HEAP  ✘
+   COUNT(cột)   →  "đếm số dòng có `cột` KHÁC NULL"
+                   → PHẢI biết giá trị của `cột`
+                   → nếu `cột` không nằm trong index → PHẢI VÀO HEAP  ✘
 ```
 
 Và kết quả cũng khác:
 
 ```text
    COUNT(*)  → 3001
-   COUNT(g)  → 2987      ← thieu 14 dong co g IS NULL
+   COUNT(g)  → 2987      ← thiếu 14 dòng có g IS NULL
 ```
 
 Hai hiểu lầm cần dẹp:
 
 ```text
-   ❌ "COUNT(*) doc HET moi cot roi dem"
-   ✔  Gan nhu moi database hien dai deu KHONG lam vay.
-      COUNT(*) chi dem MUC, khong cham gia tri nao.
-      → COUNT(*) NHANH HON HOAC BANG COUNT(cot), khong bao gio cham hon.
+   ❌ "COUNT(*) đọc HẾT mọi cột rồi đếm"
+   ✔  Gần như mọi database hiện đại đều KHÔNG làm vậy.
+      COUNT(*) chỉ đếm MỤC, không chạm giá trị nào.
+      → COUNT(*) NHANH HƠN HOẶC BẰNG COUNT(cột), không bao giờ chậm hơn.
 
-   ❌ "COUNT(1) nhanh hon COUNT(*)"
-   ✔  Y HET NHAU. Planner xu ly hai cai nhu nhau.
-      Day la truyen thuyet tu thoi Oracle nhung nam 1990.
+   ❌ "COUNT(1) nhanh hơn COUNT(*)"
+   ✔  Y HỆT NHAU. Planner xử lý hai cái như nhau.
+      Đây là truyền thuyết từ thời Oracle những năm 1990.
 ```
 
 ### `Heap Fetches` xuất hiện sau khi `UPDATE`
@@ -457,26 +457,26 @@ EXPLAIN ANALYZE SELECT count(*) FROM grades WHERE id BETWEEN 1000 AND 4000;
 
 ```text
   ->  Index Only Scan using grades_pkey on grades
-        Heap Fetches: 6002        ← van phai vao heap 6.002 lan
+        Heap Fetches: 6002        ← vẫn phải vào heap 6.002 lần
 Execution Time: 18.882 ms
 ```
 
 ```sql
 VACUUM grades;
--- chay lai → Heap Fetches: 0, Execution Time: 1.9 ms
+-- chạy lại → Heap Fetches: 0, Execution Time: 1.9 ms
 ```
 
 ```text
-   Index KHONG biet dong nao con song.
-   Sau UPDATE, cac page bi sua MAT bit visibility
-   → Index Only Scan phai vao heap kiem tra tung dong
-   → chi `VACUUM` moi bat lai bit do
+   Index KHÔNG biết dòng nào còn sống.
+   Sau UPDATE, các page bị sửa MẤT bit visibility
+   → Index Only Scan phải vào heap kiểm tra từng dòng
+   → chỉ `VACUUM` mới bật lại bit đó
 ```
 
 Ba cách thay thế:
 
 ```sql
--- 1. UOC LUONG (tuc thi, sai so vai phan tram)
+-- 1. ƯỚC LƯỢNG (tức thì, sai số vài phần trăm)
 SELECT reltuples::BIGINT FROM pg_class WHERE relname = 'orders';
 ```
 
@@ -487,16 +487,16 @@ SELECT reltuples::BIGINT FROM pg_class WHERE relname = 'orders';
 ```
 
 ```sql
--- 2. UOC LUONG cho truy van CO DIEU KIEN
+-- 2. ƯỚC LƯỢNG cho truy vấn CÓ ĐIỀU KIỆN
 EXPLAIN SELECT * FROM orders WHERE status = 'paid';
---   → doc so `rows=` trong ke hoach
+--   → đọc số `rows=` trong kế hoạch
 ```
 
 ```sql
--- 3. BO DEM CHINH XAC bang trigger (khi that su can)
+-- 3. BỘ ĐẾM CHÍNH XÁC bằng trigger (khi thật sự cần)
 CREATE TABLE row_counts (bang TEXT PRIMARY KEY, cnt BIGINT NOT NULL DEFAULT 0);
--- + trigger AFTER INSERT/DELETE tang/giam
--- ⚠ nhung dong nay tro thanh DIEM NONG → can bo dem chia manh
+-- + trigger AFTER INSERT/DELETE tăng/giảm
+-- ⚠ nhưng dòng này trở thành ĐIỂM NÓNG → cần bộ đếm chia mảnh
 ```
 
 Cách 3 mang lại đúng vấn đề đã phân tích ở [phase-10 bài 1](../phase-10/01-system-design-twitter-database.md): một dòng bộ đếm bị cập nhật liên tục trở thành điểm nóng khoá.
@@ -504,7 +504,7 @@ Cách 3 mang lại đúng vấn đề đã phân tích ở [phase-10 bài 1](../
 Và cách rẻ nhất cho giao diện phân trang:
 
 ```sql
-SELECT ... LIMIT 21;   -- lay 21, hien 20, con 1 dong nghia la "con trang sau"
+SELECT ... LIMIT 21;   -- lấy 21, hiện 20, còn 1 dòng nghĩa là "còn trang sau"
 ```
 
 ## Bảng tra nhanh
