@@ -159,6 +159,18 @@ Thực tế:
   → Admin là job riêng (DevOps/Platform engineer)
 ```
 
+> **Cập nhật**: bốn phase bổ sung (17–20) đã lấp phần lớn danh sách trên. Bảng dưới đây cho biết tìm ở đâu:
+>
+> | Chủ đề ở danh sách trên | Giờ nằm ở |
+> |---|---|
+> | RBAC chi tiết | [Phase 19 bài 2](../phase-19/02-rbac-va-serviceaccount.md) |
+> | Network Policies | [Phase 19 bài 4](../phase-19/04-networkpolicy-va-tong-ket.md) |
+> | Giám sát cụm với Prometheus/Grafana | [Phase 20 bài 3](../phase-20/03-chi-so-giam-sat-va-so-tay.md) |
+> | Lập lịch nâng cao (taint, toleration, affinity) | [Phase 17 bài 2](../phase-17/02-daemonset.md), [Phase 18 bài 4](../phase-18/04-cluster-autoscaler-va-tong-ket.md) |
+> | Quản lý bí mật | [Phase 19 bài 3](../phase-19/03-secret-that-su-an-toan.md) |
+>
+> Phần **vẫn chưa có**: nâng cấp phiên bản cụm, sao lưu và khôi phục thảm hoạ, vận hành etcd. Đó thật sự là việc của đội nền tảng, và với cụm quản lý sẵn (EKS/GKE/AKS) thì nhà cung cấp lo phần lớn.
+
 ### 4. Ngôn Ngữ Lập Trình Khác
 
 ```text
@@ -237,6 +249,34 @@ Advanced:
   □ Kubernetes operators
   □ GitOps với ArgoCD hoặc Flux
 ```
+
+### Lộ trình đọc bốn phase bổ sung
+
+Bốn phase 17–20 không nằm trong transcript gốc. Chúng được viết thêm vì đó là những thứ bạn **chắc chắn gặp** khi đưa hệ thống lên production, mà khoá gốc dừng lại ở mức "triển khai được lên EKS".
+
+```text
+   Nếu bạn sắp đưa hệ thống lên production, đọc theo thứ tự này:
+
+   1. Phase 18 — Tài nguyên và autoscaling
+      Vì sao Pod bị OOMKilled, đặt requests/limits bao nhiêu,
+      vì sao livenessProbe có thể làm cụm tự giết chính mình.
+      → Đây là phase cứu bạn khỏi nhiều đêm mất ngủ nhất.
+
+   2. Phase 19 — Bảo mật
+      Quét lỗ hổng image, non-root, RBAC, Secret, NetworkPolicy.
+      → Làm sớm rẻ hơn sửa sau rất nhiều.
+
+   3. Phase 20 — Quan sát và gỡ lỗi
+      Log, Event, kubectl debug, và SỔ TAY CHẨN ĐOÁN
+      tra từ triệu chứng ra nguyên nhân.
+      → Đọc trước khi có sự cố, không phải lúc đang có sự cố.
+
+   4. Phase 17 — Workload đầy đủ
+      StatefulSet, DaemonSet, Job, CronJob.
+      → Đọc khi thật sự cần chạy database, agent, hoặc tác vụ theo lịch.
+```
+
+Điểm khởi đầu nhanh nhất khi có sự cố: [sổ tay chẩn đoán ở Phase 20 bài 3](../phase-20/03-chi-so-giam-sat-va-so-tay.md) — bảng 18 dòng tra từ triệu chứng sang nguyên nhân và bài giải thích.
 
 ---
 
