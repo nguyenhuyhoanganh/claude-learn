@@ -164,4 +164,96 @@ service-name.namespace  # Cũng work!
 
 ---
 
+## Vì sao tên rút gọn hoạt động — và khi nào nó phản tác dụng
+
+Tên rút gọn chạy được nhờ file `/etc/resolv.conf` mà Kubernetes tự đặt vào mỗi Pod:
+
+```bash
+kubectl exec -it my-pod -- cat /etc/resolv.conf
+```
+
+```text
+nameserver 10.96.0.10
+search default.svc.cluster.local svc.cluster.local cluster.local
+options ndots:5
+```
+
+Dòng `search` nghĩa là: khi bạn gọi `auth-service`, hệ thống **lần lượt thử** ghép từng hậu tố:
+
+```text
+   auth-service                              → không có
+   auth-service.default.svc.cluster.local    → CÓ  ✓
+```
+
+Còn `ndots:5` là chi tiết gây ra một vấn đề hiệu năng thật:
+
+```text
+   ndots:5 nghĩa là: tên có DƯỚI 5 dấu chấm thì THỬ GHÉP HẬU TỐ TRƯỚC
+
+   Gọi "api.github.com" (2 dấu chấm):
+     1. api.github.com.default.svc.cluster.local   → không có
+     2. api.github.com.svc.cluster.local           → không có
+     3. api.github.com.cluster.local               → không có
+     4. api.github.com                             → CÓ  ✓
+
+   → BỐN lượt truy vấn DNS thay vì một, cho MỌI lời gọi ra ngoài
+```
+
+Với dịch vụ gọi API bên ngoài nhiều, đây là nguyên nhân thật của độ trễ tăng và tải nặng lên CoreDNS. Cách chữa: thêm **dấu chấm cuối** để báo "đây là tên tuyệt đối, đừng ghép gì nữa".
+
+```javascript
+fetch('https://api.github.com./users')     // chú ý dấu chấm sau "com"
+```
+
+Hoặc chỉnh riêng cho Pod đó:
+
+```yaml
+spec:
+  dnsConfig:
+    options:
+      - name: ndots
+        value: "1"
+```
+
+### Biến môi trường tự sinh — và bẫy thứ tự
+
+Kubernetes tự tạo biến môi trường cho mọi Service **đã tồn tại trước** khi Pod khởi động:
+
+```bash
+kubectl exec my-pod -- env | grep AUTH
+```
+
+```text
+AUTH_SERVICE_SERVICE_HOST=10.96.45.12
+AUTH_SERVICE_SERVICE_PORT=80
+```
+
+> **Bẫy**: biến này **chỉ có nếu Service được tạo TRƯỚC Pod**. Tạo Service sau thì Pod đang chạy **không bao giờ** thấy biến đó — phải khởi động lại Pod. Đây là lý do **luôn nên dùng DNS thay vì biến môi trường tự sinh**: DNS phân giải lúc chạy, không phụ thuộc thứ tự tạo.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Triệu chứng | Cách xử lý |
+|---|---|---|
+| Dùng biến môi trường tự sinh thay DNS | Biến không tồn tại nếu Service tạo sau Pod | Luôn dùng **tên DNS** |
+| Gọi Service ở namespace khác bằng tên ngắn | `getaddrinfo ENOTFOUND` | Thêm namespace: `auth-service.production` |
+| Gọi API ngoài mà không có dấu chấm cuối | **4 lượt truy vấn DNS** mỗi lần gọi, CoreDNS quá tải | Thêm dấu chấm cuối, hoặc chỉnh `ndots` |
+| Dùng cổng đã publish thay vì cổng của Service | Không kết nối được | Dùng đúng `port` khai trong Service |
+| Tưởng DNS trỏ tới Pod | Nó trỏ tới **Service** (một IP ảo cố định) | IP Pod đổi liên tục, IP Service thì không |
+| Headless Service mà mong có cân tải | Nó trả **danh sách IP Pod**, không cân tải | Đó là hành vi đúng — xem [Phase 17 bài 1](../phase-17/01-statefulset.md) |
+| CoreDNS quá tải mà không biết | Độ trễ tăng ngẫu nhiên toàn cụm | Theo dõi `coredns_dns_request_duration_seconds` |
+
+---
+
+## Tóm tắt bài 4
+
+- Trong cụm, gọi nhau bằng **tên DNS của Service**: dạng đầy đủ `<service>.<namespace>.svc.cluster.local`, dạng rút gọn `<service>` (cùng namespace) hoặc `<service>.<namespace>`.
+- Tên rút gọn chạy được nhờ dòng **`search`** trong `/etc/resolv.conf` mà Kubernetes tự đặt vào Pod.
+- **`ndots:5` khiến mỗi lời gọi ra ngoài tốn 4 lượt truy vấn DNS.** Với dịch vụ gọi API ngoài nhiều, đây là nguyên nhân thật của độ trễ và tải nặng lên CoreDNS. Chữa bằng **dấu chấm cuối** hoặc `dnsConfig`.
+- **Biến môi trường tự sinh chỉ có nếu Service được tạo TRƯỚC Pod** — nên luôn ưu tiên DNS, vì nó phân giải lúc chạy.
+- DNS trỏ tới **Service** (IP ảo cố định), không trỏ tới Pod (IP đổi liên tục).
+
+---
+
 **Bài kế tiếp** → [Bài 5: Frontend & Reverse Proxy trong Kubernetes](05-frontend-va-reverse-proxy.md)

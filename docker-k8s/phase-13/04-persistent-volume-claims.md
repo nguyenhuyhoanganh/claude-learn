@@ -186,4 +186,103 @@ kubectl delete pvc NAME
 
 ---
 
+## Chẩn đoán PVC kẹt ở `Pending`
+
+Đây là sự cố lưu trữ phổ biến nhất trong Kubernetes, và nguyên nhân luôn nằm trong bốn khả năng.
+
+```bash
+kubectl describe pvc du-lieu-app | tail -12
+```
+
+```text
+Events:
+  Type     Reason              Age   From                Message
+  ----     ------              ----  ----                -------
+  Warning  ProvisioningFailed  30s   persistentvolume-controller
+    storageclass.storage.k8s.io "fast-ssd" not found
+```
+
+| Thông báo | Nguyên nhân | Cách xử lý |
+|---|---|---|
+| `storageclass ... not found` | Tên StorageClass sai, hoặc cụm không có class đó | `kubectl get storageclass` xem tên đúng |
+| `no persistent volumes available for this claim` | Không có PV nào khớp, và cụm **không có cấp phát động** | Tạo PV thủ công, hoặc cài CSI driver |
+| Không có sự kiện nào cả | StorageClass dùng `volumeBindingMode: WaitForFirstConsumer` | **Bình thường** — PVC chờ tới khi có Pod dùng nó |
+| `exceeded quota` | Namespace đã chạm hạn mức lưu trữ | Kiểm tra `kubectl describe resourcequota` |
+
+Trường hợp thứ ba đáng nói vì nó **không phải lỗi**:
+
+```bash
+kubectl get storageclass gp3 -o jsonpath='{.volumeBindingMode}'
+```
+
+```text
+WaitForFirstConsumer
+```
+
+```text
+   Immediate            → tạo PV NGAY khi PVC được tạo
+   WaitForFirstConsumer → CHỜ tới khi có Pod dùng PVC, rồi mới tạo PV
+                          Ở ĐÚNG vùng sẵn sàng (AZ) mà Pod được xếp lên
+```
+
+Chế độ chờ tồn tại để tránh một lỗi rất khó chịu trên cloud: PV được tạo ở AZ `a`, nhưng scheduler lại xếp Pod lên node ở AZ `b` → Pod kẹt `Pending` vĩnh viễn với thông báo `volume node affinity conflict`.
+
+### Ba chế độ truy cập — và hiểu nhầm phổ biến
+
+| Chế độ | Nghĩa | Ai hỗ trợ |
+|---|---|---|
+| **`ReadWriteOnce` (RWO)** | Gắn được vào **một node** (nhiều Pod trên node đó vẫn dùng chung được) | Gần như mọi loại ổ đĩa khối: EBS, GCE PD, Azure Disk |
+| `ReadOnlyMany` (ROX) | Nhiều node đọc, không ghi | NFS, EFS |
+| `ReadWriteMany` (RWX) | **Nhiều node cùng đọc ghi** | **Chỉ hệ thống file chia sẻ**: EFS, NFS, CephFS. **EBS KHÔNG hỗ trợ** |
+
+> **Hiểu nhầm phổ biến**: `ReadWriteOnce` không phải "một Pod duy nhất" mà là "**một node duy nhất**". Nhiều Pod trên cùng node vẫn gắn chung được. Nhưng nếu Deployment có 3 bản sao trải trên 3 node và dùng PVC `RWO`, thì **chỉ Pod ở node giữ ổ đĩa mới chạy được**, hai Pod kia kẹt `Pending`.
+>
+> Đây là lý do chạy Deployment nhiều bản sao với ổ đĩa dùng chung là **sai thiết kế**. Cần mỗi Pod một ổ đĩa riêng thì dùng **StatefulSet** với `volumeClaimTemplates` ([Phase 17 bài 1](../phase-17/01-statefulset.md)).
+
+### `reclaimPolicy` — điều gì xảy ra khi xoá PVC
+
+```bash
+kubectl get pv -o custom-columns=NAME:.metadata.name,POLICY:.spec.persistentVolumeReclaimPolicy,STATUS:.status.phase
+```
+
+```text
+NAME       POLICY   STATUS
+pvc-a1b2   Delete   Bound
+```
+
+| Giá trị | Xoá PVC thì |
+|---|---|
+| **`Delete`** (mặc định của hầu hết StorageClass) | **Ổ đĩa thật bị xoá — MẤT DỮ LIỆU** |
+| `Retain` | PV còn lại ở trạng thái `Released`; dữ liệu **vẫn nguyên**, nhưng phải xử lý tay mới dùng lại được |
+
+> Với dữ liệu quan trọng, hãy tạo một StorageClass riêng đặt `reclaimPolicy: Retain`. Mặc định `Delete` nghĩa là **một lệnh `kubectl delete pvc` gõ nhầm là mất database**.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả |
+|---|---|
+| Dùng `ReadWriteOnce` cho Deployment nhiều bản sao trải nhiều node | Chỉ **một** Pod chạy được, các Pod khác kẹt `Pending` |
+| Tưởng `RWO` là "một Pod" | Nó là "**một node**" |
+| Để `reclaimPolicy: Delete` cho dữ liệu quan trọng | `kubectl delete pvc` là **mất ổ đĩa thật** |
+| Tưởng PVC `Pending` luôn là lỗi | Với `WaitForFirstConsumer` thì đó là **hành vi đúng** |
+| Xoá namespace chứa PVC | Xoá luôn PVC → xoá luôn ổ đĩa nếu policy là `Delete` |
+| Muốn mở rộng dung lượng nhưng StorageClass không cho | Kiểm tra `allowVolumeExpansion: true` |
+| Dùng PVC cho dữ liệu tạm | Tốn tiền ổ đĩa vô ích — `emptyDir` là đủ |
+| Không đặt `storageClassName` | Dùng class mặc định của cụm, có thể không phải thứ bạn muốn |
+
+---
+
+## Tóm tắt bài 4
+
+- **PVC là "đơn xin ổ đĩa"**, PV là ổ đĩa thật. Ứng dụng chỉ khai PVC; PV do quản trị viên hoặc **cấp phát động** lo.
+- PVC kẹt `Pending` có **bốn nguyên nhân**: sai tên StorageClass, không có PV khớp, đang chờ Pod (`WaitForFirstConsumer` — **bình thường**), hoặc chạm hạn mức.
+- **`WaitForFirstConsumer` tồn tại để tránh lỗi `volume node affinity conflict`** — PV bị tạo ở AZ khác với nơi Pod được xếp lên.
+- **`ReadWriteOnce` nghĩa là "một NODE", không phải "một Pod".** Deployment nhiều bản sao trải nhiều node mà dùng PVC RWO thì chỉ một Pod chạy được. Cần mỗi Pod một ổ đĩa thì dùng **StatefulSet**.
+- **`ReadWriteMany` chỉ có ở hệ thống file chia sẻ** (EFS, NFS). Ổ đĩa khối như EBS **không hỗ trợ**.
+- **`reclaimPolicy` mặc định là `Delete`** — xoá PVC là **xoá ổ đĩa thật**. Dữ liệu quan trọng nên dùng StorageClass có `Retain`.
+
+---
+
 **Bài kế tiếp** → [Bài 5: Environment Variables & ConfigMaps](05-environment-variables-configmaps.md)

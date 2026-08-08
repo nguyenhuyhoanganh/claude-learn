@@ -116,4 +116,75 @@ PersistentVolume (PV):
 
 ---
 
+## Volume của Kubernetes khác volume của Docker chỗ nào
+
+Cùng tên gọi nhưng khác nhau ở một điểm cốt lõi, và không nắm điểm này thì mọi thứ về sau đều mơ hồ:
+
+```text
+   DOCKER VOLUME
+   ═════════════
+   Gắn với MỘT MÁY. Container chuyển sang máy khác → không thấy volume nữa.
+   Nhưng Docker cũng không tự chuyển container sang máy khác, nên không sao.
+
+   KUBERNETES VOLUME
+   ═════════════════
+   Pod CÓ THỂ bị xếp lên BẤT KỲ node nào trong cụm — và chuyện đó
+   xảy ra thường xuyên (node chết, nâng cấp, cân bằng lại).
+
+   → Volume gắn với MỘT máy (như hostPath) trở nên VÔ DỤNG
+   → cần một lớp lưu trữ mà MỌI node đều truy cập được
+```
+
+Đây chính là lý do Kubernetes có tới ba tầng khái niệm (`Volume` → `PersistentVolume` → `PersistentVolumeClaim`) trong khi Docker chỉ có một. Sự phức tạp thêm vào không phải vô cớ — nó giải bài toán *"dữ liệu phải đi theo Pod, kể cả khi Pod nhảy sang máy khác"*.
+
+### Ba câu hỏi để chọn đúng loại
+
+```text
+   1. Dữ liệu có cần sống sót khi POD bị xoá không?
+        KHÔNG → emptyDir       (cache, file tạm, chia sẻ giữa container trong Pod)
+        CÓ    → câu hỏi 2
+
+   2. Dữ liệu có cần sống sót khi NODE chết không?
+        KHÔNG → hostPath       (gần như chỉ dùng cho agent hệ thống)
+        CÓ    → câu hỏi 3
+
+   3. Nhiều Pod trên NHIỀU NODE có cần ghi cùng lúc không?
+        KHÔNG → PVC với ReadWriteOnce  (EBS, GCE PD — phổ biến nhất)
+        CÓ    → PVC với ReadWriteMany  (EFS, NFS — đắt và chậm hơn)
+```
+
+Câu hỏi thứ hai đáng lưu ý: **`hostPath` gần như không bao giờ đúng cho ứng dụng thường**. Nó gắn dữ liệu vào một node cụ thể, nên Pod chuyển node là mất dữ liệu — mà Pod chuyển node là chuyện Kubernetes làm thường xuyên. `hostPath` chỉ hợp lý cho DaemonSet cần đọc dữ liệu **của chính node đó** (log, chỉ số) — xem [Phase 17 bài 2](../phase-17/02-daemonset.md).
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả |
+|---|---|
+| Dùng `hostPath` cho dữ liệu ứng dụng | Pod chuyển node là **mất dữ liệu**; và trên cụm nhiều node thì mỗi Pod thấy dữ liệu khác nhau |
+| Tưởng `emptyDir` sống sót qua khởi động lại container | Nó sống sót khi **container** khởi động lại, nhưng mất khi **Pod** bị xoá |
+| Dùng volume cho dữ liệu lẽ ra thuộc về database | Tự dựng lưu trữ phức tạp thay vì dùng dịch vụ quản lý sẵn |
+| Chạy Deployment nhiều bản sao với một PVC `ReadWriteOnce` | Chỉ **một** Pod chạy được, số còn lại kẹt `Pending` |
+| Không đặt giới hạn dung lượng cho `emptyDir` | Ứng dụng ghi tràn làm **đầy đĩa node**, ảnh hưởng mọi Pod khác |
+
+Dòng cuối có cách chữa đơn giản mà ít người biết:
+
+```yaml
+volumes:
+  - name: cache
+    emptyDir:
+      sizeLimit: 1Gi        # Pod bị đuổi nếu vượt quá
+```
+
+---
+
+## Tóm tắt bài 1
+
+- Khác biệt cốt lõi so với Docker: **Pod có thể bị xếp lên bất kỳ node nào**, nên volume gắn với một máy trở nên vô dụng. Đó là lý do Kubernetes có ba tầng khái niệm thay vì một.
+- Ba câu hỏi để chọn: **sống sót qua Pod bị xoá?** → `emptyDir` hay không; **sống sót qua node chết?** → `hostPath` hay không; **nhiều node cùng ghi?** → `RWO` hay `RWX`.
+- **`hostPath` gần như không bao giờ đúng cho ứng dụng thường** — chỉ hợp cho DaemonSet đọc dữ liệu của chính node đó.
+- **`emptyDir` mất khi Pod bị xoá**, nhưng sống sót khi container trong Pod khởi động lại. Nên đặt **`sizeLimit`** để không làm đầy đĩa node.
+
+---
+
 **Bài kế tiếp** → [Bài 2: emptyDir và hostPath Volumes](02-emptydir-va-hostpath.md)
