@@ -316,7 +316,7 @@ Ba cách dùng thực tế:
       Mảnh gần đây → NVMe;  mảnh cũ → HDD
       → kết hợp với partitioning ([phase-6])
 
-   2. TACH WAL RA O RIENG
+   2. TÁCH WAL RA Ổ RIÊNG
       WAL là ghi TUẦN TỰ liên tục;  dữ liệu là ghi NGẪU NHIÊN
       → để chung nhau thì chúng tranh đầu đọc/hàng đợi I/O
 

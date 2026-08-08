@@ -224,7 +224,7 @@ const crypto = require('crypto');
 class VongBam {
     constructor(soNutAo = 150) {
         this.soNutAo = soNutAo;
-        this.vong    = new Map();   // vi tri bam -> ten shard
+        this.vong    = new Map();   // vị trí băm -> tên shard
         this.viTriSapXep = [];
     }
 

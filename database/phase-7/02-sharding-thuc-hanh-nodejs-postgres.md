@@ -214,7 +214,7 @@ async function moPhongDuoiTre(soLan = 1000) {
         tong1 += doTre[0];                    // hoi 1 shard
         tongN += Math.max(...doTre);          // hỏi tất cả → chờ cái chậm nhất
     }
-    console.log(`Hoi 1 shard : trung binh ${(tong1/soLan).toFixed(1)} ms`);
+    console.log(`Hỏi 1 shard : trung bình ${(tong1/soLan).toFixed(1)} ms`);
     console.log(`Hoi 3 shard : trung binh ${(tongN/soLan).toFixed(1)} ms`);
 }
 ```
@@ -252,7 +252,7 @@ for (const urlId of daTao) {
     const moi = bamModulo(urlId, 4);
     if (cu !== moi) doiCho++;
 }
-console.log(`Phai di chuyen: ${(100*doiCho/daTao.length).toFixed(1)}%`);
+console.log(`Phải di chuyển: ${(100*doiCho/daTao.length).toFixed(1)}%`);
 ```
 
 ```text
@@ -310,7 +310,7 @@ vong.themShard('shard4');
 
 let doi = 0;
 for (const [k, v] of truoc) if (vong.timShard(k) !== v) doi++;
-console.log(`Phai di chuyen: ${(100*doi/daTao.length).toFixed(1)}%`);
+console.log(`Phải di chuyển: ${(100*doi/daTao.length).toFixed(1)}%`);
 ```
 
 ```text
@@ -318,7 +318,7 @@ Phải di chuyển: 24.6%
 ```
 
 ```text
-   Chia lay du     :  74,8%
+   Chia lấy dư     :  74,8%
    Băm nhất quán   :  24,6%     →  ÍT HƠN 3 LẦN
 ```
 

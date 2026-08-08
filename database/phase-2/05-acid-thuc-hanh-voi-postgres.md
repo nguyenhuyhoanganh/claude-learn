@@ -711,7 +711,7 @@ def chay_co_thu_lai(conn, cong_viec):
             # backoff có nhiễu ngẫu nhiên: tránh mọi client cùng thử lại một nhịp
             cho = (2 ** lan) * 0.05 * (1 + random.random())
             time.sleep(cho)
-    raise RuntimeError(f"That bai sau {SO_LAN_THU_TOI_DA} lan thu")
+    raise RuntimeError(f"Thất bại sau {SO_LAN_THU_TOI_DA} lần thử")
 ```
 
 Ba chi tiết trong đoạn code này đều quan trọng:

@@ -50,7 +50,7 @@ Bài này giải thích vì sao, và cho bạn công cụ để xử lý dữ li
    │          │                        │          │
    │ 42 GB RAM│  cursor chỉ là con trỏ │ 0 trạng thái
    │          │  chạy trên MẢNG DỮ LIỆU│  lưu lại │
-   └──────────┘  DA NAM O CLIENT       └──────────┘
+   └──────────┘  ĐÃ NẰM Ở CLIENT       └──────────┘
 
    → "Cursor" ở đây chỉ là vòng lặp trên một mảng trong bộ nhớ.
    → Database đã làm xong việc và quên bạn rồi.

@@ -78,7 +78,7 @@ Hash Join  (cost=3854.00..28471.11 rows=1000000 width=48)
    CÁCH LÀM:
      1. Quét bảng NHỎ HƠN (users) → dựng BẢNG BĂM trong RAM
      2. Quét bảng LỚN HƠN (orders) → mỗi dòng, tra bảng băm
-   → O(n + m) thay vi O(n × m)
+   → O(n + m) thay vì O(n × m)
 ```
 
 Ba dòng cần đọc trong kế hoạch:

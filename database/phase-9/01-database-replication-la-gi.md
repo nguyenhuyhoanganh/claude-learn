@@ -399,7 +399,7 @@ Cách 1 giải quyết ~90% trường hợp với ~10% công sức:
 def lay_ket_noi_doc(user_id):
     vua_ghi_luc = cache.get(f"vua_ghi:{user_id}")
     if vua_ghi_luc and time.time() - vua_ghi_luc < 5:
-        return pool_primary          # trong 5 giay sau khi ghi
+        return pool_primary          # trong 5 giây sau khi ghi
     return pool_replica
 
 def sau_khi_ghi(user_id):

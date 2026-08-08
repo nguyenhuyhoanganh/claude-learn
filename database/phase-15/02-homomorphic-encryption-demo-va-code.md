@@ -73,7 +73,7 @@ cac_ban_ma = [tai_ban_ma(r[0]) for r in cur.fetchall()]
 tong_ma_hoa = sum(cac_ban_ma)          # ← CỘNG TRÊN BẢN MÃ
 
 # CHỈ CLIENT giải mã
-print(f"Tong luong ky thuat: {khoa_bi_mat.decrypt(tong_ma_hoa):,}")
+print(f"Tổng lương kỹ thuật: {khoa_bi_mat.decrypt(tong_ma_hoa):,}")
 ```
 
 ```text
@@ -121,7 +121,7 @@ Lỗi: unsupported operand type(s)
 ```
 
 ```text
-   PAILLIER CHO PHEP:   E(a)+E(b),  E(a)+hang_so,  E(a)×hang_so
+   PAILLIER CHO PHÉP:   E(a)+E(b),  E(a)+hang_so,  E(a)×hang_so
    PAILLIER KHÔNG CHO:  E(a)×E(b),  so sánh,  sắp xếp,  MAX/MIN
 ```
 

@@ -125,9 +125,9 @@ Mức 5 là mức mà hầu hết mọi người không biết tồn tại cho t
 
 ```text
    Quy định: ca trực phải có ít nhất 1 bác sĩ. Hiện có 2.
-   An:   dem → 2 → xin nghi.  COMMIT
-   Binh: dem → 2 → xin nghi.  COMMIT
-   → 0 bac si truc
+   An:   đếm → 2 → xin nghỉ.  COMMIT
+   Bình: đếm → 2 → xin nghỉ.  COMMIT
+   → 0 bác sĩ trực
 
    Cả hai đều đọc đúng, ghi đúng dòng CỦA MÌNH, không ghi đè nhau.
    → không phải lost update

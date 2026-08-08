@@ -380,7 +380,7 @@ SELECT count(*) FROM orders;   -- bảng 50 triệu dòng → ~4 giây
    MyISAM lưu sẵn số dòng trong metadata → trả về tức thì.
    PostgreSQL PHẢI ĐẾM THẬT.
 
-   VI SAO?  Vi MVCC:
+   VÌ SAO?  Vì MVCC:
      Transaction A đang chạy thấy 50.000.000 dòng
      Transaction B (bắt đầu sau) thấy 50.000.017 dòng
      → KHÔNG CÓ "số dòng" duy nhất để lưu sẵn

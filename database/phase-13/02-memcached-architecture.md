@@ -386,7 +386,7 @@ Bốn chỉ số quan trọng nhất:
 ```text
 STAT get_hits 88412993
 STAT get_misses 4118822
-   → ti le trung = 88.412.993 / (88.412.993 + 4.118.822) = 95,5%
+   → tỉ lệ trúng = 88.412.993 / (88.412.993 + 4.118.822) = 95,5%
 
 STAT evictions 12849
    → số mục bị XOÁ vì hết bộ nhớ.  Tăng đều = CẦN THÊM RAM

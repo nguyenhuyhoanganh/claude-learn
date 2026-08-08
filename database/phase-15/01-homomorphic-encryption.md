@@ -163,7 +163,7 @@ tong_ma_hoa = sum(luong_ma_hoa)                # cộng được!
 tang_10_pt  = luong_ma_hoa[0] * 1.1            # nhân với hằng số cũng được
 
 # CLIENT giải mã
-print(f"Tong luong  : {khoa_bi_mat.decrypt(tong_ma_hoa):,}")
+print(f"Tổng lương  : {khoa_bi_mat.decrypt(tong_ma_hoa):,}")
 print(f"Luong +10%  : {khoa_bi_mat.decrypt(tang_10_pt):,.0f}")
 ```
 
@@ -358,7 +358,7 @@ Bài học: **mọi lược đồ cho phép truy vấn đều rò rỉ thông ti
    ✘ Database nghiệp vụ thông thường  → dùng TLS + mã hoá đĩa + phân quyền
    ✘ Cần WHERE, ORDER BY, JOIN thường xuyên
    ✘ Cần độ trễ mili-giây
-   ✘ Chi vi "nghe hay"
+   ✘ Chỉ vì "nghe hay"
 ```
 
 Lời khuyên thực dụng:

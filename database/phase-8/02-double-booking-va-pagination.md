@@ -317,7 +317,7 @@ Chậm chưa phải điều tệ nhất. `OFFSET` còn cho **kết quả sai** k
 
    ⟵ AI ĐÓ CHÈN BẢN GHI MỚI id=106
 
-   DANH SACH BAY GIO:
+   DANH SÁCH BÂY GIỜ:
       id 106, 105, 104, 103, 102, 101, ...
 
    NGƯỜI DÙNG XEM TRANG 2:  LIMIT 3 OFFSET 3

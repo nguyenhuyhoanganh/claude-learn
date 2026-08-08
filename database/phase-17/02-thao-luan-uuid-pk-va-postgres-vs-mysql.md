@@ -26,7 +26,7 @@ Nhắc lại cơ chế từ [phase-4 bài 4](../phase-4/04-bloom-filter-va-uuid-
 ```text
    KHOÁ TĂNG DẦN                        UUID v4
    ══════════════                       ═══════
-   Chen 1001, 1002, 1003...             Chen f47ac1..., 550e84..., 6ba7b8...
+   Chèn 1001, 1002, 1003...             Chèn f47ac1..., 550e84..., 6ba7b8...
    → tất cả vào PAGE CUỐI               → mỗi cái vào MỘT PAGE NGẪU NHIÊN
 
    ┌───┬───┬───┬───┬███┐                ┌███┬───┬███┬───┬███┐

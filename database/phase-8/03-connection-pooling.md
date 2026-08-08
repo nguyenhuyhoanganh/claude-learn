@@ -309,7 +309,7 @@ mydb = host=127.0.0.1 port=5432 dbname=mydb
 
 [pgbouncer]
 pool_mode = transaction
-max_client_conn = 2000        ; cho phep ung dung mo bao nhieu
+max_client_conn = 2000        ; cho phép ứng dụng mở bao nhiêu
 default_pool_size = 20        ; so ket noi THAT toi PostgreSQL
 reserve_pool_size = 5
 server_idle_timeout = 600

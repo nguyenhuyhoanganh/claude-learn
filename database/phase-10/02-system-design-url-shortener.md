@@ -166,7 +166,7 @@ def rut_gon(long_url, so_lan_thu=5):
             return ma
         except errors.UniqueViolation:
             continue                     # trùng → sinh mã khác
-    raise RuntimeError("Khong sinh duoc ma sau 5 lan thu")
+    raise RuntimeError("Không sinh được mã sau 5 lần thử")
 ```
 
 Chú ý: dùng `secrets` chứ không phải `random`. `random` dùng bộ sinh giả ngẫu nhiên **đoán được** — quan sát vài mã là suy ra được trạng thái nội bộ và dự đoán mã tiếp theo.
@@ -517,7 +517,7 @@ Ba quyết định trong mô hình này:
                  ▼                     ▼
           ┌──────────────┐      ┌──────────────┐
           │  POSTGRES    │      │   WORKER     │
-          │  primary     │◀─────┤ (ghi theo lo)│
+          │  primary     │◀─────┤ (ghi theo lô)│
           └──────┬───────┘      └──────────────┘
                  │
           ┌──────▼───────┐

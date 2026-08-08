@@ -140,7 +140,7 @@ def luu_moc(conn, moc):
 def chay():
     conn = psycopg2.connect(DSN)
     moc = lay_moc(conn)
-    print(f"Tiep tuc tu id = {moc}")
+    print(f"Tiếp tục từ id = {moc}")
 
     while True:
         with conn.cursor() as c:
