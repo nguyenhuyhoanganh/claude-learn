@@ -234,4 +234,79 @@ Bạn phải tự quản lý:
 
 ---
 
+## Bẫy thường gặp khi deploy lên EC2
+
+| Bẫy | Thông báo lỗi | Cách xử lý |
+|---|---|---|
+| Quyền file khoá SSH quá rộng | `WARNING: UNPROTECTED PRIVATE KEY FILE!` | `chmod 400 khoa.pem` |
+| Security Group không mở cổng | Trình duyệt treo rồi timeout | Mở cổng 80/443 cho `0.0.0.0/0`; cổng 22 **chỉ cho IP của bạn** |
+| Gõ `docker` mà chưa thoát đăng nhập | `permission denied ... docker.sock` | `sudo usermod -aG docker $USER` rồi **đăng xuất và đăng nhập lại** |
+| Build image trên máy Mac M-series rồi chạy trên EC2 x86 | `exec format error` | Build với `--platform linux/amd64`, hoặc dùng `docker buildx` đa kiến trúc |
+| Container chết là hết, không tự chạy lại | Dịch vụ ngừng sau một lỗi vặt | Thêm `--restart unless-stopped` |
+| Khởi động lại EC2 thì container không lên | Dịch vụ chết sau bảo trì | `--restart unless-stopped` + bật `systemctl enable docker` |
+| Đĩa EC2 đầy sau vài tuần | `no space left on device` | `docker system prune -a` định kỳ; giám sát dung lượng |
+| Dùng IP công khai của EC2 làm địa chỉ cố định | IP **đổi mỗi lần khởi động lại** instance | Gắn **Elastic IP**, hoặc dùng tên miền |
+| Đưa mật khẩu database qua `-e` trên dòng lệnh | Nằm trong lịch sử shell và `docker inspect` | Dùng `--env-file`, hoặc AWS Secrets Manager |
+
+Ba dòng đáng nói kỹ hơn.
+
+**Lỗi `exec format error`** là bẫy rất hay gặp từ khi máy Mac dùng chip ARM:
+
+```bash
+# Trên máy Mac M1-M4, build mặc định ra image ARM
+docker build -t myapp .
+docker push myuser/myapp
+
+# Trên EC2 (x86_64)
+docker run myuser/myapp
+```
+
+```text
+exec /usr/local/bin/docker-entrypoint.sh: exec format error
+```
+
+```bash
+# Cách chữa
+docker build --platform linux/amd64 -t myapp .
+
+# Hoặc build cho cả hai kiến trúc một lần
+docker buildx build --platform linux/amd64,linux/arm64 -t myuser/myapp --push .
+```
+
+**Chính sách khởi động lại** — bảng bốn giá trị:
+
+| Giá trị | Hành vi |
+|---|---|
+| `no` (mặc định) | Không bao giờ tự chạy lại |
+| `on-failure` | Chỉ chạy lại khi thoát với mã khác 0 |
+| **`unless-stopped`** | Chạy lại trừ khi **bạn** chủ động dừng. Sống sót qua khởi động lại máy |
+| `always` | Luôn chạy lại, kể cả khi bạn đã `docker stop` rồi máy khởi động lại |
+
+`unless-stopped` gần như luôn là lựa chọn đúng — nó tôn trọng ý định của bạn khi bạn cố ý dừng container.
+
+**Dọn đĩa** là việc phải làm định kỳ, vì EC2 mặc định chỉ có 8 GB:
+
+```bash
+# Xem đang dùng bao nhiêu
+docker system df
+
+# Dọn tự động mỗi tuần
+echo '0 3 * * 0 /usr/bin/docker system prune -af --filter "until=168h"' | crontab -
+```
+
+---
+
+## Tóm tắt bài 2
+
+- Deploy lên EC2 gồm ba bước: **tạo máy**, **cài Docker**, **đưa image lên rồi chạy**.
+- Đưa image lên nên qua **registry** (Docker Hub, ECR), không nên `scp` mã nguồn rồi build trên server — build trên máy nhỏ vừa chậm vừa dễ hết bộ nhớ.
+- **Security Group là tường lửa**: mở 80/443 cho tất cả, nhưng **cổng 22 chỉ cho IP của bạn**.
+- **Máy Mac chip ARM build ra image không chạy được trên EC2 x86** — dùng `--platform linux/amd64` hoặc `docker buildx`.
+- Luôn thêm **`--restart unless-stopped`**, nếu không container sẽ không tự lên sau khi máy khởi động lại.
+- **IP công khai của EC2 đổi mỗi lần khởi động lại** — gắn Elastic IP hoặc dùng tên miền.
+- Đĩa EC2 mặc định chỉ 8 GB — đặt lịch **`docker system prune`** hằng tuần.
+- EC2 cho toàn quyền kiểm soát, nhưng **bạn tự chịu trách nhiệm** vá hệ điều hành, giám sát, sao lưu, và tự phục hồi khi máy chết.
+
+---
+
 **Bài kế tiếp** → [Bài 3: AWS ECS — Managed Container Service](03-aws-ecs-managed-service.md)

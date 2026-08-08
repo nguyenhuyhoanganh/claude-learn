@@ -144,4 +144,50 @@ Bài 6: Tổng kết
 
 ---
 
+## Danh sách kiểm tra trước khi đưa image lên production
+
+Đây là bảng rà nhanh, mỗi dòng đều dẫn tới bài giải thích chi tiết:
+
+| Mục | Kiểm tra | Chi tiết |
+|---|---|---|
+| Không có bind mount trong `docker-compose.prod.yml` | `grep -n "\.:/" docker-compose.prod.yml` | Bài này |
+| Code được `COPY` vào image | Đọc Dockerfile | Bài này |
+| Ghim tag cụ thể, không dùng `latest` | `grep FROM Dockerfile` | [Phase 2 bài 4](../phase-2/04-naming-tagging-va-chia-se-images.md) |
+| `CMD` viết dạng mảng | `grep CMD Dockerfile` | [Phase 2 bài 5](../phase-2/05-dockerfile-best-practices.md) |
+| Chạy bằng non-root | `docker inspect --format '{{.Config.User}}'` | [Phase 19 bài 1](../phase-19/01-bao-mat-image.md) |
+| Không có bí mật trong image | `docker history --no-trunc \| grep -i -E "pass\|token\|key"` | [Phase 3 bài 4](../phase-3/04-env-variables-va-build-args.md) |
+| Có `.dockerignore` | `cat .dockerignore` | [Phase 2 bài 5](../phase-2/05-dockerfile-best-practices.md) |
+| Dữ liệu cần giữ nằm ở volume hoặc dịch vụ ngoài | Đọc compose file | [Phase 3](../phase-3/05-volumes-tong-ket-va-patterns.md) |
+| Ứng dụng ghi log ra **stdout** | `docker logs <container>` có nội dung | [Phase 20 bài 1](../phase-20/01-log-va-event.md) |
+| Ứng dụng chịu được database khởi động lại | Đọc code kết nối | [Phase 5 bài 3](../phase-5/03-ket-noi-containers-voi-networks.md) |
+
+Hai dòng cuối là thứ hay bị bỏ sót nhất, và cả hai đều chỉ lộ ra khi đã ở production.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả |
+|---|---|
+| Dùng chung một `docker-compose.yml` cho cả dev và production | Bind mount đi theo lên production → server phải có sẵn mã nguồn |
+| Đưa `NODE_ENV=development` lên production | Thư viện dev bị cài, log chi tiết quá mức, hiệu năng kém |
+| Quên bước build của frontend | Đẩy mã nguồn React lên thay vì file tĩnh đã build |
+| Tự chạy database trong container ở production mà không có volume và sao lưu | Mất dữ liệu ở lần deploy tiếp theo |
+| Đặt mật khẩu database trong `docker-compose.yml` rồi commit | Lộ bí mật vĩnh viễn |
+| Publish cổng database ra ngoài | Database phơi ra Internet |
+| Không có giới hạn tài nguyên | Một container rò rỉ bộ nhớ làm sập cả máy chủ |
+| Không có chiến lược khởi động lại | Container chết là dịch vụ chết luôn — thêm `restart: unless-stopped` |
+
+---
+
+## Tóm tắt bài 1
+
+- Ba khác biệt cốt lõi giữa dev và production: **không dùng bind mount**, **phải có bước build cho frontend**, và **các container có thể nằm trên nhiều máy chủ khác nhau**.
+- Bind mount ở production **phá bỏ chính lý do dùng Docker** — image lẽ ra phải chứa đủ mọi thứ để chạy.
+- Nên tách **`docker-compose.yml`** (dev) và **`docker-compose.prod.yml`** (production) thay vì dùng chung một file.
+- Danh sách kiểm tra 10 mục ở trên nên chạy trước **mỗi lần** đưa image mới lên production.
+- Hai thứ hay bị bỏ sót nhất: **ứng dụng ghi log ra stdout** và **ứng dụng chịu được database khởi động lại** — cả hai chỉ lộ ra khi đã ở production.
+
+---
+
 **Bài kế tiếp** → [Bài 2: Deploy với EC2 — DIY Approach](02-deploy-voi-ec2.md)
