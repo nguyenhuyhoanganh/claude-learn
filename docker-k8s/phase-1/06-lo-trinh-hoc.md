@@ -168,6 +168,44 @@ Deploy Kubernetes cluster trên AWS:
 
 ---
 
+### Phase 16 — Tổng kết khoá học (Section 16)
+
+Nhìn lại toàn bộ chặng đường và định hướng học tiếp.
+
+### Phase 17 — Workload đầy đủ (bổ sung ngoài transcript)
+
+**StatefulSet, DaemonSet, Job, CronJob** — ba loại workload mà Phase 12 chưa chạm tới. Cần khi bạn phải chạy database trong cụm, chạy agent trên mọi node, hoặc chạy tác vụ theo lịch.
+
+### Phase 18 — Tài nguyên và autoscaling (bổ sung)
+
+`requests`/`limits`, lớp QoS, vì sao Pod bị **OOMKilled**, ba loại probe, và tự động scale (HPA, Cluster Autoscaler). Đây là phần quyết định hệ thống có sống nổi ở production không.
+
+### Phase 19 — Bảo mật (bổ sung)
+
+Quét lỗ hổng image, chạy non-root, distroless, RBAC, Secret, NetworkPolicy. Sáu tầng phòng thủ.
+
+### Phase 20 — Quan sát và gỡ lỗi (bổ sung)
+
+Log, Event, `kubectl debug`, chỉ số giám sát, và **sổ tay chẩn đoán** tra từ triệu chứng ra nguyên nhân.
+
+> **Lưu ý**: bốn phase 17–20 không có trong transcript gốc. Chúng được bổ sung vì đó là những thứ bạn **chắc chắn cần** khi đưa hệ thống lên production, mà khoá gốc dừng lại ở mức triển khai được lên EKS.
+
+---
+
+## Nên đọc theo thứ tự nào
+
+Không phải ai cũng cần đọc tuần tự từ đầu tới cuối.
+
+| Bạn đang ở đâu | Đọc |
+|---|---|
+| Mới hoàn toàn | Phase 1 → 10 (Docker), rồi 11 → 16 (Kubernetes) |
+| Đã dùng Docker, chưa dùng Kubernetes | Lướt phase 1–10, học kỹ từ phase 11 |
+| Đã dùng cả hai ở mức cơ bản, sắp lên production | **Phase 18 → 19 → 20**, rồi quay lại 17 khi cần |
+| Đang có sự cố cần tra ngay | [Phase 20 bài 3](../phase-20/03-chi-so-giam-sat-va-so-tay.md) — sổ tay chẩn đoán |
+| Chuẩn bị phỏng vấn | Phase 2 (image/layer), phase 12 (core concept), phase 14 (networking), phase 18 (tài nguyên) |
+
+---
+
 ## Lời khuyên học hiệu quả
 
 ### 1. Code along — Làm theo cùng

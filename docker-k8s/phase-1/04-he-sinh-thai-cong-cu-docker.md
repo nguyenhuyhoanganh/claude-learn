@@ -44,6 +44,55 @@ docker run nginx
 
 > Trên Linux, Docker Engine cài trực tiếp. Trên macOS/Windows, Docker Desktop cài Engine bên trong một VM nhỏ.
 
+### CLI và Daemon nói chuyện với nhau bằng cách nào
+
+Chi tiết này nhỏ nhưng giải thích được nhiều thứ về sau:
+
+```text
+   docker run nginx
+        │
+        │  CLI biến lệnh của bạn thành một request HTTP
+        ▼
+   POST /v1.45/containers/create
+        │
+        │  gửi qua UNIX SOCKET (một "file" đặc biệt)
+        ▼
+   /var/run/docker.sock
+        │
+        ▼
+   dockerd (daemon) nhận, tạo container, trả kết quả
+```
+
+Nghĩa là **Docker CLI thực chất là một client HTTP**, và daemon là một máy chủ HTTP. Kiểm chứng bằng cách gọi thẳng API, không qua CLI:
+
+```bash
+curl --unix-socket /var/run/docker.sock http://localhost/version
+```
+
+```text
+{"Platform":{"Name":"Docker Engine - Community"},"Version":"27.3.1",...}
+```
+
+Ba điều rút ra:
+
+| Điều | Ý nghĩa thực tế |
+|---|---|
+| CLI và daemon **tách rời** | CLI trên máy bạn điều khiển được daemon ở máy khác (`DOCKER_HOST`) |
+| Mọi thứ đi qua **một file socket** | Ai đọc/ghi được file đó là **điều khiển được toàn bộ Docker** |
+| Có API chuẩn | Đó là lý do có rất nhiều công cụ (Portainer, Lazydocker, IDE plugin) làm việc với Docker mà không cần CLI |
+
+Dòng giữa là điểm bảo mật quan trọng nhất của Docker, và nó quay lại ở [Phase 19](../phase-19/01-bao-mat-image.md):
+
+```bash
+# Đây là lý do KHÔNG bao giờ gắn docker.sock vào container không tin cậy
+docker run -v /var/run/docker.sock:/var/run/docker.sock some-image
+#           ▲
+#   Container này giờ ĐIỀU KHIỂN ĐƯỢC Docker của máy chủ
+#   → nó tạo được container khác có quyền root và gắn cả ổ đĩa máy chủ
+```
+
+Cách gắn này đôi khi cần thật (công cụ CI, Portainer), nhưng phải coi image đó **đáng tin ngang với quyền quản trị máy**.
+
 ---
 
 ## 2. Docker Desktop

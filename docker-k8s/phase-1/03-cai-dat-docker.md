@@ -158,6 +158,47 @@ docker run hello-world
 
 Nếu thấy thông báo `Hello from Docker!` → cài đặt thành công!
 
+### Sáu lỗi cài đặt hay gặp
+
+Bảng này giải quyết gần hết các trường hợp "cài xong mà không chạy được".
+
+| Thông báo lỗi | Nguyên nhân | Cách xử lý |
+|---|---|---|
+| `Cannot connect to the Docker daemon at unix:///var/run/docker.sock` | **Docker chưa chạy** (không phải chưa cài) | macOS/Windows: mở Docker Desktop. Linux: `sudo systemctl start docker` |
+| `permission denied while trying to connect to the Docker daemon socket` | Trên Linux, user chưa thuộc nhóm `docker` | `sudo usermod -aG docker $USER` rồi **đăng xuất và đăng nhập lại** |
+| `WSL 2 installation is incomplete` | Windows thiếu nhân WSL2 | Chạy `wsl --update` trong PowerShell quyền quản trị |
+| `Hardware assisted virtualization... not enabled` | Chưa bật ảo hoá trong BIOS | Vào BIOS bật `Intel VT-x` hoặc `AMD-V` |
+| `no matching manifest for linux/arm64/v8` | Máy Apple Silicon (M1–M4) chạy image chỉ có bản x86 | Thêm `--platform linux/amd64` (chậm hơn vì phải giả lập) |
+| `docker: 'compose' is not a docker command` | Docker Engine trên Linux không kèm Compose | Cài thêm gói `docker-compose-plugin` |
+
+Riêng dòng thứ hai đáng nói kỹ, vì nó vừa là lỗi hay gặp nhất trên Linux vừa có ý nghĩa bảo mật:
+
+```bash
+# Cách chữa nhanh nhưng SAI về lâu dài
+sudo docker run hello-world      # phải gõ sudo mọi lệnh, rất phiền
+
+# Cách chuẩn
+sudo usermod -aG docker $USER
+newgrp docker                    # hoặc đăng xuất rồi đăng nhập lại
+docker run hello-world           # không cần sudo nữa
+```
+
+> **Cần biết trước khi làm**: thêm user vào nhóm `docker` **tương đương cấp quyền root cho user đó**. Lý do: ai gọi được Docker daemon thì gắn được thư mục gốc `/` của máy vào một container rồi sửa bất cứ gì. Trên máy cá nhân thì chấp nhận được; trên máy chủ dùng chung thì cân nhắc kỹ, hoặc dùng **rootless mode** của Docker.
+
+### Kiểm tra sâu hơn `docker --version`
+
+`docker --version` chỉ cho biết **CLI** đã cài. Nó vẫn in ra kết quả kể cả khi daemon đang chết. Muốn chắc chắn thì:
+
+```bash
+docker info --format '{{.ServerVersion}} | {{.OperatingSystem}} | {{.Architecture}}'
+```
+
+```text
+27.3.1 | Docker Desktop | aarch64
+```
+
+Lệnh này chỉ chạy được khi **daemon thật sự đang phục vụ** — đó mới là thứ cần xác nhận. Cột `Architecture` cũng cho bạn biết máy đang là ARM hay x86, thứ quyết định dòng lỗi thứ năm trong bảng trên.
+
 ---
 
 ## 6. IDE cho Docker
