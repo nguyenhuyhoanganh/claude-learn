@@ -2,9 +2,9 @@
 
 > Kafka với Spring — từ topic đầu tiên tới hệ thống streaming production.
 
-69 bài về Kafka trong hệ sinh thái Java/Spring: nền tảng Kafka (topic, partition, key, offset, rebalancing), Spring Cloud Stream cho producer và consumer, consumer group và scaling, event routing, cụm Kafka và replication, xử lý theo lô, xử lý song song, độ tin cậy và ack, xử lý lỗi và retry, transaction và exactly-once, testing, bảo mật, và phần mổ xẻ nội bộ Kafka (ZooKeeper, KRaft/Raft, ISR, high watermark, failover có số đo).
+69 bài về Kafka trong hệ sinh thái Java/Spring: nền tảng Kafka (topic, partition, key, offset, rebalancing), Spring Cloud Stream cho producer và consumer, consumer group và scaling, event routing, cụm Kafka và replication, xử lý theo lô, xử lý song song, độ tin cậy và ack, xử lý lỗi và retry, transaction và exactly-once, testing, bảo mật, phần mổ xẻ nội bộ Kafka (ZooKeeper, KRaft/Raft, ISR, high watermark, failover có số đo), và các chủ đề bổ sung (ưu tiên message, offset commit toàn tập, partitioner tuỳ chỉnh, TLS từ gốc).
 
-**69 bài** trong 19 phần.
+**76 bài** trong 20 phần.
 
 ## Mục lục
 
@@ -174,6 +174,20 @@
 | [11](phase-20-kafka-internals/11-tu-dien-moi-thanh-phan-kafka.md) | Bài 11: Từ điển mọi thành phần Kafka — làm gì, giải quyết gì, hỏng ra sao |
 | [12](phase-20-kafka-internals/12-dinh-chinh-transcript-va-tong-ket.md) | Bài 12: Bảng đính chính transcript và tổng kết Phase 20 |
 
+### Phase 21 — chủ đề bổ sung
+
+> Bảy chủ đề rút từ tài liệu Kafka 162 trang, **không trùng** với phase nào đang có. Các chỗ tài liệu nguồn nói sai đã được đính chính ngay trong bài (đáng chú ý: công thức băm key bị ghi nhầm thành `% (numPartitions - 1)`).
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-21-chu-de-tu-tai-lieu/01-message-broker-va-queue-vs-topic.md) | Bài 1: Message broker, Queue và Topic — Kafka đứng ở đâu trong bức tranh chung |
+| [02](phase-21-chu-de-tu-tai-lieu/02-uu-tien-message-trong-kafka.md) | Bài 2: Ưu tiên message trong Kafka — ba mẫu thiết kế và cái giá của từng mẫu |
+| [03](phase-21-chu-de-tu-tai-lieu/03-offset-commit-toan-tap.md) | Bài 3: Offset commit toàn tập — commitSync, commitAsync và 7 AckMode của Spring |
+| [04](phase-21-chu-de-tu-tai-lieu/04-gui-va-doc-partition-chi-dinh.md) | Bài 4: Gửi và đọc partition chỉ định — custom partitioner, assign và seek |
+| [05](phase-21-chu-de-tu-tai-lieu/05-gioi-han-vat-ly-cua-partition.md) | Bài 5: Bao nhiêu partition là đủ — giới hạn vật lý và công thức tính |
+| [06](phase-21-chu-de-tu-tai-lieu/06-ssl-tls-cho-kafka-tu-goc.md) | Bài 6: SSL/TLS cho Kafka từ gốc — CA, keystore, truststore |
+| [07](phase-21-chu-de-tu-tai-lieu/07-ba-tang-test-cho-kafka.md) | Bài 7: Ba tầng test cho Kafka — Test Binder, EmbeddedKafka, Testcontainers |
+
 ## Nên bắt đầu từ đâu
 
 | Bạn đang ở tình huống | Đọc từ |
@@ -185,6 +199,9 @@
 | Muốn hiểu Kafka hoạt động bên trong ra sao | phase-20 — ISR, high watermark, ZooKeeper vs KRaft, failover có số đo |
 | Chuẩn bị phỏng vấn về hệ phân tán | phase-20 bài 2, 5, 7 — quorum, replication, Raft |
 | Sắp đưa Kafka lên production | phase-20 bài 9 — bảng mặc định phải đổi và bộ chỉ số cảnh báo |
+| Cần ưu tiên message (VIP xử lý trước) | phase-21 bài 2 — ba mẫu và giới hạn thật của Kafka |
+| Hay bị trùng hoặc mất message | phase-21 bài 3 — offset commit toàn tập |
+| Phải tự tạo chứng chỉ TLS | phase-21 bài 6 — CA, keystore, truststore từ gốc |
 
 ---
 
