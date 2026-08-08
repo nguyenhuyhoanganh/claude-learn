@@ -7,23 +7,23 @@ Bài cuối của khoá. Nó quay lại ACID — nơi mọi thứ bắt đầu �
 ```text
    ┌────────────────────────────────────────────────────────────────────┐
    │ A — ATOMICITY                                                      │
-   │   Co che : WAL + undo (InnoDB) hoac nhieu phien ban (PostgreSQL)   │
-   │   Cai dat: crash recovery luc khoi dong; ROLLBACK                  │
+   │   Cơ chế : WAL + undo (InnoDB) hoặc nhiều phiên bản (PostgreSQL)   │
+   │   Cài đặt: crash recovery lúc khởi động; ROLLBACK                  │
    │   Hoc o  : phase-2 bai 2, phase-17 bai 1                           │
    ├────────────────────────────────────────────────────────────────────┤
    │ I — ISOLATION                                                      │
-   │   Co che : MVCC (snapshot) hoac khoa (record/gap/next-key)         │
-   │   Cai dat: isolation level; SSI cho SERIALIZABLE                   │
+   │   Cơ chế : MVCC (snapshot) hoặc khoá (record/gap/next-key)         │
+   │   Cài đặt: isolation level; SSI cho SERIALIZABLE                   │
    │   Hoc o  : phase-2 bai 3, phase-8 bai 1, phase-17 bai 8            │
    ├────────────────────────────────────────────────────────────────────┤
    │ C — CONSISTENCY                                                    │
-   │   Co che : KHONG CO co che rieng                                   │
-   │   Cai dat: rang buoc ban khai bao + HE QUA cua A va I              │
+   │   Cơ chế : KHÔNG CÓ cơ chế riêng                                   │
+   │   Cài đặt: ràng buộc bạn khai báo + HỆ QUẢ của A và I              │
    │   Hoc o  : phase-2 bai 4, phase-14 bai 2                           │
    ├────────────────────────────────────────────────────────────────────┤
    │ D — DURABILITY                                                     │
-   │   Co che : WAL + fsync + checkpoint + ghi ca page                  │
-   │   Cai dat: synchronous_commit; innodb_flush_log_at_trx_commit      │
+   │   Cơ chế : WAL + fsync + checkpoint + ghi cả page                  │
+   │   Cài đặt: synchronous_commit; innodb_flush_log_at_trx_commit      │
    │   Hoc o  : phase-2 bai 2, phase-9 bai 1, phase-17 bai 1            │
    └────────────────────────────────────────────────────────────────────┘
 ```
@@ -37,28 +37,28 @@ Bài cuối của khoá. Nó quay lại ACID — nơi mọi thứ bắt đầu �
 ```text
    POSTGRESQL — NHIEU PHIEN BAN                INNODB — SUA TAI CHO
    ════════════════════════════                ════════════════════
-   UPDATE → tao TUPLE MOI trong bang           UPDATE → ghi de, day gia tri cu
-            phien ban cu van nam do                     sang UNDO LOG
+   UPDATE → tạo TUPLE MỚI trong bảng           UPDATE → ghi đè, đẩy giá trị cũ
+            phiên bản cũ vẫn nằm đó                     sang UNDO LOG
 
-   ROLLBACK → ghi "XID 77 da huy"              ROLLBACK → doc undo log,
-              → GAN NHU TUC THI                            GHI LAI tung dong
-                                                          → cham theo so dong
+   ROLLBACK → ghi "XID 77 đã huỷ"              ROLLBACK → đọc undo log,
+              → GẦN NHƯ TỨC THÌ                            GHI LẠI từng dòng
+                                                          → chậm theo số dòng
 
-   Hoa don : bang PHINH, can VACUUM            Hoa don : undo log phinh,
-             moi index phai cap nhat                      doc du lieu cu cham
+   Hoá đơn : bảng PHÌNH, cần VACUUM            Hoá đơn : undo log phình,
+             mọi index phải cập nhật                      đọc dữ liệu cũ chậm
 ```
 
 Cả hai đều bị **transaction dài** làm hại — chỉ khác chỗ nào phình:
 
 ```sql
--- PostgreSQL: kiem tra bang co phinh khong
+-- PostgreSQL: kiểm tra bảng có phình không
 SELECT relname, n_dead_tup,
        round(100.0*n_dead_tup/NULLIF(n_live_tup+n_dead_tup,0),1) AS pct_chet
 FROM pg_stat_user_tables WHERE n_dead_tup > 10000 ORDER BY n_dead_tup DESC;
 ```
 
 ```sql
--- MySQL: kiem tra undo log co phinh khong
+-- MySQL: kiểm tra undo log có phình không
 SELECT name, count FROM information_schema.innodb_metrics
 WHERE name LIKE '%undo%' AND status = 'enabled';
 ```
@@ -68,14 +68,14 @@ WHERE name LIKE '%undo%' AND status = 'enabled';
 Nhắc lại vì đây là nguyên nhân số một khiến bảng phình dù mọi thứ có vẻ bình thường:
 
 ```sql
--- 1. Transaction dang mo lau
+-- 1. Transaction đang mở lâu
 SELECT pid, now()-xact_start AS mo_bao_lau, state, left(query,50)
 FROM pg_stat_activity WHERE xact_start IS NOT NULL ORDER BY xact_start LIMIT 5;
 
--- 2. Khe nhan ban khong hoat dong
+-- 2. Khe nhân bản không hoạt động
 SELECT slot_name, active, wal_status FROM pg_replication_slots WHERE NOT active;
 
--- 3. Transaction chuan bi san bi bo quen (2PC)
+-- 3. Transaction chuẩn bị sẵn bị bỏ quên (2PC)
 SELECT gid, prepared, age(now(), prepared) FROM pg_prepared_xacts;
 ```
 
@@ -86,8 +86,8 @@ Ba câu này nên nằm trong bảng theo dõi của mọi hệ thống PostgreS
 ## Isolation — bảng thực tế, không phải bảng chuẩn
 
 ```text
-   BANG CHUAN ANSI mo ta MUC TOI THIEU ma he PHAI dat.
-   No KHONG mo ta he THAT SU lam gi.
+   BẢNG CHUẨN ANSI mô tả MỨC TỐI THIỂU mà hệ PHẢI đạt.
+   Nó KHÔNG mô tả hệ THẬT SỰ làm gì.
 ```
 
 | Hệ | Mặc định | `READ UNCOMMITTED` thật? | `REPEATABLE READ` chặn phantom? | Cơ chế |
@@ -101,22 +101,22 @@ Hai cơ chế, cùng một kết quả:
 
 ```text
    CHAN PHANTOM BANG SNAPSHOT (PostgreSQL)
-     "loc bo moi dong sinh ra sau thoi diem toi bat dau"
-     → khong khoa gi ca → song song cao
-     → nhung KHONG chan duoc write skew
+     "lọc bỏ mọi dòng sinh ra sau thời điểm tôi bắt đầu"
+     → không khoá gì cả → song song cao
+     → nhưng KHÔNG chặn được write skew
 
    CHAN PHANTOM BANG GAP LOCK (MySQL)
-     "khoa luon cac khoang trong de khong ai chen vao"
-     → chan that → it song song hon
+     "khoá luôn các khoảng trống để không ai chèn vào"
+     → chặn thật → ít song song hơn
      → gay deadlock kho hieu ([phase-17 bai 8])
 ```
 
 ### Ba bất thường theo thứ tự khó chặn
 
 ```text
-   1. DIRTY READ        →  moi he hien dai deu chan (tru SQL Server NOLOCK)
+   1. DIRTY READ        →  mọi hệ hiện đại đều chặn (trừ SQL Server NOLOCK)
    2. NON-REPEATABLE    →  REPEATABLE READ chan
-   3. PHANTOM           →  PostgreSQL RR chan; MySQL RR chan bang gap lock
+   3. PHANTOM           →  PostgreSQL RR chặn; MySQL RR chặn bằng gap lock
    4. LOST UPDATE       →  PostgreSQL RR chan (loi 40001); RC KHONG chan
    5. WRITE SKEW        →  CHI SERIALIZABLE chan
 ```
@@ -124,14 +124,14 @@ Hai cơ chế, cùng một kết quả:
 Mức 5 là mức mà hầu hết mọi người không biết tồn tại cho tới khi gặp:
 
 ```text
-   Quy dinh: ca truc phai co it nhat 1 bac si. Hien co 2.
+   Quy định: ca trực phải có ít nhất 1 bác sĩ. Hiện có 2.
    An:   dem → 2 → xin nghi.  COMMIT
    Binh: dem → 2 → xin nghi.  COMMIT
    → 0 bac si truc
 
-   Ca hai deu doc dung, ghi dung dong CUA MINH, khong ghi de nhau.
-   → khong phai lost update
-   → CHI theo doi PHU THUOC DOC-GHI moi bat duoc
+   Cả hai đều đọc đúng, ghi đúng dòng CỦA MÌNH, không ghi đè nhau.
+   → không phải lost update
+   → CHỈ theo dõi PHỤ THUỘC ĐỌC-GHI mới bắt được
 ```
 
 ---
@@ -141,21 +141,21 @@ Mức 5 là mức mà hầu hết mọi người không biết tồn tại cho t
 ```text
    ┌──────────────────────────────────────────────────────────────┐
    │ TANG 1 — KIEU DU LIEU                                        │
-   │   INT, DATE, NUMERIC... chan du lieu vo nghia ngay tu dau    │
-   │   → dung TEXT cho MOI THU la bo tang bao ve dau tien          │
+   │   INT, DATE, NUMERIC... chặn dữ liệu vô nghĩa ngay từ đầu    │
+   │   → đừng TEXT cho MỌI THỨ là bỏ tầng bảo vệ đầu tiên          │
    ├──────────────────────────────────────────────────────────────┤
    │ TANG 2 — RANG BUOC                                           │
    │   NOT NULL, CHECK, UNIQUE, FOREIGN KEY                       │
-   │   → KHONG duong nao pha duoc: khong ung dung, khong job,     │
-   │     khong ky su sua tay luc khan cap                          │
+   │   → KHÔNG đường nào phá được: không ứng dụng, không job,     │
+   │     không kỹ sư sửa tay lúc khẩn cấp                          │
    ├──────────────────────────────────────────────────────────────┤
    │ TANG 3 — TRANSACTION                                         │
-   │   Bao ve BAT BIEN giua NHIEU dong/nhieu bang                 │
-   │   → thu ma rang buoc khong dien dat duoc                     │
+   │   Bảo vệ BẤT BIẾN giữa NHIỀU dòng/nhiều bảng                 │
+   │   → thứ mà ràng buộc không diễn đạt được                     │
    ├──────────────────────────────────────────────────────────────┤
    │ TANG 4 — DOI SOAT                                            │
-   │   Job dinh ky kiem tra nhung gi ba tang tren khong giu duoc  │
-   │   → bo dem phi chuan hoa, du lieu mo coi xuyen dich vu       │
+   │   Job định kỳ kiểm tra những gì ba tầng trên không giữ được  │
+   │   → bộ đếm phi chuẩn hoá, dữ liệu mồ côi xuyên dịch vụ       │
    └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -168,7 +168,7 @@ FROM posts p LEFT JOIN comments c ON c.post_id = p.id
 GROUP BY p.id, p.comment_count
 HAVING p.comment_count <> count(c.id);
 
--- Du lieu mo coi (khi khong the dung khoa ngoai — vi du xuyen shard)
+-- Dữ liệu mồ côi (khi không thể dùng khoá ngoại — ví dụ xuyên shard)
 SELECT o.id FROM orders o
 LEFT JOIN users u ON u.id = o.user_id
 WHERE u.id IS NULL;
@@ -187,13 +187,13 @@ Quy tắc: **mọi cột phi chuẩn hoá phải đi kèm một truy vấn đố
    POSTGRESQL                          MYSQL INNODB
    ══════════                          ════════════
    synchronous_commit                  innodb_flush_log_at_trx_commit
-     off          → mat vai tram ms      0  → mat ~1s ke ca khi MySQL chet
-     local        → mat neu may chet     2  → mat ~1s neu MAY chet
-     on (mac dinh)→ khong mat            1  → khong mat (mac dinh)
-     remote_write → cho replica nhan
-     remote_apply → cho replica ap dung
+     off          → mất vài trăm ms      0  → mất ~1s kể cả khi MySQL chết
+     local        → mất nếu máy chết     2  → mất ~1s nếu MÁY chết
+     on (mặc định)→ không mất            1  → không mất (mặc định)
+     remote_write → chờ replica nhận
+     remote_apply → chờ replica áp dụng
 
-   ⚡ PostgreSQL van duoc THEO TUNG TRANSACTION:
+   ⚡ PostgreSQL vặn được THEO TỪNG TRANSACTION:
       BEGIN; SET LOCAL synchronous_commit = 'remote_apply'; ... COMMIT;
 ```
 
@@ -202,11 +202,11 @@ Quy tắc: **mọi cột phi chuẩn hoá phải đi kèm một truy vấn đố
 ### Năm tầng có thể nói dối
 
 ```text
-   1. Ung dung             →  "da commit"  ← chi la loi hua cua tang duoi
-   2. Bo nho dem database  →  mat dien o day = MAT
-   3. Page cache cua HDH   →  ⚠ TRA VE "xong" KHI CHUA GHI XUONG DIA
-   4. Bo dem cua thiet bi  →  ⚠ SSD/RAID cung co RAM rieng
-   5. Chip nho vat ly      →  ✔ den day moi that su ben vung
+   1. Ứng dụng             →  "đã commit"  ← chỉ là lời hứa của tầng dưới
+   2. Bộ nhớ đệm database  →  mất điện ở đây = MẤT
+   3. Page cache của HĐH   →  ⚠ TRẢ VỀ "xong" KHI CHƯA GHI XUỐNG ĐĨA
+   4. Bộ đệm của thiết bị  →  ⚠ SSD/RAID cũng có RAM riêng
+   5. Chip nhớ vật lý      →  ✔ đến đây mới thật sự bền vững
 ```
 
 `fsync` ép các tầng 3 và 4 nói thật. Nhưng tầng 4 có thể **vẫn nói dối** nếu ổ đĩa không trung thực:
@@ -220,9 +220,9 @@ docker exec -it pg pg_test_fsync
 ```
 
 ```text
-   Con so HOP LY: 20-100 µs tren NVMe co tu chong mat dien
-   Con so DANG NGO: hang trieu ops/sec → o dia dang NOI DOI fsync
-                    → moi cam ket durability deu VO NGHIA
+   Con số HỢP LÝ: 20-100 µs trên NVMe có tụ chống mất điện
+   Con số ĐÁNG NGỜ: hàng triệu ops/sec → ổ đĩa đang NÓI DỐI fsync
+                    → mọi cam kết durability đều VÔ NGHĨA
 ```
 
 ---
@@ -236,39 +236,39 @@ docker exec -it pg pg_test_fsync
 ```sql
 BEGIN;
 UPDATE accounts SET balance = balance - 100 WHERE id = 1;
-UPDATE accounts SET balance = balance - 100 WHERE id = 2;   -- ← LOI: phai la +100
+UPDATE accounts SET balance = balance - 100 WHERE id = 2;   -- ← LỖI: phải là +100
 COMMIT;
 ```
 
 ```text
-   ACID dam bao ca hai lenh CUNG THANH CONG hoac CUNG THAT BAI.
-   No KHONG biet ban viet sai dau.
-   → Ban vua tru tien CA HAI tai khoan, mot cach hoan toan "dung ACID".
+   ACID đảm bảo cả hai lệnh CÙNG THÀNH CÔNG hoặc CÙNG THẤT BẠI.
+   Nó KHÔNG biết bạn viết sai dấu.
+   → Bạn vừa trừ tiền CẢ HAI tài khoản, một cách hoàn toàn "đúng ACID".
 ```
 
 ### 2. Không bảo vệ khỏi mất dữ liệu do con người
 
 ```sql
-DELETE FROM users;   -- quen menh de WHERE
+DELETE FROM users;   -- quên mệnh đề WHERE
 COMMIT;
 ```
 
 ```text
-   ACID dam bao lenh nay duoc thuc hien DAY DU va BEN VUNG.
-   Va no duoc NHAN BAN sang moi replica trong ~200 ms.
+   ACID đảm bảo lệnh này được thực hiện ĐẦY ĐỦ và BỀN VỮNG.
+   Và nó được NHÂN BẢN sang mọi replica trong ~200 ms.
 
-   → Chi PITR ([phase-17 bai 1]) moi cuu duoc: quay nguoc ve
-     thoi diem TRUOC khi lenh do chay.
-   → Replica KHONG phai ban sao luu.
+   → Chỉ PITR ([phase-17 bài 1]) mới cứu được: quay ngược về
+     thời điểm TRƯỚC khi lệnh đó chạy.
+   → Replica KHÔNG phải bản sao lưu.
 ```
 
 ### 3. Không tự động mở rộng ra nhiều máy
 
 ```text
-   ACID la dam bao TRONG MOT database instance.
-   Vuot ra ngoai no:
+   ACID là đảm bảo TRONG MỘT database instance.
+   Vượt ra ngoài nó:
      → 2PC (chan, kho van hanh)
-     → Saga (khong co co lap)
+     → Saga (không có cô lập)
      → hoac THIET KE DE KHONG CAN ([phase-17 bai 4])
 ```
 
@@ -296,30 +296,30 @@ Bảng này là kết tinh của cả khoá: **một hệ thống thật cần n
 
 ```text
    ┌─ ATOMICITY ─────────────────────────────────────────────────┐
-   │ □ idle_in_transaction_session_timeout da dat                │
+   │ □ idle_in_transaction_session_timeout đã đặt                │
    │ □ Canh bao transaction mo > 5 phut                          │
-   │ □ Canh bao khe nhan ban khong hoat dong                     │
-   │ □ Theo doi n_dead_tup / pct_chet tren cac bang lon          │
-   │ □ autovacuum_vacuum_scale_factor chinh rieng cho bang lon   │
+   │ □ Cảnh báo khe nhân bản không hoạt động                     │
+   │ □ Theo dõi n_dead_tup / pct_chet trên các bảng lớn          │
+   │ □ autovacuum_vacuum_scale_factor chỉnh riêng cho bảng lớn   │
    └─────────────────────────────────────────────────────────────┘
    ┌─ ISOLATION ─────────────────────────────────────────────────┐
-   │ □ Biet ro isolation level mac dinh cua he dang dung         │
-   │ □ Co vong lap thu lai cho loi 40001 va deadlock             │
+   │ □ Biết rõ isolation level mặc định của hệ đang dùng         │
+   │ □ Có vòng lặp thử lại cho lỗi 40001 và deadlock             │
    │ □ Khoa theo THU TU nhat quan (chong deadlock)               │
    │ □ Theo doi pg_stat_database.deadlocks                       │
    └─────────────────────────────────────────────────────────────┘
    ┌─ CONSISTENCY ───────────────────────────────────────────────┐
-   │ □ Khoa ngoai duoc khai bao (khong bo "cho nhanh")           │
-   │ □ CHECK cho moi bat bien dien dat duoc                      │
-   │ □ MOI cot phi chuan hoa co truy van doi soat                │
-   │ □ Job doi soat chay dinh ky va CO CANH BAO                  │
+   │ □ Khoá ngoại được khai báo (không bỏ "cho nhanh")           │
+   │ □ CHECK cho mọi bất biến diễn đạt được                      │
+   │ □ MỌI cột phi chuẩn hoá có truy vấn đối soát                │
+   │ □ Job đối soát chạy định kỳ và CÓ CẢNH BÁO                  │
    └─────────────────────────────────────────────────────────────┘
    ┌─ DURABILITY ────────────────────────────────────────────────┐
-   │ □ Da chay pg_test_fsync, con so HOP LY                      │
+   │ □ Đã chạy pg_test_fsync, con số HỢP LÝ                      │
    │ □ full_page_writes = on                                     │
-   │ □ Sao luu DAY DU + WAL archive (PITR), khong chi replica    │
-   │ □ DA DIEN TAP PHUC HOI trong 3 thang gan day                │
-   │ □ Ban sao luu duoc MA HOA                                   │
+   │ □ Sao lưu ĐẦY ĐỦ + WAL archive (PITR), không chỉ replica    │
+   │ □ ĐÃ DIỄN TẬP PHỤC HỒI trong 3 tháng gần đây                │
+   │ □ Bản sao lưu được MÃ HOÁ                                   │
    └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -333,32 +333,32 @@ Nếu phải tóm tắt toàn bộ khoá trong một khung tư duy:
 
 ```text
    1. DATABASE DEM PAGE, KHONG DEM DONG.
-      Moi cau hoi ve hieu nang deu quy ve: "phai doc bao nhieu page?"
+      Mọi câu hỏi về hiệu năng đều quy về: "phải đọc bao nhiêu page?"
       ([phase-3 bai 1])
 
-   2. INDEX LA BAN SAO DA SAP XEP — va no CO GIA.
-      Nhanh khi doc, cham khi ghi, ton dia, ton RAM.
-      Chi dang khi loc ra duoi ~10% so dong.
+   2. INDEX LÀ BẢN SAO ĐÃ SẮP XẾP — và nó CÓ GIÁ.
+      Nhanh khi đọc, chậm khi ghi, tốn đĩa, tốn RAM.
+      Chỉ đáng khi lọc ra dưới ~10% số dòng.
       ([phase-4])
 
    3. MOI DAM BAO DEU CO NUT VAN.
-      Isolation, durability, nhat quan doc — deu chinh duoc,
-      va chinh duoc THEO TUNG TRANSACTION.
+      Isolation, durability, nhất quán đọc — đều chỉnh được,
+      và chỉnh được THEO TỪNG TRANSACTION.
       ([phase-2], [phase-9])
 
    4. TRANH CHAP GIAI BANG THU TU, KHONG BANG SO LUONG.
-      Deadlock sinh ra tu thu tu khoa khac nhau, khong tu so khoa.
+      Deadlock sinh ra từ thứ tự khoá khác nhau, không từ số khoá.
       ([phase-8 bai 1])
 
    5. MOI DAC TINH KIEN TRUC LA MOT DANH DOI.
-      PostgreSQL vs MySQL, B+Tree vs LSM, bi quan vs lac quan —
-      khong cai nao "tot hon", chi co "hop hon voi tai cua ban".
+      PostgreSQL vs MySQL, B+Tree vs LSM, bi quan vs lạc quan —
+      không cái nào "tốt hơn", chỉ có "hợp hơn với tải của bạn".
       ([phase-17])
 
    6. LEO HET THANG TRUOC KHI NHAY.
-      Do dac → index → query → pool → cau hinh → may lon hon →
+      Đo đạc → index → query → pool → cấu hình → máy lớn hơn →
       cache → replica → partition → tach chuc nang → SHARDING.
-      Chin nac dau quay dau duoc. Nac thu muoi thi khong.
+      Chín nấc đầu quay đầu được. Nấc thứ mười thì không.
       ([phase-7 bai 3])
 ```
 

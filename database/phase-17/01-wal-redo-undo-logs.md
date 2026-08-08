@@ -3,9 +3,9 @@
 Ba từ này hay bị dùng lẫn lộn, và chúng **không phải là một**:
 
 ```text
-   WAL   →  TEN GOI CUA CO CHE  (Write-Ahead Logging): ghi nhat ky TRUOC khi sua
-   REDO  →  thong tin de LAM LAI  thay doi sau su co
-   UNDO  →  thong tin de HOAN TAC thay doi khi rollback
+   WAL   →  TÊN GỌI CỦA CƠ CHẾ  (Write-Ahead Logging): ghi nhật ký TRƯỚC khi sửa
+   REDO  →  thông tin để LÀM LẠI  thay đổi sau sự cố
+   UNDO  →  thông tin để HOÀN TÁC thay đổi khi rollback
 ```
 
 Một hệ có thể có cả ba, hoặc gộp chúng lại. Bài này tách bạch chúng, rồi cho thấy PostgreSQL và MySQL giải cùng bài toán bằng hai cách hoàn toàn khác nhau.
@@ -13,12 +13,12 @@ Một hệ có thể có cả ba, hoặc gộp chúng lại. Bài này tách b�
 ## Vấn đề gốc
 
 ```text
-   Ban muon sua 4 dong nam o 4 page khac nhau, roi COMMIT.
+   Bạn muốn sửa 4 dòng nằm ở 4 page khác nhau, rồi COMMIT.
 
-   CACH NGAY THO: ghi ca 4 page xuong dia truoc khi tra ve "da commit"
+   CÁCH NGÂY THƠ: ghi cả 4 page xuống đĩa trước khi trả về "đã commit"
      → 4 lan ghi NGAU NHIEN + 4 lan fsync
-     → tren SSD: ~4 × 100 µs = 400 µs, chua ke tim kiem
-     → va neu mat dien giua chung: 2 page moi, 2 page cu → DU LIEU NUA VOI
+     → trên SSD: ~4 × 100 µs = 400 µs, chưa kể tìm kiếm
+     → và nếu mất điện giữa chừng: 2 page mới, 2 page cũ → DỮ LIỆU NỬA VỜI
 ```
 
 Hai vấn đề: **chậm**, và **không nguyên tử**.
@@ -27,33 +27,33 @@ Hai vấn đề: **chậm**, và **không nguyên tử**.
 
 ```text
    QUY TAC WAL (bat di bat dich):
-     Ban ghi nhat ky mo ta mot thay doi phai NAM YEN TREN DIA
-     TRUOC KHI page chua thay doi do duoc phep xuong dia.
+     Bản ghi nhật ký mô tả một thay đổi phải NẰM YÊN TRÊN ĐĨA
+     TRƯỚC KHI page chứa thay đổi đó được phép xuống đĩa.
 ```
 
 ```text
    ┌─ COMMIT ────────────────────────────────────────────────────┐
-   │  1. Ghi vao cuoi file WAL (GHI TUAN TU):                    │
+   │  1. Ghi vào cuối file WAL (GHI TUẦN TỰ):                    │
    │       [LSN 0/15A3B] page 4201: byte 128, 'new' → 'paid'     │
-   │       [LSN 0/15A5C] page  887: them khoa index              │
+   │       [LSN 0/15A5C] page  887: thêm khoá index              │
    │       [LSN 0/15A6D] COMMIT XID 12345                        │
    │  2. fsync MOT LAN                                           │
-   │  3. Tra ve "da commit"       ← XONG, RAT NHANH              │
+   │  3. Trả về "đã commit"       ← XONG, RẤT NHANH              │
    │                                                             │
-   │  Cac page du lieu that? Cu nam BAN trong RAM.               │
-   │  CHECKPOINT sau nay se don.                                 │
+   │  Các page dữ liệu thật? Cứ nằm BẨN trong RAM.               │
+   │  CHECKPOINT sau này sẽ dọn.                                 │
    └─────────────────────────────────────────────────────────────┘
 ```
 
 Hai tính chất làm mẹo này hoạt động:
 
 ```text
-   1. GHI TUAN TU nhanh hon GHI NGAU NHIEN rat nhieu
-      HDD: chenh hang tram lan.  SSD: van chenh vai lan.
+   1. GHI TUẦN TỰ nhanh hơn GHI NGẪU NHIÊN rất nhiều
+      HDD: chênh hàng trăm lần.  SSD: vẫn chênh vài lần.
 
-   2. BAN GHI WAL NHO HON PAGE nhieu
-      "doi o nay tu X sang Y" = vai chuc byte
-      ghi ca page = 8.192 byte
+   2. BẢN GHI WAL NHỎ HƠN PAGE nhiều
+      "đổi ô này từ X sang Y" = vài chục byte
+      ghi cả page = 8.192 byte
 ```
 
 ---
@@ -62,16 +62,16 @@ Hai tính chất làm mẹo này hoạt động:
 
 ```text
    ┌──────────────────────────────────────────────────────────────┐
-   │ REDO — "gia tri MOI la gi"                                   │
-   │   Dung khi: khoi dong lai sau su co                          │
-   │   Muc dich: LAM LAI cac thay doi DA COMMIT nhung page chua   │
-   │             kip xuong dia                                    │
+   │ REDO — "giá trị MỚI là gì"                                   │
+   │   Dùng khi: khởi động lại sau sự cố                          │
+   │   Mục đích: LÀM LẠI các thay đổi ĐÃ COMMIT nhưng page chưa   │
+   │             kịp xuống đĩa                                    │
    │   Vi du:  "page 4201, byte 128 = 'paid'"                     │
    ├──────────────────────────────────────────────────────────────┤
-   │ UNDO — "gia tri CU la gi"                                    │
-   │   Dung khi: ROLLBACK, hoac doc phien ban cu (MVCC)           │
-   │   Muc dich: HOAN TAC cac thay doi CHUA COMMIT                │
-   │   Vi du:  "page 4201, byte 128 truoc do la 'pending'"        │
+   │ UNDO — "giá trị CŨ là gì"                                    │
+   │   Dùng khi: ROLLBACK, hoặc đọc phiên bản cũ (MVCC)           │
+   │   Mục đích: HOÀN TÁC các thay đổi CHƯA COMMIT                │
+   │   Ví dụ:  "page 4201, byte 128 trước đó là 'pending'"        │
    └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -85,13 +85,13 @@ Hai tính chất làm mẹo này hoạt động:
      Xac dinh: transaction nao DA commit, transaction nao DANG DO
 
    GIAI DOAN 2 — REDO
-     Lam lai MOI thay doi tu checkpoint tro di
-     (ke ca cua transaction chua commit — se hoan tac o giai doan 3)
-     → dua database ve dung trang thai luc mat dien
+     Làm lại MỌI thay đổi từ checkpoint trở đi
+     (kể cả của transaction chưa commit — sẽ hoàn tác ở giai đoạn 3)
+     → đưa database về đúng trạng thái lúc mất điện
 
    GIAI DOAN 3 — UNDO
-     Hoan tac cac transaction DANG DO
-     → dua ve trang thai NHAT QUAN
+     Hoàn tác các transaction DANG DỞ
+     → đưa về trạng thái NHẤT QUÁN
 ```
 
 Điểm phản trực giác ở giai đoạn 2: **nó làm lại cả những thay đổi chưa commit**. Lý do là để dựng lại chính xác trạng thái tại thời điểm sự cố, rồi mới hoàn tác — đơn giản hơn nhiều so với việc vừa đọc vừa lọc.
@@ -119,14 +119,14 @@ LOG:  database system is ready to accept connections
 ```text
    POSTGRESQL KHONG CO UNDO LOG.
 
-   Vi sao khong can?  Vi no KHONG SUA TAI CHO:
-     UPDATE = tao mot PHIEN BAN MOI cua dong, ngay trong bang
-     → phien ban CU van nam do
-     → "undo" chinh la: bo qua phien ban moi
+   Vì sao không cần?  Vì nó KHÔNG SỬA TẠI CHỖ:
+     UPDATE = tạo một PHIÊN BẢN MỚI của dòng, ngay trong bảng
+     → phiên bản CŨ vẫn nằm đó
+     → "undo" chính là: bỏ qua phiên bản mới
 
-   ROLLBACK = ghi mot dau "XID 12345 da huy"
-     → moi phien ban do XID do tao ra tu dong VO HINH
-     → GAN NHU TUC THI, bat ke da sua bao nhieu dong
+   ROLLBACK = ghi một dấu "XID 12345 đã huỷ"
+     → mọi phiên bản do XID đó tạo ra tự động VÔ HÌNH
+     → GẦN NHƯ TỨC THÌ, bất kể đã sửa bao nhiêu dòng
 ```
 
 ```text
@@ -134,22 +134,22 @@ LOG:  database system is ready to accept connections
    ┌────┬─────────┬─────────┬─────────┐
    │ id │ balance │  xmin   │  xmax   │
    ├────┼─────────┼─────────┼─────────┤
-   │  1 │ 1000000 │   50    │   77    │  ← phien ban CU (bi XID 77 thay)
-   │  1 │  900000 │   77    │    —    │  ← phien ban MOI
+   │  1 │ 1000000 │   50    │   77    │  ← phiên bản CŨ (bị XID 77 thay)
+   │  1 │  900000 │   77    │    —    │  ← phiên bản MỚI
    └────┴─────────┴─────────┴─────────┘
 
-   Neu XID 77 COMMIT   → doc thay dong thu hai
-   Neu XID 77 ROLLBACK → doc thay dong thu nhat (dong thu hai vo hinh)
+   Nếu XID 77 COMMIT   → đọc thấy dòng thứ hai
+   Nếu XID 77 ROLLBACK → đọc thấy dòng thứ nhất (dòng thứ hai vô hình)
 ```
 
 Cái giá của thiết kế này:
 
 ```text
-   ✔ ROLLBACK gan nhu tuc thi
-   ✔ Doc du lieu cu RE (nam ngay trong bang)
-   ✘ Bang PHINH ra chua ca phien ban chet
+   ✔ ROLLBACK gần như tức thì
+   ✔ Đọc dữ liệu cũ RẺ (nằm ngay trong bảng)
+   ✘ Bảng PHÌNH ra chứa cả phiên bản chết
    ✘ Can VACUUM don dep
-   ✘ MOI index phai cap nhat khi UPDATE (vi ctid doi)
+   ✘ MỌI index phải cập nhật khi UPDATE (vì ctid đổi)
 ```
 
 ### Cấu trúc file WAL
@@ -165,12 +165,12 @@ drwx------ 2 postgres postgres     4096 Aug  8 09:00 archive_status
 ```
 
 ```text
-   TEN FILE: 24 ky tu hex, chia ba phan
-     00000001  → timeline (tang len sau moi lan thang cap replica)
-     00000000  → so hieu file cao
-     00000042  → so hieu file thap
+   TÊN FILE: 24 ký tự hex, chia ba phần
+     00000001  → timeline (tăng lên sau mỗi lần thăng cấp replica)
+     00000000  → số hiệu file cao
+     00000042  → số hiệu file thấp
 
-   Moi file: 16 MB (doi duoc bang --wal-segsize luc initdb)
+   Mỗi file: 16 MB (đổi được bằng --wal-segsize lúc initdb)
 ```
 
 ### `LSN` — địa chỉ trong dòng WAL
@@ -184,8 +184,8 @@ SELECT pg_current_wal_lsn();
 --------------------
  0/1B4C7A8
    ▲    ▲
-   │    └ vi tri byte trong file (hex)
-   └ so hieu file cao (hex)
+   │    └ vị trí byte trong file (hex)
+   └ số hiệu file cao (hex)
 ```
 
 Đo lượng WAL sinh ra bởi một thao tác:
@@ -211,21 +211,21 @@ SHOW full_page_writes;   -- on
 ```
 
 ```text
-   Page 8 KB, nhung don vi ghi NGUYEN TU cua dia chi 512 byte hoac 4 KB.
-   Mat dien giua chung → PAGE RACH: nua moi, nua cu.
-   → ban ghi WAL kieu "doi byte 128" khong ap duoc len page rach
+   Page 8 KB, nhưng đơn vị ghi NGUYÊN TỬ của đĩa chỉ 512 byte hoặc 4 KB.
+   Mất điện giữa chừng → PAGE RÁCH: nửa mới, nửa cũ.
+   → bản ghi WAL kiểu "đổi byte 128" không áp được lên page rách
 
-   GIAI PHAP: lan DAU TIEN mot page bi sua SAU MOI CHECKPOINT,
-              chep CA PAGE 8 KB vao WAL.
+   GIẢI PHÁP: lần ĐẦU TIÊN một page bị sửa SAU MỖI CHECKPOINT,
+              chép CẢ PAGE 8 KB vào WAL.
 ```
 
 Hệ quả quan sát được:
 
 ```text
-   Ngay sau checkpoint  → WAL PHINH MANH (moi page dau tien deu ghi ca page)
-   Xa checkpoint        → WAL nho lai (chi ghi delta)
+   Ngay sau checkpoint  → WAL PHÌNH MẠNH (mọi page đầu tiên đều ghi cả page)
+   Xa checkpoint        → WAL nhỏ lại (chỉ ghi delta)
 
-   → Checkpoint QUA DAY lam luong WAL tang dang ke
+   → Checkpoint QUÁ DÀY làm lượng WAL tăng đáng kể
 ```
 
 Cách giảm:
@@ -234,7 +234,7 @@ Cách giảm:
 ALTER SYSTEM SET checkpoint_timeout = '15min';      -- mac dinh 5min
 ALTER SYSTEM SET max_wal_size = '8GB';              -- mac dinh 1GB
 ALTER SYSTEM SET checkpoint_completion_target = 0.9;
-ALTER SYSTEM SET wal_compression = 'zstd';          -- nen ca page (PG15+)
+ALTER SYSTEM SET wal_compression = 'zstd';          -- nén cả page (PG15+)
 ```
 
 `wal_compression` đáng chú ý: nó nén riêng các bản ghi ghi-cả-page, thường **giảm 40-70% lượng WAL** với chi phí CPU nhỏ.
@@ -245,14 +245,14 @@ ALTER SYSTEM SET wal_compression = 'zstd';          -- nen ca page (PG15+)
 
 ```text
    REDO LOG  (ib_logfile0, ib_logfile1)
-     • Vong tron, kich thuoc co dinh
+     • Vòng tròn, kích thước cố định
      • Ghi thay doi vat ly muc page
-     • Dung de phuc hoi sau su co
+     • Dùng để phục hồi sau sự cố
 
    UNDO LOG  (undo tablespace)
-     • Ghi gia tri CU
-     • Dung cho ROLLBACK
-     • VA cho MVCC: doc du lieu cu thi dung lai tu day
+     • Ghi giá trị CŨ
+     • Dùng cho ROLLBACK
+     • VÀ cho MVCC: đọc dữ liệu cũ thì dựng lại từ đây
 ```
 
 ```text
@@ -260,11 +260,11 @@ ALTER SYSTEM SET wal_compression = 'zstd';          -- nen ca page (PG15+)
 
    BANG:                      UNDO LOG:
    ┌────┬─────────┐           ┌──────────────────────────┐
-   │  1 │  900000 │  ← MOI    │ XID 77: id=1 cu la 1000000│
+   │  1 │  900000 │  ← MỚI    │ XID 77: id=1 cũ là 1000000│
    └────┴─────────┘           └──────────────────────────┘
 
-   ROLLBACK → doc undo log, GHI 1.000.000 tro lai vao bang
-            → PHAI HOAN TAC THAT tung dong
+   ROLLBACK → đọc undo log, GHI 1.000.000 trở lại vào bảng
+            → PHẢI HOÀN TÁC THẬT từng dòng
 ```
 
 ### So sánh hai kiến trúc
@@ -283,7 +283,7 @@ ALTER SYSTEM SET wal_compression = 'zstd';          -- nen ca page (PG15+)
 Dòng cuối đáng chú ý: cả hai đều bị transaction dài làm hại, chỉ khác **chỗ nào phình**.
 
 ```sql
--- MySQL: kiem tra undo log co phinh khong
+-- MySQL: kiểm tra undo log có phình không
 SELECT * FROM information_schema.innodb_metrics
 WHERE name LIKE '%undo%' AND status = 'enabled';
 ```
@@ -291,17 +291,17 @@ WHERE name LIKE '%undo%' AND status = 'enabled';
 ### Redo log của InnoDB là vòng tròn
 
 ```text
-   POSTGRESQL WAL: file MOI lien tuc, file cu duoc XOA hoac LUU TRU
-   INNODB REDO   : kich thuoc CO DINH, ghi vong lai tu dau
+   POSTGRESQL WAL: file MỚI liên tục, file cũ được XOÁ hoặc LƯU TRỮ
+   INNODB REDO   : kích thước CỐ ĐỊNH, ghi vòng lại từ đầu
 
    → Neu redo log QUA NHO:
-       ghi vong quanh nhanh → phai FLUSH page ban gap gap
-       → hien tuong "async flush", thong luong ghi SUP
+       ghi vòng quanh nhanh → phải FLUSH page bẩn gấp gáp
+       → hiện tượng "async flush", thông lượng ghi SỤP
 ```
 
 ```ini
 innodb_redo_log_capacity = 4G      # MySQL 8.0.30+
-# ban cu: innodb_log_file_size × innodb_log_files_in_group
+# bản cũ: innodb_log_file_size × innodb_log_files_in_group
 ```
 
 Mặc định chỉ 100 MB — quá nhỏ cho tải ghi nặng. Đây là một trong những chỉnh sửa hiệu quả nhất trên MySQL.
@@ -315,8 +315,8 @@ WAL sinh ra cho durability, nhưng nó trở thành nền của ba tính năng k
 ### 1. Nhân bản
 
 ```text
-   Replica CHINH LA mot may lien tuc AP DUNG WAL cua primary.
-   → khong can co che rieng, tai su dung dung thu da co
+   Replica CHÍNH LÀ một máy liên tục ÁP DỤNG WAL của primary.
+   → không cần cơ chế riêng, tái sử dụng đúng thứ đã có
 ```
 
 ### 2. Phục hồi theo thời điểm (PITR)
@@ -327,9 +327,9 @@ ALTER SYSTEM SET archive_command = 'cp %p /backup/wal/%f';
 ```
 
 ```text
-   Ban sao luu day du (Chu nhat)  +  moi file WAL sau do
+   Bản sao lưu đầy đủ (Chủ nhật)  +  mọi file WAL sau đó
    → phuc hoi ve BAT KY THOI DIEM NAO
-   → vi du: ngay TRUOC khi ai do chay DELETE nham luc 14:32
+   → ví dụ: ngay TRƯỚC khi ai đó chạy DELETE nhầm lúc 14:32
 ```
 
 ```bash
@@ -347,12 +347,12 @@ SELECT pg_create_logical_replication_slot('cdc_slot', 'pgoutput');
 ```
 
 ```text
-   Giai ma WAL thanh cac su kien muc hang:
-     INSERT vao bang orders: {id: 1, total: 500000}
-     UPDATE bang users: truoc {...}, sau {...}
+   Giải mã WAL thành các sự kiện mức hàng:
+     INSERT vào bảng orders: {id: 1, total: 500000}
+     UPDATE bảng users: trước {...}, sau {...}
 
-   → Debezium, Kafka Connect dung dung co che nay
-   → Dong bo du lieu sang Elasticsearch, kho phan tich, cache
+   → Debezium, Kafka Connect dùng đúng cơ chế này
+   → Đồng bộ dữ liệu sang Elasticsearch, kho phân tích, cache
    → KHONG can them cot `updated_at` hay them trigger
 ```
 
@@ -363,7 +363,7 @@ SELECT pg_create_logical_replication_slot('cdc_slot', 'pgoutput');
 ## Theo dõi WAL
 
 ```sql
--- Luong WAL sinh ra (PG14+)
+-- Lượng WAL sinh ra (PG14+)
 SELECT wal_records, wal_bytes, wal_fpi,
        pg_size_pretty(wal_bytes) AS tong
 FROM pg_stat_wal;
@@ -374,14 +374,14 @@ FROM pg_stat_wal;
 -------------+------------+---------+---------
     88412993 | 4.2884e+11 | 1284993 | 399 GB
                              ▲
-                 so lan GHI CA PAGE — cao nghia la checkpoint qua day
+                 số lần GHI CẢ PAGE — cao nghĩa là checkpoint quá dày
 ```
 
 ```sql
 -- Dung luong thu muc WAL
 SELECT pg_size_pretty(sum(size)) FROM pg_ls_waldir();
 
--- Khe nhan ban dang giu bao nhieu WAL  ← NGUY HIEM NHAT
+-- Khe nhân bản đang giữ bao nhiêu WAL  ← NGUY HIỂM NHẤT
 SELECT slot_name, active, wal_status,
        pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS wal_giu
 FROM pg_replication_slots;
@@ -395,9 +395,9 @@ FROM pg_stat_bgwriter;
 ```
 
 ```text
-   checkpoints_req cao (> 10%) nghia la checkpoint bi EP BUOC
-   vi WAL day `max_wal_size`, khong phai vi het thoi gian
-   → nen TANG max_wal_size
+   checkpoints_req cao (> 10%) nghĩa là checkpoint bị ÉP BUỘC
+   vì WAL đầy `max_wal_size`, không phải vì hết thời gian
+   → nên TĂNG max_wal_size
 ```
 
 Bốn cảnh báo nên đặt:
