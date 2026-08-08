@@ -8,7 +8,7 @@ PostgreSQL là **đa tiến trình**, không phải đa luồng:
 
 ```text
    ┌──────────────────────────────────────────────────────────────┐
-   │  POSTMASTER  (tien trinh cha)                                │
+   │  POSTMASTER  (tiến trình cha)                                │
    │   • lắng nghe cổng 5432                                      │
    │   • fork() một tiến trình con cho MỖI kết nối                │
    │   • khởi động và giám sát các tiến trình nền                 │
@@ -17,7 +17,7 @@ PostgreSQL là **đa tiến trình**, không phải đa luồng:
      ┌────────┼────────────────────────────────────────────┐
      ▼        ▼                                            ▼
    ┌──────┐ ┌──────┐                              ┌─────────────────┐
-   │BACKEND│ │BACKEND│  ... 1 tien trinh          │ TIEN TRINH NEN  │
+   │BACKEND│ │BACKEND│  ... 1 tiến trình          │ TIẾN TRÌNH NỀN  │
    │ #1   │ │ #2   │      mỗi kết nối             ├─────────────────┤
    └──────┘ └──────┘                              │ • checkpointer  │
                                                   │ • background    │
@@ -73,14 +73,14 @@ FROM pg_stat_bgwriter;
 --------------------+---------------+-----------------
            12849302 |       4118822 |         8842119
                                               ▲
-                    BACKEND tu ghi 8,8 trieu page — QUA CAO
+                    BACKEND tự ghi 8,8 triệu page — QUÁ CAO
 ```
 
 `buffers_backend` cao nghĩa là background writer không theo kịp. Chỉnh:
 
 ```sql
-ALTER SYSTEM SET bgwriter_lru_maxpages = 500;   -- mac dinh 100
-ALTER SYSTEM SET bgwriter_delay = '100ms';      -- mac dinh 200ms
+ALTER SYSTEM SET bgwriter_lru_maxpages = 500;   -- mặc định 100
+ALTER SYSTEM SET bgwriter_delay = '100ms';      -- mặc định 200ms
 ```
 
 ---
@@ -101,7 +101,7 @@ pg_subtrans/       ← sub-transaction (SAVEPOINT)
 pg_tblspc/         ← liên kết tới các tablespace ngoài
 pg_stat/           ← thống kê lưu bền
 pg_logical/        ← trạng thái nhân bản logic
-postgresql.conf    ← cau hinh chinh
+postgresql.conf    ← cấu hình chính
 pg_hba.conf        ← quy tắc xác thực
 postmaster.pid     ← PID và thông tin tiến trình đang chạy
 ```
@@ -170,7 +170,7 @@ Giới hạn 1 GB mỗi file là chủ đích: nó tương thích với các h�
    │  shared_buffers            (mặc định 128 MB → đặt 25% RAM)│
    │    └ cache page dữ liệu và index                         │
    │                                                          │
-   │  wal_buffers               (mac dinh 1/32 shared_buffers) │
+   │  wal_buffers               (mặc định 1/32 shared_buffers) │
    │    └ đệm WAL trước khi ghi xuống đĩa                     │
    │                                                          │
    │  Bảng khoá, bảng tiến trình, thống kê                    │
@@ -178,14 +178,14 @@ Giới hạn 1 GB mỗi file là chủ đích: nó tương thích với các h�
 
    ┌─ BỘ NHỚ RIÊNG (MỖI KẾT NỐI một bản) ─────────────────────┐
    │                                                          │
-   │  work_mem            (mac dinh 4 MB)                     │
+   │  work_mem            (mặc định 4 MB)                     │
    │    └ sắp xếp, bảng băm                                   │
    │    ⚠ MỖI THAO TÁC, MỖI KẾT NỐI — không phải tổng         │
    │                                                          │
-   │  maintenance_work_mem (mac dinh 64 MB)                   │
+   │  maintenance_work_mem (mặc định 64 MB)                   │
    │    └ CREATE INDEX, VACUUM, ALTER TABLE                   │
    │                                                          │
-   │  temp_buffers        (mac dinh 8 MB)                     │
+   │  temp_buffers        (mặc định 8 MB)                     │
    │    └ bảng tạm                                            │
    └──────────────────────────────────────────────────────────┘
 ```
@@ -203,7 +203,7 @@ Giới hạn 1 GB mỗi file là chủ đích: nó tương thích với các h�
 
       50 × 7 × work_mem
 
-   Voi work_mem = 512 MB  →  50 × 7 × 512 MB = 179 GB
+   Với work_mem = 512 MB  →  50 × 7 × 512 MB = 179 GB
    → OOM killer giet PostgreSQL
 ```
 
@@ -219,7 +219,7 @@ COMMIT;
 Phát hiện `work_mem` không đủ:
 
 ```sql
-ALTER SYSTEM SET log_temp_files = 0;   -- ghi log MOI file tam
+ALTER SYSTEM SET log_temp_files = 0;   -- ghi log MỌI file tạm
 SELECT pg_reload_conf();
 ```
 
@@ -261,12 +261,12 @@ ALTER SYSTEM SET effective_cache_size = '24GB';    -- 75% — chỉ là GỢI Ý
 ## Đường đi của một truy vấn qua các tầng
 
 ```text
-   ┌─ 1. KET NOI ────────────────────────────────────────────────┐
+   ┌─ 1. KẾT NỐI ────────────────────────────────────────────────┐
    │  postmaster nhận kết nối → fork() một backend mới           │
    │  → 1-5 ms, và ~5-10 MB RAM                                  │
    └────────────────────────────┬────────────────────────────────┘
    ┌─ 2. PARSER ────────────────▼────────────────────────────────┐
-   │  Kiem tra cu phap → cay cu phap                             │
+   │  Kiểm tra cú pháp → cây cú pháp                             │
    │  Tra catalog: bảng có tồn tại? cột có đúng kiểu?            │
    └────────────────────────────┬────────────────────────────────┘
    ┌─ 3. REWRITER ──────────────▼────────────────────────────────┐
@@ -279,7 +279,7 @@ ALTER SYSTEM SET effective_cache_size = '24GB';    -- 75% — chỉ là GỢI Ý
    │  → đây là bước `EXPLAIN` cho bạn xem                        │
    └────────────────────────────┬────────────────────────────────┘
    ┌─ 5. EXECUTOR ──────────────▼────────────────────────────────┐
-   │  Chay cay ke hoach                                          │
+   │  Chạy cây kế hoạch                                          │
    │  Xin page từ shared_buffers → không có thì đọc đĩa          │
    │  Kiểm tra MVCC: phiên bản này có thuộc snapshot của tôi?    │
    │  Lấy khoá nếu cần ghi                                       │
@@ -312,7 +312,7 @@ CREATE INDEX idx_orders_user ON orders (user_id) TABLESPACE fast_ssd;
 Ba cách dùng thực tế:
 
 ```text
-   1. PHAN TANG LUU TRU
+   1. PHÂN TẦNG LƯU TRỮ
       Mảnh gần đây → NVMe;  mảnh cũ → HDD
       → kết hợp với partitioning ([phase-6])
 
@@ -320,7 +320,7 @@ Ba cách dùng thực tế:
       WAL là ghi TUẦN TỰ liên tục;  dữ liệu là ghi NGẪU NHIÊN
       → để chung nhau thì chúng tranh đầu đọc/hàng đợi I/O
 
-   3. TACH INDEX KHOI DU LIEU
+   3. TÁCH INDEX KHỎI DỮ LIỆU
       Trong một truy vấn, index và heap được đọc GẦN NHƯ ĐỒNG THỜI
       → ổ riêng cho phép song song thật
 ```

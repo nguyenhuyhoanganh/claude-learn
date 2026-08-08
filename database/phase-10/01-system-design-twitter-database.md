@@ -144,7 +144,7 @@ CREATE TABLE users (
     handle       TEXT        NOT NULL UNIQUE,
     display_name TEXT        NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- cot phi chuan hoa, xem phan cuoi bai
+    -- cột phi chuẩn hoá, xem phần cuối bài
     follower_count  INT NOT NULL DEFAULT 0,
     following_count INT NOT NULL DEFAULT 0
 );
@@ -245,7 +245,7 @@ Limit  (actual time=182.442..182.488 rows=50 loops=1)
         Sort Key: t.created_at DESC
         Sort Method: top-N heapsort  Memory: 41kB
         ->  Nested Loop  (actual time=0.088..168.112 rows=248113 loops=1)
-              →  248.113 DONG duoc doc len chi de lay 50
+              →  248.113 DÒNG được đọc lên chỉ để lấy 50
 ```
 
 ### Cách 2 — Toè khi ghi (fan-out on write / push)
@@ -254,7 +254,7 @@ Limit  (actual time=182.442..182.488 rows=50 loops=1)
 
 ```sql
 CREATE TABLE timeline (
-    user_id    BIGINT      NOT NULL,   -- chu hop thu
+    user_id    BIGINT      NOT NULL,   -- chủ hộp thư
     tweet_id   BIGINT      NOT NULL,
     author_id  BIGINT      NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
@@ -263,7 +263,7 @@ CREATE TABLE timeline (
 ```
 
 ```sql
--- Khi dang tweet: chep vao hop thu cua moi nguoi theo doi
+-- Khi đăng tweet: chép vào hộp thư của mọi người theo dõi
 INSERT INTO timeline (user_id, tweet_id, author_id, created_at)
 SELECT f.follower_id, :tweet_id, :author_id, :created_at
 FROM follows f
@@ -277,7 +277,7 @@ SELECT * FROM timeline WHERE user_id = :toi ORDER BY created_at DESC LIMIT 50;
 ```
 
 ```text
-   Mot lan tra index, doc 50 dong lien tiep.  → ~0,3 ms
+   Một lần tra index, đọc 50 dòng liên tiếp.  → ~0,3 ms
 ```
 
 ```text
@@ -329,19 +329,19 @@ SELECT * FROM timeline WHERE user_id = :toi ORDER BY created_at DESC LIMIT 50;
 ```
 
 ```sql
--- Buoc 1
+-- Bước 1
 SELECT tweet_id, author_id, created_at
 FROM timeline WHERE user_id = :toi
 ORDER BY created_at DESC LIMIT 50;
 
--- Buoc 2 — chi voi nhung nguoi noi tieng minh theo doi
+-- Bước 2 — chỉ với những người nổi tiếng mình theo dõi
 SELECT t.id, t.user_id, t.created_at
 FROM tweets t
 WHERE t.user_id = ANY(:danh_sach_noi_tieng_toi_theo_doi)
   AND t.created_at > :moc_thoi_gian
 ORDER BY t.created_at DESC LIMIT 50;
 
--- Buoc 3: tron trong ung dung
+-- Bước 3: trộn trong ứng dụng
 ```
 
 Vì sao bước 2 rẻ: một người theo dõi 500 tài khoản thì thường chỉ **20-50 tài khoản** trong đó là nổi tiếng. Gộp 30 nguồn rẻ hơn gộp 500 nguồn rất nhiều.
@@ -370,16 +370,16 @@ SELECT count(*) FROM follows WHERE followee_id = 42;
 ```
 
 ```text
-   Voi tai khoan 100 trieu nguoi theo doi:
-     → dem 100 trieu dong  →  vai giay
-     → moi lan co ai mo ho so
-   → khong dung duoc
+   Với tài khoản 100 triệu người theo dõi:
+     → đếm 100 triệu dòng  →  vài giây
+     → mỗi lần có ai mở hồ sơ
+   → không dùng được
 ```
 
 Vì thế cột `follower_count` tồn tại. Nhưng như [phase-2 bài 4](../phase-2/04-consistency-va-eventual-consistency.md) đã cảnh báo: **đó là quy tắc database không giữ giúp**.
 
 ```sql
--- Cap nhat trong CUNG transaction, va dung bieu thuc tu tham chieu
+-- Cập nhật trong CÙNG transaction, và dùng biểu thức tự tham chiếu
 BEGIN;
   INSERT INTO follows (follower_id, followee_id) VALUES (:toi, :ho);
   UPDATE users SET follower_count  = follower_count  + 1 WHERE id = :ho;
@@ -417,11 +417,11 @@ CREATE TABLE follower_counts (
     PRIMARY KEY (user_id, shard)
 );
 
--- Tang: chon ngau nhien 1 trong 100 manh → tranh chap giam 100 lan
+-- Tăng: chọn ngẫu nhiên 1 trong 100 mảnh → tranh chấp giảm 100 lần
 UPDATE follower_counts SET cnt = cnt + 1
  WHERE user_id = :ho AND shard = (random()*100)::INT;
 
--- Doc: cong lai
+-- Đọc: cộng lại
 SELECT sum(cnt) FROM follower_counts WHERE user_id = :ho;
 ```
 

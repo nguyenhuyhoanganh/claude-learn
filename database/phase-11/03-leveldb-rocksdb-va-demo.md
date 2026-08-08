@@ -124,7 +124,7 @@ Mỗi file SST có một bloom filter ([phase-4 bài 4](../phase-4/04-bloom-filt
        KHÔNG  →  BỎ QUA file, không chạm đĩa            ✔
        CÓ THỂ →  mở file ra tìm (có thể là dương tính giả)
 
-   Voi ti le duong tinh gia 1%:
+   Với tỉ lệ dương tính giả 1%:
      → 99% các file KHÔNG chứa khoá bị loại ngay tại RAM
      → đọc điểm trở nên khả thi
 ```
@@ -285,7 +285,7 @@ import plyvel, time, os
 
 db = plyvel.DB('/tmp/leveldb-lab', create_if_missing=True)
 
-# GHI 1 TRIEU BAN GHI
+# GHI 1 TRIỆU BẢN GHI
 bat_dau = time.time()
 with db.write_batch() as wb:
     for i in range(1_000_000):
@@ -325,7 +325,7 @@ ls -la /tmp/leveldb-lab/
 000042.log        1.2M      ← WAL
 CURRENT             16
 LOCK                 0
-LOG               8.4K      ← nhat ky compaction
+LOG               8.4K      ← nhật ký compaction
 MANIFEST-000002   4.1K
 ```
 
@@ -362,7 +362,7 @@ print(subprocess.run(['du','-sh','/tmp/leveldb-lab'], capture_output=True, text=
 Vì sao: xoá **ghi thêm** một triệu bia mộ. Dung lượng chỉ giảm sau khi compaction chạy:
 
 ```python
-db.compact_range()      # buoc compaction chay ngay
+db.compact_range()      # buộc compaction chạy ngay
 print(subprocess.run(['du','-sh','/tmp/leveldb-lab'], capture_output=True, text=True).stdout)
 ```
 

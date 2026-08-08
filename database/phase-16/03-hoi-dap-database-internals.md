@@ -9,7 +9,7 @@ Tám câu hỏi về cơ chế bên trong và về những quyết định thi�
 ```sql
 SELECT pg_size_pretty(pg_relation_size('events'));   -- 42 GB
 DELETE FROM events WHERE created_at < '2025-01-01';  -- xoá 30 triệu dòng
-SELECT pg_size_pretty(pg_relation_size('events'));   -- VAN 42 GB
+SELECT pg_size_pretty(pg_relation_size('events'));   -- VẪN 42 GB
 ```
 
 Vì `DELETE` **không xoá byte nào**:
@@ -70,7 +70,7 @@ SHOW autovacuum_vacuum_threshold;      -- 50
 ```
 
 ```text
-   NGUONG KICH HOAT =  threshold  +  scale_factor × so_dong
+   NGƯỠNG KÍCH HOẠT =  threshold  +  scale_factor × số_dòng
 
    Bảng 1.000 dòng    →  50 + 0,2×1.000     =        250 dòng chết
    Bảng 100 triệu dòng→  50 + 0,2×100.000.000 = 20.000.050 dòng chết
@@ -154,10 +154,10 @@ CREATE TABLE users (
 Vì sao `CHECK` tốt hơn `VARCHAR(n)`:
 
 ```text
-   Doi VARCHAR(50) thanh VARCHAR(100):
+   Đổi VARCHAR(50) thành VARCHAR(100):
      → PostgreSQL 9.2+ không viết lại bảng, nhưng VẪN lấy ACCESS EXCLUSIVE
 
-   Doi CHECK:
+   Đổi CHECK:
      ALTER TABLE ... DROP CONSTRAINT ..., ADD CONSTRAINT ... NOT VALID;
      ALTER TABLE ... VALIDATE CONSTRAINT ...;
      → khoá NHẸ hơn nhiều
@@ -224,7 +224,7 @@ SELECT * FROM users WHERE status <> 'active';
 ```sql
 -- Cách đúng
 WHERE status IS DISTINCT FROM 'active';
--- hoac
+-- hoặc
 WHERE status <> 'active' OR status IS NULL;
 ```
 
@@ -236,7 +236,7 @@ Tương tự với `NOT IN`:
 -- BẪY: nếu subquery trả về BẤT KỲ NULL nào, kết quả LUÔN RỖNG
 SELECT * FROM orders WHERE user_id NOT IN (SELECT id FROM banned_users);
 
--- AN TOAN
+-- AN TOÀN
 SELECT * FROM orders o WHERE NOT EXISTS (
     SELECT 1 FROM banned_users b WHERE b.id = o.user_id
 );
@@ -262,7 +262,7 @@ SELECT * FROM orders o WHERE NOT EXISTS (
      • TĂNG DẦN theo thời gian → không gây tách page
 
    ✘ UUID v4
-     • Ngau nhien hoan toan → tach page lien tuc
+     • Ngẫu nhiên hoàn toàn → tách page liên tục
      • Đo thật trên PostgreSQL: chèn CHẬM HƠN 3,7 LẦN, index LỚN HƠN 2,1 LẦN
      • Trên InnoDB còn tệ hơn vì bảng cũng sắp theo khoá chính
 ```
@@ -282,7 +282,7 @@ Mẫu tách đôi khi cần cả hai:
 ```sql
 CREATE TABLE orders (
     id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- kỹ thuật, nội bộ
-    order_no UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE     -- doi ngoai
+    order_no UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE     -- đối ngoại
 );
 ```
 
@@ -349,16 +349,16 @@ Chủ đề này được đào sâu ở [sql-interview/phase-6](../../sql-inter
 ```text
    ┌─────────────────────────────────────────────────────────┐
    │ NÊN Ở DATABASE — BẤT BIẾN VỀ DỮ LIỆU                    │
-   │   • Rang buoc: NOT NULL, CHECK, UNIQUE, FOREIGN KEY     │
+   │   • Ràng buộc: NOT NULL, CHECK, UNIQUE, FOREIGN KEY     │
    │   • Kiểu dữ liệu đúng (đừng TEXT cho mọi thứ)           │
-   │   • Cach ly tenant (Row Level Security)                 │
+   │   • Cách ly tenant (Row Level Security)                 │
    │   → VÌ: chúng KHÔNG THỂ bị bỏ qua, kể cả khi ứng dụng   │
    │     có bug, hoặc khi có ứng dụng THỨ HAI ghi vào        │
    ├─────────────────────────────────────────────────────────┤
    │ NÊN Ở ỨNG DỤNG — QUY TẮC NGHIỆP VỤ                      │
    │   • Quy trình, luồng trạng thái                          │
-   │   • Tinh toan gia, khuyen mai                            │
-   │   • Goi dich vu ngoai                                    │
+   │   • Tính toán giá, khuyến mãi                            │
+   │   • Gọi dịch vụ ngoài                                    │
    │   → VÌ: dễ kiểm thử, dễ đọc, dễ triển khai, đúng tay    │
    │     nghề của đội ngũ                                     │
    └─────────────────────────────────────────────────────────┘
@@ -384,7 +384,7 @@ Chủ đề này được đào sâu ở [sql-interview/phase-6](../../sql-inter
    Stored procedure:
      ✘ Khó kiểm thử tự động
      ✘ Khó quản lý phiên bản trong git
-     ✘ Kho go loi
+     ✘ Khó gỡ lỗi
      ✘ Khó triển khai dần (không có canary)
      ✘ Khoá chặt vào một hệ quản trị
 ```
@@ -392,7 +392,7 @@ Chủ đề này được đào sâu ở [sql-interview/phase-6](../../sql-inter
 ### Vùng xám: trigger
 
 ```text
-   ✔ HOP: bo dem phi chuan hoa, ghi audit, cap nhat updated_at
+   ✔ HỢP: bộ đếm phi chuẩn hoá, ghi audit, cập nhật updated_at
      → những việc PHẢI luôn xảy ra, không được quên
 
    ✘ KHÔNG HỢP: logic nghiệp vụ phức tạp, gọi dịch vụ ngoài
@@ -414,19 +414,19 @@ Quy tắc thực dụng: **trigger chỉ nên làm những việc mà mọi đư
 Ba dạng phi chuẩn hoá, xếp theo mức độ rủi ro:
 
 ```text
-   1. CỘT ĐẾM SẴN  (rui ro VUA)
+   1. CỘT ĐẾM SẴN  (rủi ro VỪA)
       users.follower_count, posts.comment_count
       → phải có job đối soát
 
-   2. CỘT CHÉP SANG  (rui ro CAO)
-      orders.customer_name chep tu customers.name
+   2. CỘT CHÉP SANG  (rủi ro CAO)
+      orders.customer_name chép từ customers.name
       → đổi tên khách hàng phải cập nhật hàng triệu đơn
       → TRỪ KHI là CÓ CHỦ ĐÍCH: giữ tên LÚC ĐẶT HÀNG
 
-   3. BẢNG TỔNG HỢP  (rui ro THAP)
-      daily_sales tinh san tu orders
+   3. BẢNG TỔNG HỢP  (rủi ro THẤP)
+      daily_sales tính sẵn từ orders
       → tính lại được bất cứ lúc nào từ nguồn sự thật
-      → AN TOAN NHAT
+      → AN TOÀN NHẤT
 ```
 
 Dạng 3 an toàn nhất vì nó **không phải nguồn sự thật** — sai thì tính lại. Dạng 2 nguy hiểm nhất vì bản sao có thể lệch mà không ai biết.

@@ -4,9 +4,9 @@
 
 ```text
    NoSQL bao gom:
-     • Kho tai lieu    (MongoDB, CouchDB)
+     • Kho tài liệu    (MongoDB, CouchDB)
      • Kho khoá-giá trị (Redis, DynamoDB, Memcached)
-     • Kho cot rong     (Cassandra, HBase)
+     • Kho cột rộng     (Cassandra, HBase)
      • Cơ sở dữ liệu đồ thị (Neo4j, Neptune)
      • Chuỗi thời gian  (InfluxDB, TimescaleDB)
 
@@ -20,13 +20,13 @@ Bài này gạt bỏ khẩu hiệu tiếp thị và đi vào những khác biệ
 Câu "NoSQL nhanh hơn SQL" gần như luôn là một trong hai điều dưới đây — và cả hai đều không phải "công nghệ tốt hơn":
 
 ```text
-   1. NO LAM IT VIEC HON
+   1. NÓ LÀM ÍT VIỆC HƠN
       Không kiểm tra khoá ngoại
       Không đảm bảo ACID xuyên nhiều bản ghi
       Không tối ưu truy vấn phức tạp
       → Nhanh hơn vì HỨA ÍT HƠN, không phải vì tài hơn
 
-   2. MO HINH DU LIEU KHOP VOI MAU TRUY CAP
+   2. MÔ HÌNH DỮ LIỆU KHỚP VỚI MẪU TRUY CẬP
       Đọc một hồ sơ người dùng đầy đủ:
         SQL   : JOIN 5 bảng → 5 lần tra index
         MongoDB: đọc MỘT tài liệu → 1 lần tra index
@@ -42,7 +42,7 @@ Câu "NoSQL nhanh hơn SQL" gần như luôn là một trong hai điều dưới
 ### Chuẩn hoá vs nhúng
 
 ```text
-   SQL — CHUAN HOA
+   SQL — CHUẨN HOÁ
    ═══════════════
    users        (id, name, email)
    addresses    (id, user_id, street, city)
@@ -52,7 +52,7 @@ Câu "NoSQL nhanh hơn SQL" gần như luôn là một trong hai điều dưới
    Lấy hồ sơ đầy đủ → JOIN 4 bảng
 
 
-   MONGODB — NHUNG
+   MONGODB — NHÚNG
    ═══════════════
    {
      _id: 1,
@@ -126,7 +126,7 @@ Từ MongoDB 3.2, engine mặc định là **WiredTiger**:
 ```text
    • B+Tree (có thể cấu hình LSM, nhưng hiếm dùng)
    • MVCC — người đọc không chặn người ghi
-   • Nen: Snappy (mac dinh), zlib, zstd
+   • Nén: Snappy (mặc định), zlib, zstd
    • Nén tiền tố cho index
    • Checkpoint mỗi 60 giây
    • Journal (WAL) fsync mỗi 100 ms
@@ -169,12 +169,12 @@ Từ MongoDB 5.0, `w: "majority"` là **mặc định** — trước đó là `w
 ### `readConcern` và `readPreference`
 
 ```javascript
-// Doc tu dau
+// Đọc từ đâu
 db.orders.find().readPref("primary")            // luôn mới nhất
 db.orders.find().readPref("secondary")          // có thể CŨ
 db.orders.find().readPref("nearest")            // độ trễ thấp nhất
 
-// Doc muc dam bao nao
+// Đọc mức đảm bảo nào
 db.orders.find().readConcern("local")           // có thể đọc dữ liệu SẼ BỊ ROLLBACK
 db.orders.find().readConcern("majority")        // chỉ đọc dữ liệu đã được đa số xác nhận
 db.orders.find().readConcern("linearizable")    // mạnh nhất, chậm nhất
@@ -205,7 +205,7 @@ Nhưng cần biết:
    • CHẬM hơn đáng kể so với thao tác một tài liệu
    • Giới hạn thời gian mặc định: 60 GIÂY
    • Yêu cầu replica set (không chạy trên một nút đơn lẻ)
-   • Tai liệu MongoDB KHUYEN NGHI thiet ke de KHONG CAN transaction
+   • Tài liệu MongoDB KHUYẾN NGHỊ thiết kế để KHÔNG CẦN transaction
 ```
 
 Dòng cuối là lời khuyên chân thành: nếu bạn thấy mình cần transaction nhiều tài liệu thường xuyên trên MongoDB, có thể mô hình dữ liệu đang sai — hoặc bạn nên dùng database quan hệ.
@@ -223,21 +223,21 @@ db.createCollection("events", {
 ```
 
 ```text
-   COLLECTION THUONG                  CLUSTERED COLLECTION
+   COLLECTION THƯỜNG                  CLUSTERED COLLECTION
    ════════════════                   ════════════════════
    Index _id  →  RecordId  →  Tài liệu   Tài liệu nằm LUÔN ở lá của
-     hai buoc                             index _id
-                                          → MOT buoc
+     hai bước                             index _id
+                                          → MỘT bước
 ```
 
 Chính xác là ý tưởng clustered index của InnoDB ([phase-3 bài 3](../phase-3/03-primary-key-vs-secondary-key.md)), và nó mang theo **đúng những đánh đổi cũ**:
 
 ```text
    ✔ Tra theo _id nhanh hơn (một bước)
-   ✔ Quet theo thu tu _id tuan tu
+   ✔ Quét theo thứ tự _id tuần tự
    ✔ Ít tốn đĩa hơn (không lưu index _id riêng)
    ✘ Index PHỤ trở nên đắt hơn (phải qua _id)
-   ✘ _id ngau nhien → tach page lien tuc
+   ✘ _id ngẫu nhiên → tách page liên tục
 ```
 
 Hợp nhất với dữ liệu chuỗi thời gian, nơi `_id` tăng dần theo thời gian.

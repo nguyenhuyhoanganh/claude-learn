@@ -51,8 +51,8 @@ Trước khi mã hoá, cần biết chính xác cái gì đang truyền:
      │◀─── AuthenticationOk, ParameterStatus ──│
      │◀─── ReadyForQuery ──────────────────────│
      │                                         │
-     │──── Query: "SELECT ..." ───────────────▶│  ← VAN BAN THUAN
-     │◀─── RowDescription, DataRow... ─────────│  ← VAN BAN THUAN
+     │──── Query: "SELECT ..." ───────────────▶│  ← VĂN BẢN THUẦN
+     │◀─── RowDescription, DataRow... ─────────│  ← VĂN BẢN THUẦN
      │◀─── CommandComplete, ReadyForQuery ─────│
 ```
 
@@ -86,14 +86,14 @@ await client.query(sql);
 ```
 
 ```text
-   N          KICH THUOC     GOI TCP PHAI GHEP     KET QUA
+   N          KÍCH THƯỚC     GÓI TCP PHẢI GHÉP     KẾT QUẢ
    ────────   ──────────     ─────────────────     ────────────────────
    1               ~60 B                 1         xong ngay
    100          ~1,0 KB                  1         xong ngay
    1.000         ~12 KB                  9         xong
    10.000       ~125 KB                 90         xong, bắt đầu chậm
    100.000      ~1,3 MB                960         xong, RẤT nhiều gói gửi lại
-   1.000.000     ~14 MB                  —         SAP SERVER
+   1.000.000     ~14 MB                  —         SẬP SERVER
 ```
 
 ```text
@@ -105,10 +105,10 @@ DETAIL: The postmaster has commanded this server process to roll back the
 Ba điều rút ra:
 
 ```text
-   1. KHONG CO GIOI HAN CUNG ro rang.
+   1. KHÔNG CÓ GIỚI HẠN CỨNG rõ ràng.
       PostgreSQL nhận được câu 1,3 MB. Nhưng "nhận được" ≠ "nên làm".
 
-   2. MOI GOI TCP PHAI DUOC XAC NHAN.
+   2. MỖI GÓI TCP PHẢI ĐƯỢC XÁC NHẬN.
       960 gói = 960 lần chờ xác nhận, và nếu một gói mất thì
       PHẢI GỬI LẠI và chờ GHÉP LẠI đúng thứ tự.
       → độ trễ tăng PHI TUYẾN theo kích thước câu lệnh.
@@ -125,7 +125,7 @@ Cách viết đúng thay cho danh sách `IN` khổng lồ:
 SELECT * FROM t WHERE id IN (1, 2, 3, ..., 10000);
 
 -- ĐÚNG 1: truyền một MẢNG làm THAM SỐ (một giá trị nhị phân gọn)
-SELECT * FROM t WHERE id = ANY($1);          -- $1 = mang int[]
+SELECT * FROM t WHERE id = ANY($1);          -- $1 = mảng int[]
 
 -- ĐÚNG 2: đưa danh sách vào BẢNG TẠM rồi JOIN
 CREATE TEMP TABLE ids (id BIGINT PRIMARY KEY);
@@ -156,7 +156,7 @@ Wireshark → Preferences → Protocols → TLS
 ```
 
 ```text
-   ⚠ KY THUAT NAY LA CON DAO HAI LUOI
+   ⚠ KỸ THUẬT NÀY LÀ CON DAO HAI LƯỠI
      • Rất hữu ích khi GỠ LỖI ở máy phát triển
      • Nhưng file khoá đó giải mã được TOÀN BỘ phiên
      → TUYỆT ĐỐI không bật SSLKEYLOGFILE trên sản phẩm thật
@@ -212,7 +212,7 @@ ssl_ciphers = 'HIGH:!aNULL:!MD5:!3DES'
 ```
 
 ```ini
-# pg_hba.conf — BUOC QUAN TRONG NHAT
+# pg_hba.conf — BƯỚC QUAN TRỌNG NHẤT
 # hostssl = CHỈ chấp nhận kết nối đã mã hoá
 hostssl  all  all  0.0.0.0/0   scram-sha-256
 
@@ -278,7 +278,7 @@ Không còn đọc được gì.
    `prefer` có nghĩa: "thử TLS trước, không được thì dùng kết nối thường"
 
    KẺ TẤN CÔNG Ở GIỮA chỉ cần:
-     1. Chan goi thuong luong TLS
+     1. Chặn gói thương lượng TLS
      2. Trả lời "server này không hỗ trợ TLS"
      3. Client NGOAN NGOÃN chuyển sang kết nối VĂN BẢN THUẦN
      4. Đọc toàn bộ lưu lượng
@@ -293,7 +293,7 @@ Không còn đọc được gì.
    `require` có nghĩa: "bắt buộc phải mã hoá"
    NHƯNG KHÔNG kiểm tra chứng chỉ của ai.
 
-   KE TAN CONG O GIUA:
+   KẺ TẤN CÔNG Ở GIỮA:
      1. Tự tạo một chứng chỉ bất kỳ
      2. Giả làm server
      3. Client thấy "có TLS" → CHẤP NHẬN
@@ -304,7 +304,7 @@ Không còn đọc được gì.
 
 ```text
    ┌──────────┐        ┌──────────────┐        ┌──────────┐
-   │  CLIENT  │──TLS──▶│ KE TAN CONG  │──TLS──▶│  SERVER  │
+   │  CLIENT  │──TLS──▶│ KẺ TẤN CÔNG  │──TLS──▶│  SERVER  │
    └──────────┘        │ đọc HẾT      │        └──────────┘
                        └──────────────┘
    Cả hai chặng đều mã hoá. Client vẫn bị lộ sạch.
@@ -343,7 +343,7 @@ MySQL có khái niệm tương đương:
 
 ```text
    --ssl-mode=DISABLED     ~  disable
-   --ssl-mode=PREFERRED    ~  prefer     (mac dinh)
+   --ssl-mode=PREFERRED    ~  prefer     (mặc định)
    --ssl-mode=REQUIRED     ~  require
    --ssl-mode=VERIFY_CA    ~  verify-ca
    --ssl-mode=VERIFY_IDENTITY ~ verify-full   ← dùng cái này
@@ -358,7 +358,7 @@ Lo ngại thường gặp: "TLS làm chậm database". Đo thử:
 ```text
    BẮT TAY TLS (một lần mỗi kết nối)
      TLS 1.2: 2 vòng mạng  → ~2-4 ms trong LAN
-     TLS 1.3: 1 vong mang  → ~1-2 ms
+     TLS 1.3: 1 vòng mạng  → ~1-2 ms
      Nối lại phiên (session resumption): 0 vòng  → ~0 ms
 
    MÃ HOÁ DỮ LIỆU (mỗi gói tin)
@@ -429,19 +429,19 @@ TLS bảo vệ dữ liệu **khi truyền**. Còn khi nó nằm trên đĩa?
 ### Ba mức, ba phạm vi bảo vệ
 
 ```text
-   1. MA HOA CA DIA (LUKS, dm-crypt, EBS encryption)
+   1. MÃ HOÁ CẢ ĐĨA (LUKS, dm-crypt, EBS encryption)
       Bảo vệ: ai đó LẤY được ổ đĩa vật lý
       KHÔNG bảo vệ: ai đó vào được máy đang chạy (đĩa đã giải mã rồi)
       Chi phi: ~2-5% CPU
       → NÊN BẬT MẶC ĐỊNH, gần như không tốn gì
 
-   2. MA HOA TRONG SUOT CAP DATABASE (TDE)
+   2. MÃ HOÁ TRONG SUỐT CẤP DATABASE (TDE)
       Oracle, SQL Server, MySQL Enterprise có sẵn
       PostgreSQL: KHÔNG có sẵn trong bản cộng đồng
       Bảo vệ: gần giống mã hoá đĩa
       → Ít thêm giá trị nếu đã mã hoá đĩa
 
-   3. MA HOA TUNG COT
+   3. MÃ HOÁ TỪNG CỘT
       Ứng dụng tự mã hoá TRƯỚC KHI gửi vào database
       Bảo vệ: KỂ CẢ khi database bị chiếm hoàn toàn
       → Mạnh nhất, nhưng MẤT khả năng truy vấn
@@ -459,7 +459,7 @@ SELECT pgp_sym_decrypt(ssn_encrypted, :khoa) FROM users WHERE id = 1;
 ```
 
 ```text
-   CAI GIA:
+   CÁI GIÁ:
      ✘ KHÔNG truy vấn được:  WHERE ssn = '123-45-6789'  → không thể
      ✘ KHÔNG đánh index được theo giá trị
      ✘ KHÔNG sắp xếp, không so sánh khoảng

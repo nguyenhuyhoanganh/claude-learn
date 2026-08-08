@@ -15,7 +15,7 @@ Nhắc lại ba lớp bảo vệ ở [phase-14 bài 1](../phase-14/01-bao-mat-ke
 ```text
    1. KHI TRUYỀN  →  TLS         ✔ đã giải quyết
    2. KHI LƯU     →  mã hoá đĩa  ✔ đã giải quyết
-   3. KHI DUNG    →  ???         ✘ CON HO
+   3. KHI DÙNG    →  ???         ✘ CÒN HỞ
 ```
 
 Lỗ hổng thứ ba:
@@ -30,7 +30,7 @@ Lỗ hổng thứ ba:
    → Tại THỜI ĐIỂM ĐÓ, dữ liệu nằm TRONG RAM dưới dạng RÕ
    → Ai kiểm soát máy chủ đều đọc được:
        • nhà cung cấp đám mây
-       • quan tri vien he thong
+       • quản trị viên hệ thống
        • kẻ tấn công đã chiếm được máy
        • lệnh của cơ quan chức năng
 ```
@@ -64,7 +64,7 @@ Diễn bằng luồng dữ liệu:
    b = 3                             
    E(5) = 8x9f2a...  ──────────────▶ 
    E(3) = 3c1b7e...  ──────────────▶ 
-                                     tinh: 8x9f2a... ⊕ 3c1b7e...
+                                     tính: 8x9f2a... ⊕ 3c1b7e...
                                         = ff41c2...
                      ◀────────────── tra ve ff41c2...
    D(ff41c2...) = 8                  
@@ -129,21 +129,21 @@ Nhưng RSA **chỉ** đồng cấu với phép nhân, không với phép cộng.
 
 ```text
    ┌────────────────────────────────────────────────────────────────┐
-   │ PHAN PHAN (Partially HE — PHE)                                 │
+   │ PHẦN PHẦN (Partially HE — PHE)                                 │
    │   Hỗ trợ MỘT phép toán, KHÔNG GIỚI HẠN số lần                  │
    │   RSA, ElGamal  → chỉ phép NHÂN                                │
    │   Paillier      → chỉ phép CỘNG                                │
    │   → NHANH, dùng được trong sản phẩm thật                       │
    ├────────────────────────────────────────────────────────────────┤
-   │ CO PHAN (Somewhat HE — SHE)                                    │
+   │ CÓ PHẦN (Somewhat HE — SHE)                                    │
    │   Hỗ trợ CẢ HAI phép toán, nhưng GIỚI HẠN số lần               │
    │   Mỗi phép toán làm "nhiễu" tích tụ; quá ngưỡng → hỏng         │
    │   → dùng được cho công thức đơn giản                           │
    ├────────────────────────────────────────────────────────────────┤
-   │ TOAN PHAN (Fully HE — FHE)                                     │
+   │ TOÀN PHẦN (Fully HE — FHE)                                     │
    │   Hỗ trợ MỌI phép toán, KHÔNG GIỚI HẠN số lần                  │
    │   Craig Gentry, 2009 — đột phá lý thuyết lớn                   │
-   │   → CHAM HON HANG NGHIN LAN                                    │
+   │   → CHẬM HƠN HÀNG NGHÌN LẦN                                    │
    └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -168,15 +168,15 @@ print(f"Luong +10%  : {khoa_bi_mat.decrypt(tang_10_pt):,.0f}")
 ```
 
 ```text
-Tong luong  : 85,000,000
-Luong +10%  : 16,500,000
+Tổng lương  : 85,000,000
+Lương +10%  : 16,500,000
 ```
 
 ```text
-   PAILLIER LAM DUOC:
+   PAILLIER LÀM ĐƯỢC:
      ✔ E(a) + E(b)        → cộng hai giá trị mã hoá
      ✔ E(a) × hằng_số     → nhân với số RÕ
-   PAILLIER KHONG LAM DUOC:
+   PAILLIER KHÔNG LÀM ĐƯỢC:
      ✘ E(a) × E(b)        → nhân hai giá trị mã hoá
      ✘ E(a) > E(b)        → SO SANH
 ```
@@ -191,7 +191,7 @@ Dòng cuối là hạn chế quan trọng nhất: **không so sánh được** n
    VẤN ĐỀ: mỗi phép toán thêm "nhiễu" (noise) vào bản mã.
            Nhiễu tích tụ quá ngưỡng → giải mã ra RÁC.
 
-   GIAI PHAP CUA GENTRY:
+   GIẢI PHÁP CỦA GENTRY:
      Định kỳ chạy chính THUẬT TOÁN GIẢI MÃ — nhưng ở dạng ĐÃ MÃ HOÁ.
      → được một bản mã "sạch" với cùng giá trị, nhiễu về mức thấp
      → từ đó tính toán tiếp VÔ HẠN
@@ -206,9 +206,9 @@ Nghe rất đẹp. Vấn đề nằm ở con số:
    Cải tiến (2013)    :  ~1.000.000     lần chậm hơn
    Hiện nay (2024-26) :  ~1.000-100.000 lần chậm hơn (tuỳ phép toán)
 
-   KICH THUOC BAN MA
+   KÍCH THƯỚC BẢN MÃ
    Một số nguyên 32 bit  →  bản mã từ 1 KB tới vài MB
-                            → PHINH 250 - 100.000 LAN
+                            → PHÌNH 250 - 100.000 LẦN
 ```
 
 ```text
@@ -237,7 +237,7 @@ Dòng cuối giải thích vì sao FHE khó dùng cho database: **so sánh là p
 Ba lược đồ chính và bài toán của chúng:
 
 ```text
-   BFV / BGV  →  SO NGUYEN chinh xac      (dem, tong tien)
+   BFV / BGV  →  SỐ NGUYÊN chính xác      (đếm, tổng tiền)
    CKKS       →  SỐ THỰC XẤP XỈ           (học máy, thống kê)
    TFHE       →  PHÉP TOÁN BOOLEAN nhanh  (so sánh, điều kiện)
 ```
@@ -279,7 +279,7 @@ FHE toàn phần chưa dùng được cho database thông thường. Nhưng có 
 ### 3. Giao nhau tập riêng tư (PSI)
 
 ```text
-   Hai ben muon biet HO CO CHUNG NHUNG KHACH HANG NAO,
+   Hai bên muốn biết HỌ CÓ CHUNG NHỮNG KHÁCH HÀNG NÀO,
    mà không ai lộ danh sách đầy đủ của mình.
 
    → Được dùng trong đo lường quảng cáo
@@ -356,7 +356,7 @@ Bài học: **mọi lược đồ cho phép truy vấn đều rò rỉ thông ti
    ✔ Chấp nhận được độ trễ tính bằng giây hoặc phút
 
    ✘ Database nghiệp vụ thông thường  → dùng TLS + mã hoá đĩa + phân quyền
-   ✘ Can WHERE, ORDER BY, JOIN thuong xuyen
+   ✘ Cần WHERE, ORDER BY, JOIN thường xuyên
    ✘ Cần độ trễ mili-giây
    ✘ Chi vi "nghe hay"
 ```
