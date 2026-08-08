@@ -73,7 +73,7 @@ Lợi ích của cách này: cấp quyền **một lần cho nhóm**, và mọi 
 -- 1. Kết nối vào database
 GRANT CONNECT ON DATABASE mydb TO app_read, app_write;
 
--- 2. Nhin thay schema
+-- 2. Nhìn thấy schema
 GRANT USAGE ON SCHEMA public TO app_read, app_write;
 
 -- 3. Quyền trên bảng
@@ -260,12 +260,12 @@ Không có `WITH CHECK`, một tenant vẫn có thể **chèn** dòng mang `tena
 ### Không bao giờ để client nói chuyện thẳng với database
 
 ```text
-   ❌ TRINH DUYET ──────────────▶ DATABASE
+   ❌ TRÌNH DUYỆT ──────────────▶ DATABASE
       → chuỗi kết nối nằm trong mã JavaScript → ai cũng đọc được
       → không kiểm soát được truy vấn
       → không giới hạn tần suất
 
-   ✔  TRINH DUYET ──HTTP──▶ API ──▶ DATABASE
+   ✔  TRÌNH DUYỆT ──HTTP──▶ API ──▶ DATABASE
       → bí mật nằm ở server
       → kiểm tra quyền, giới hạn tần suất, ghi nhật ký
 ```

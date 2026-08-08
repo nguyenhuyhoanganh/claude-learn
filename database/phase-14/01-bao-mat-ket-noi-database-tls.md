@@ -47,7 +47,7 @@ Trước khi mã hoá, cần biết chính xác cái gì đang truyền:
      │                                         │
      │──── StartupMessage ────────────────────▶│  tên người dùng, tên database
      │◀─── AuthenticationRequest ──────────────│  yêu cầu xác thực
-     │──── PasswordMessage ───────────────────▶│  chung minh
+     │──── PasswordMessage ───────────────────▶│  chứng minh
      │◀─── AuthenticationOk, ParameterStatus ──│
      │◀─── ReadyForQuery ──────────────────────│
      │                                         │
@@ -432,7 +432,7 @@ TLS bảo vệ dữ liệu **khi truyền**. Còn khi nó nằm trên đĩa?
    1. MÃ HOÁ CẢ ĐĨA (LUKS, dm-crypt, EBS encryption)
       Bảo vệ: ai đó LẤY được ổ đĩa vật lý
       KHÔNG bảo vệ: ai đó vào được máy đang chạy (đĩa đã giải mã rồi)
-      Chi phi: ~2-5% CPU
+      Chi phí: ~2-5% CPU
       → NÊN BẬT MẶC ĐỊNH, gần như không tốn gì
 
    2. MÃ HOÁ TRONG SUỐT CẤP DATABASE (TDE)
@@ -481,7 +481,7 @@ CREATE INDEX idx_users_ssn_hash ON users (ssn_hash);
 
 ```python
 ssn_hash = hmac.new(MUOI_BI_MAT, ssn.encode(), 'sha256').hexdigest()
-# Tra cuu:  WHERE ssn_hash = %s
+# Tra cứu:  WHERE ssn_hash = %s
 # Lấy giá trị: pgp_sym_decrypt(ssn_enc, khoa)
 ```
 

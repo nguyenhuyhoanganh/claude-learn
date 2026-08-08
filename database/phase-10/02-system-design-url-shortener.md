@@ -52,7 +52,7 @@ CREATE TABLE urls (
 ```text
    GHI:  INSERT ... RETURNING id     →  id = 125
          ma_ngan = base62(125)       →  "27"
-         tra ve  https://sho.rt/27
+         trả về  https://sho.rt/27
 
    ĐỌC:  GET /27
          id = base62_nguoc("27")     →  125
@@ -324,7 +324,7 @@ def mo_rong(ma):
         redis.setex(f"u:{ma}", 60, "__KHONG_TON_TAI__")   # cache cả kết quả RỖNG
         return None
 
-    redis.setex(f"u:{ma}", 86400, row[0])     # TTL 1 ngay
+    redis.setex(f"u:{ma}", 86400, row[0])     # TTL 1 ngày
     return row[0]
 ```
 

@@ -163,7 +163,7 @@ async function moRong(urlId) {
 ```
 
 ```text
-moRong('kQ3mXpA')  →  chi hoi shard2  →  8 ms
+moRong('kQ3mXpA')  →  chỉ hỏi shard2  →  8 ms
 ```
 
 **Chỉ một máy được hỏi.** Đây là trường hợp tốt nhất, và cũng chính là lý do `url_id` được chọn làm shard key: nghiệp vụ chính (mở rộng URL) luôn có nó trong tay.
@@ -215,13 +215,13 @@ async function moPhongDuoiTre(soLan = 1000) {
         tongN += Math.max(...doTre);          // hỏi tất cả → chờ cái chậm nhất
     }
     console.log(`Hỏi 1 shard : trung bình ${(tong1/soLan).toFixed(1)} ms`);
-    console.log(`Hoi 3 shard : trung binh ${(tongN/soLan).toFixed(1)} ms`);
+    console.log(`Hỏi 3 shard : trung bình ${(tongN/soLan).toFixed(1)} ms`);
 }
 ```
 
 ```text
-Hoi 1 shard : trung binh 6.9 ms
-Hoi 3 shard : trung binh 10.8 ms
+Hỏi 1 shard : trung bình 6.9 ms
+Hỏi 3 shard : trung bình 10.8 ms
 ```
 
 Với 3 shard đã tệ hơn 56%. Với **20 shard**, xác suất ít nhất một shard chậm là `1 − 0,99²⁰ ≈ 18%` — nghĩa là gần một phần năm số truy vấn dính 200 ms.

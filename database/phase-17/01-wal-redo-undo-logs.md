@@ -66,7 +66,7 @@ Hai tính chất làm mẹo này hoạt động:
    │   Dùng khi: khởi động lại sau sự cố                          │
    │   Mục đích: LÀM LẠI các thay đổi ĐÃ COMMIT nhưng page chưa   │
    │             kịp xuống đĩa                                    │
-   │   Vi du:  "page 4201, byte 128 = 'paid'"                     │
+   │   Ví dụ:  "page 4201, byte 128 = 'paid'"                     │
    ├──────────────────────────────────────────────────────────────┤
    │ UNDO — "giá trị CŨ là gì"                                    │
    │   Dùng khi: ROLLBACK, hoặc đọc phiên bản cũ (MVCC)           │

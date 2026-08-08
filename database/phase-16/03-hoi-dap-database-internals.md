@@ -84,7 +84,7 @@ Cách chữa — đặt riêng cho bảng lớn:
 
 ```sql
 ALTER TABLE events SET (
-    autovacuum_vacuum_scale_factor = 0.01,      -- 1% thay vi 20%
+    autovacuum_vacuum_scale_factor = 0.01,      -- 1% thay vì 20%
     autovacuum_vacuum_threshold    = 1000,
     autovacuum_analyze_scale_factor = 0.005,    -- ANALYZE còn thường xuyên hơn
     autovacuum_vacuum_cost_delay   = 2          -- chạy nhanh hơn (mặc định 2ms từ PG12)

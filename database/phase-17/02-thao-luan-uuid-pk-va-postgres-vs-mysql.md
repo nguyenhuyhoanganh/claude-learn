@@ -129,7 +129,7 @@ CREATE TABLE orders (id UUID PRIMARY KEY DEFAULT uuid_generate_v7());
 ```text
    PostgreSQL:  kieu UUID      → 16 byte   ✔
    MySQL     :  BINARY(16)     → 16 byte   ✔
-                CHAR(36)       → 36 byte   ✘ LANG PHI 20 BYTE
+                CHAR(36)       → 36 byte   ✘ LÃNG PHÍ 20 BYTE
 
    TRÊN INNODB, 20 byte lãng phí bị NHÂN LÊN trong MỌI INDEX PHỤ:
 

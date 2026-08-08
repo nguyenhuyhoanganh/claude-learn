@@ -15,7 +15,7 @@ CREATE TABLE luong_ma_hoa (
     id       BIGSERIAL PRIMARY KEY,
     ten      TEXT   NOT NULL,          -- rõ (không nhạy cảm)
     phong    TEXT   NOT NULL,          -- rõ (cần lọc theo)
-    luong_ma TEXT   NOT NULL           -- MA HOA
+    luong_ma TEXT   NOT NULL           -- MÃ HOÁ
 );
 ```
 
@@ -113,7 +113,7 @@ cur.execute("SELECT * FROM luong_ma_hoa ORDER BY luong_ma")
 try:
     x = cac_ban_ma[0] * cac_ban_ma[1]
 except Exception as e:
-    print(f"Loi: {e}")
+    print(f"Lỗi: {e}")
 ```
 
 ```text
@@ -138,12 +138,12 @@ from phe import paillier
 khoa_cong, khoa_bi_mat = paillier.generate_paillier_keypair(n_length=2048)
 N = 1000
 
-# ─── SINH KHOA ───
+# ─── SINH KHOÁ ───
 t = time.time()
 paillier.generate_paillier_keypair(n_length=2048)
 print(f"Sinh khoá 2048-bit  : {time.time()-t:.2f}s")
 
-# ─── MA HOA ───
+# ─── MÃ HOÁ ───
 t = time.time()
 cac_ban_ma = [khoa_cong.encrypt(i) for i in range(N)]
 t_ma = time.time() - t
@@ -168,7 +168,7 @@ print(f"Cộng {N} số RÕ      : {t_ro*1000:.4f} ms")
 print(f"→ HE chậm hơn       : {t_cong/max(t_ro,1e-9):,.0f} lần")
 
 # ─── KÍCH THƯỚC ───
-print(f"So nguyen RO        : 8 byte")
+print(f"Số nguyên RÕ        : 8 byte")
 print(f"Bản mã Paillier     : {len(str(cac_ban_ma[0].ciphertext()))} byte")
 ```
 
@@ -179,7 +179,7 @@ Cộng 1000 bản mã    : 0.041s (0.041 ms/phép)
 Giải mã 1 kết quả   : 4.88 ms
 Cộng 1000 số RÕ     : 0.0089 ms
 → HE chậm hơn       : 4,607 lần
-So nguyen RO        : 8 byte
+Số nguyên RÕ        : 8 byte
 Bản mã Paillier     : 617 byte
 ```
 

@@ -66,7 +66,7 @@ Diễn bằng luồng dữ liệu:
    E(3) = 3c1b7e...  ──────────────▶ 
                                      tính: 8x9f2a... ⊕ 3c1b7e...
                                         = ff41c2...
-                     ◀────────────── tra ve ff41c2...
+                     ◀────────────── trả về ff41c2...
    D(ff41c2...) = 8                  
         ▲                            SERVER không hề biết:
    ĐÚNG bằng 5 + 3                     - giá trị đầu vào là 5 và 3
@@ -164,7 +164,7 @@ tang_10_pt  = luong_ma_hoa[0] * 1.1            # nhân với hằng số cũng �
 
 # CLIENT giải mã
 print(f"Tổng lương  : {khoa_bi_mat.decrypt(tong_ma_hoa):,}")
-print(f"Luong +10%  : {khoa_bi_mat.decrypt(tang_10_pt):,.0f}")
+print(f"Lương +10%  : {khoa_bi_mat.decrypt(tang_10_pt):,.0f}")
 ```
 
 ```text

@@ -241,7 +241,7 @@ Sort Method: quicksort  Memory: 4218kB         ← vừa trong RAM, tốt
    PostgreSQL DỰA VÀO CACHE CỦA HỆ ĐIỀU HÀNH như một lớp thứ hai.
    Đặt shared_buffers quá cao (> 40%) gây CACHE HAI LẦN:
      cùng một page nằm cả trong shared_buffers LẪN trong page cache của HĐH
-   → lang phi RAM
+   → lãng phí RAM
 
    MySQL InnoDB thì ngược lại: đặt 50-75% VÀ dùng O_DIRECT
    để BỎ QUA cache HĐH hoàn toàn.

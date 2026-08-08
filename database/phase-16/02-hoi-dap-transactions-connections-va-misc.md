@@ -94,7 +94,7 @@ Câu trả lời phụ thuộc vào **hệ nào**:
    An:   đếm bác sĩ đang trực → 2 → "còn Bình, mình xin nghỉ được"
    Bình: đếm bác sĩ đang trực → 2 → "còn An, mình xin nghỉ được"
    An:   UPDATE ... An nghi      COMMIT
-   Binh: UPDATE ... Binh nghi    COMMIT
+   Bình: UPDATE ... Bình nghỉ    COMMIT
 
    → 0 bác sĩ trực. Quy tắc nghiệp vụ bị phá.
 ```

@@ -34,7 +34,7 @@ Cú pháp không đổi, ứng dụng không cần biết. Đó là toàn bộ �
 
 ```text
    MariaDB 10.1-10.3:  XtraDB là engine mặc định
-   MariaDB 10.4+    :  QUAY VE InnoDB
+   MariaDB 10.4+    :  QUAY VỀ InnoDB
    Percona Server 8.0: Bỏ XtraDB, dùng InnoDB của MySQL 8
 
    Lý do: MySQL 8 đã tiếp thu phần lớn cải tiến của XtraDB.

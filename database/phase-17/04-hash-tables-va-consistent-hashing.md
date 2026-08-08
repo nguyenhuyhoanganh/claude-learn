@@ -177,7 +177,7 @@ Với 2 TB dữ liệu, chuyển 90% nghĩa là **1,8 TB đi qua mạng** trong 
          MAY A                          │
            ●                            │
           ┌┘                            └┐
-          │        VONG BAM              │  ● MAY B
+          │        VÒNG BĂM              │  ● MÁY B
           │      (0 → 2³² − 1)           │
           └┐                            ┌┘
            │        ● MAY C             │

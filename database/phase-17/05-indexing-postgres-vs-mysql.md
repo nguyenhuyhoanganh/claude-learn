@@ -330,7 +330,7 @@ CREATE INDEX idx_jobs_pending ON jobs (created_at) WHERE status = 'pending';
 
 ```text
    → Index BỘ PHẬN: chỉ chứa ~5.000 dòng đang chờ
-   → 1,8 MB thay vi 2,1 GB
+   → 1,8 MB thay vì 2,1 GB
    → và nó TỰ NHỎ LẠI khi công việc được xử lý xong
 ```
 

@@ -11,7 +11,7 @@ Bốn lý do, và lý do thứ tư là lý do phản trực giác nhất:
 ```text
    1. TOÀN BỘ DỮ LIỆU TRONG RAM
       → không bao giờ chạm đĩa trong đường đọc/ghi
-      → ~100 nanogiay thay vi ~100 microgiay
+      → ~100 nanogiây thay vì ~100 microgiây
 
    2. CẤU TRÚC DỮ LIỆU TỐI ƯU SẴN
       → không phải phân tích SQL, không lập kế hoạch, không tối ưu
@@ -351,7 +351,7 @@ CAP chỉ nói về lúc mạng đứt. Nhưng mạng đứt là chuyện **hi�
 ```
 
 ```text
-   Vi du:
+   Ví dụ:
      PostgreSQL đồng bộ : PC / EC   — luôn ưu tiên nhất quán
      Cassandra          : PA / EL   — luôn ưu tiên khả dụng và độ trễ
      MongoDB            : PC / EC   — nhưng điều chỉnh được

@@ -363,7 +363,7 @@ SELECT BENCHMARK(1, (SELECT COUNT(*) FROM t_innodb));
 
 ```text
    MyISAM :  0,00 sec   (đọc metadata)
-   InnoDB :  0,18 sec   (quet index)
+   InnoDB :  0,18 sec   (quét index)
 ```
 
 Và cách né trên InnoDB khi chỉ cần con số xấp xỉ:

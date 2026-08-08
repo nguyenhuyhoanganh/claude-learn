@@ -3,7 +3,7 @@
 "NoSQL" là một trong những từ gây hiểu lầm nhất trong ngành. Nó nghe như tên một công nghệ, nhưng thực ra nó chỉ có nghĩa **"không phải quan hệ"** — một định nghĩa theo phủ định, gộp chung những thứ khác nhau hoàn toàn:
 
 ```text
-   NoSQL bao gom:
+   NoSQL bao gồm:
      • Kho tài liệu    (MongoDB, CouchDB)
      • Kho khoá-giá trị (Redis, DynamoDB, Memcached)
      • Kho cột rộng     (Cassandra, HBase)

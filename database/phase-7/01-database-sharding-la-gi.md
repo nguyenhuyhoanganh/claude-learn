@@ -266,7 +266,7 @@ vong.themShard('shard-4');
 
 let doiCho = 0;
 for (const [k, v] of truoc) if (vong.timShard(k) !== v) doiCho++;
-console.log(`Doi cho: ${(doiCho / 1000).toFixed(1)}%`);
+console.log(`Đổi chỗ: ${(doiCho / 1000).toFixed(1)}%`);
 ```
 
 ```text

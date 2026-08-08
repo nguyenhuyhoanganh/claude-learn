@@ -9,7 +9,7 @@ Bài cuối của phase 17 gồm hai phần: khung tư duy để chọn giữa h
 ## Hai triết lý
 
 ```text
-   BI QUAN (pessimistic)                LAC QUAN (optimistic)
+   BI QUAN (pessimistic)                LẠC QUAN (optimistic)
    ═════════════════════                ═════════════════════
    "Chắc chắn sẽ có người tranh."       "Chắc chẳng ai tranh đâu."
    → KHOÁ TRƯỚC khi làm                 → cứ làm, KIỂM TRA lúc commit
@@ -75,7 +75,7 @@ Cách này gọn hơn nhưng chỉ đúng khi giá trị không quay về đúng
 ```text
    TỈ LỆ XUNG ĐỘT = số lần xung đột / tổng số thao tác
 
-   < 5%   →  LAC QUAN
+   < 5%   →  LẠC QUAN
              (không ai phải chờ, và hiếm khi phải làm lại)
 
    > 20%  →  BI QUAN

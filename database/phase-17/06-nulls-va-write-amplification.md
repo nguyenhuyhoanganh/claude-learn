@@ -206,7 +206,7 @@ Quy tắc gọn:
    │  Ghi bản ghi WAL cho dòng + cho mọi index                  │
    │  → ~400 byte                                               │
    │  VÀ nếu là lần đầu page bị sửa sau checkpoint:              │
-   │  → GHI CA PAGE 8 KB × (1 heap + 5 index) = 48 KB   ⚠       │
+   │  → GHI CẢ PAGE 8 KB × (1 heap + 5 index) = 48 KB   ⚠       │
    ├─ TẦNG 5: HỆ ĐIỀU HÀNH ─────────────────────────────────────┤
    │  Ghi theo đơn vị 4 KB                                      │
    ├─ TẦNG 6: SSD ──────────────────────────────────────────────┤
@@ -261,7 +261,7 @@ FROM pg_stat_wal;
 ## Vì sao nó quan trọng
 
 ```text
-   1. TUOI THO SSD
+   1. TUỔI THỌ SSD
       SSD chỉ chịu được số lần ghi HỮU HẠN mỗi ô.
       Khuếch đại 50 lần → SSD mòn nhanh hơn 50 lần.
       → 5 năm thành 1 năm

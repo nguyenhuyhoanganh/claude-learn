@@ -290,7 +290,7 @@ bat_dau = time.time()
 with db.write_batch() as wb:
     for i in range(1_000_000):
         wb.put(f'key{i:08d}'.encode(), f'value-{i}'.encode())
-print(f"Ghi 1 trieu: {time.time() - bat_dau:.2f}s")
+print(f"Ghi 1 triệu: {time.time() - bat_dau:.2f}s")
 
 # ĐỌC NGẪU NHIÊN
 import random

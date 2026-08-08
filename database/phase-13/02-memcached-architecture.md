@@ -101,10 +101,10 @@ Với một tiến trình chạy nhiều tháng và cấp phát hàng tỷ lần
 Lưu một giá trị:
 
 ```text
-   Gia tri 130 byte
+   Giá trị 130 byte
      → tìm lớp nhỏ nhất VỪA: lớp 3 (152 byte)
      → đặt vào một chunk trống của lớp 3
-     → LANG PHI 22 byte  (152 − 130)
+     → LÃNG PHÍ 22 byte  (152 − 130)
 ```
 
 ```text

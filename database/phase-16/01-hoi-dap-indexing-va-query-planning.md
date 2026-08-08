@@ -113,7 +113,7 @@ Lệch 5.000 lần nghĩa là thống kê sai. Chữa: `ANALYZE fresh;` — chi 
 ```sql
 WHERE UPPER(name) = 'AN'      -- index trên `name` KHÔNG dùng được
 WHERE id::TEXT = '5'          -- ép kiểu là một hàm
-WHERE created_at::DATE = ...  -- ep kieu
+WHERE created_at::DATE = ...  -- ép kiểu
 WHERE age + 1 = 30            -- biểu thức
 ```
 
@@ -122,7 +122,7 @@ Chữa: index trên biểu thức, hoặc viết lại điều kiện:
 ```sql
 CREATE INDEX ON users (UPPER(name));
 -- hoặc
-WHERE created_at >= '2026-08-01' AND created_at < '2026-08-02'   -- thay vi ::DATE
+WHERE created_at >= '2026-08-01' AND created_at < '2026-08-02'   -- thay vì ::DATE
 ```
 
 ### Nguyên nhân 4 — Vi phạm quy tắc tiền tố trái
@@ -512,7 +512,7 @@ Index Only Scan using idx_grades_g on grades
 ```
 
 ```sql
-VACUUM grades;   -- → Heap Fetches tro ve 0
+VACUUM grades;   -- → Heap Fetches trở về 0
 ```
 
 `Heap Fetches` lớn kéo dài là dấu hiệu **autovacuum không theo kịp tốc độ ghi**.
