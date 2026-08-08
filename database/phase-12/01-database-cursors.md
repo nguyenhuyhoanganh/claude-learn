@@ -46,7 +46,7 @@ Bài này giải thích vì sao, và cho bạn công cụ để xử lý dữ li
    CLIENT-SIDE CURSOR (mặc định ở hầu hết thư viện)
    ════════════════════════════════════════════════
    ┌──────────┐                        ┌──────────┐
-   │  CLIENT  │◀─── TAT CA DU LIEU ────│ DATABASE │
+   │  CLIENT  │◀─── TẤT CẢ DỮ LIỆU ────│ DATABASE │
    │          │                        │          │
    │ 42 GB RAM│  cursor chỉ là con trỏ │ 0 trạng thái
    │          │  chạy trên MẢNG DỮ LIỆU│  lưu lại │
@@ -61,7 +61,7 @@ Bài này giải thích vì sao, và cho bạn công cụ để xử lý dữ li
    ┌──────────┐                        ┌──────────┐
    │  CLIENT  │──── FETCH 1000 ───────▶│ DATABASE │
    │          │◀─── 1000 dòng ─────────│          │
-   │  4 MB RAM│                        │ GIU vi tri│
+   │  4 MB RAM│                        │ GIỮ vị trí│
    │          │──── FETCH 1000 ───────▶│ và SNAPSHOT
    │          │◀─── 1000 dòng ─────────│          │
    └──────────┘                        └──────────┘
@@ -122,8 +122,8 @@ print(f"Sau vòng lặp: {do_ram_mb():.0f} MB, {dem} dòng")
 ```
 
 ```text
-Truoc:  28 MB
-Sau execute: 4218 MB, 18.4s        ← DA TAI HET TRUOC KHI VAO VONG LAP
+Trước:  28 MB
+Sau execute: 4218 MB, 18.4s        ← ĐÃ TẢI HẾT TRƯỚC KHI VÀO VÒNG LẶP
 Sau vòng lặp: 4218 MB, 10000000 dòng
 ```
 
@@ -158,7 +158,7 @@ cur.close()
 ```
 
 ```text
-Truoc:  28 MB
+Trước:  28 MB
 Sau execute: 29 MB, 0.01s
 Dòng đầu tiên sau: 0.04s           ← NGAY LẬP TỨC
 Sau vòng lặp: 34 MB, 10000000 dòng
@@ -222,7 +222,7 @@ SELECT name, statement, is_holdable, creation_time FROM pg_cursors;
 ```sql
 BEGIN;
 DECLARE cur_hold CURSOR WITH HOLD FOR SELECT * FROM events;
-COMMIT;                    -- cursor VAN SONG
+COMMIT;                    -- cursor VẪN SỐNG
 
 FETCH 10 FROM cur_hold;    -- vẫn chạy được
 CLOSE cur_hold;
@@ -255,7 +255,7 @@ Nghe tiện, nhưng phải biết cái giá:
 
    HẬU QUẢ (nhắc lại từ [phase-2] và [phase-3]):
      • Ảnh chụp của transaction đó chặn VACUUM dọn rác
-       TREN TOAN BO DATABASE
+       TRÊN TOÀN BỘ DATABASE
      • Bảng bị UPDATE nhiều phình lên không ngừng
      • Nếu đọc từ replica: replica TỤT LẠI hoặc truy vấn bị HUỶ
      • idle_in_transaction_session_timeout sẽ GIẾT nó
@@ -281,7 +281,7 @@ ORDER BY xact_start LIMIT 5;
      → không rò rỉ được
 
    Server-side cursor: SERVER giữ trạng thái.
-     → client chet giua chung, hoac code quen `cur.close()`
+     → client chết giữa chừng, hoặc code quên `cur.close()`
      → cursor VẪN SỐNG trên server cho tới khi kết nối đứt
      → mỗi cursor giữ: một ảnh chụp + bộ nhớ + có thể cả file tạm
 ```
@@ -306,7 +306,7 @@ Vì sao nó nguy hiểm ở quy mô lớn:
 ```text
    1.000 client, mỗi client mở một server-side cursor và rò rỉ
      → 1.000 ảnh chụp đóng băng trên server
-     → 1.000 transaction mo
+     → 1.000 transaction mở
      → `VACUUM` KHÔNG dọn được gì TRÊN TOÀN BỘ DATABASE
      → bảng phình không ngừng, độ dài XID tăng
      → cuối cùng: hệ thống dừng để tránh XID wraparound
@@ -347,11 +347,11 @@ SELECT pg_reload_conf();
 
 ```text
    10 triệu dòng, itersize = 100
-     → 100.000 lan FETCH
+     → 100.000 lần FETCH
      → 100.000 vòng mạng × 0,5 ms = 50 GIÂY chỉ để đi lại
 
    itersize = 10.000
-     → 1.000 lan FETCH
+     → 1.000 lần FETCH
      → 0,5 GIAY
 
    → itersize QUÁ NHỎ làm chậm gấp 100 lần
@@ -368,7 +368,7 @@ Chọn `itersize`:
 ### Kế hoạch truy vấn có thể tệ hơn
 
 ```sql
-SET cursor_tuple_fraction = 0.1;    -- mac dinh
+SET cursor_tuple_fraction = 0.1;    -- mặc định
 ```
 
 Tham số này nói với planner: *"người dùng có thể chỉ lấy 10% kết quả rồi bỏ"*. Vì thế planner ưu tiên kế hoạch **trả về dòng đầu tiên nhanh** (`Index Scan`) thay vì kế hoạch **tổng thời gian ngắn nhất** (`Seq Scan` + `Hash Join`).
@@ -405,7 +405,7 @@ while True:
     for r in rows:
         xu_ly(r)
     moc = rows[-1][0]
-    conn.commit()          # ← MOI LO MOT TRANSACTION NGAN
+    conn.commit()          # ← MỖI LÔ MỘT TRANSACTION NGẮN
 ```
 
 ```text
@@ -437,7 +437,7 @@ with open('/tmp/out.csv', 'w') as f:
 ```text
    10 triệu dòng:
      Cursor + ghi từng dòng :  118 s
-     COPY TO STDOUT         :   14 s      → NHANH HON 8 LAN
+     COPY TO STDOUT         :   14 s      → NHANH HƠN 8 LẦN
 ```
 
 `COPY` nhanh hơn vì nó bỏ qua toàn bộ tầng giao thức dòng-theo-dòng và ghi thẳng luồng byte. Nếu mục tiêu chỉ là **xuất dữ liệu ra file**, đây gần như luôn là lựa chọn đúng.

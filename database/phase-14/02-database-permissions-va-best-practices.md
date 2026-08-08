@@ -14,7 +14,7 @@ Một lỗ hổng SQL injection nhỏ trong một endpoint tìm kiếm ít ngư�
    NẾU ứng dụng kết nối bằng tài khoản CHỈ CÓ SELECT/INSERT/UPDATE
    trên đúng 6 bảng cần thiết:
      → ERROR: permission denied for table users
-     → thiet hai: KHONG
+     → thiệt hại: KHÔNG
 ```
 
 Cùng một lỗ hổng, hai kết cục hoàn toàn khác nhau. Phân quyền là **lớp phòng thủ cuối cùng** — nó không ngăn được lỗi trong code, nhưng nó giới hạn thiệt hại khi lỗi xảy ra.
@@ -60,7 +60,7 @@ Nghe hiển nhiên, nhưng thực tế phổ biến là ngược lại:
 CREATE ROLE app_read;
 CREATE ROLE app_write;
 
--- Tai khoan DANG NHAP, ke thua tu nhom
+-- Tài khoản ĐĂNG NHẬP, kế thừa từ nhóm
 CREATE ROLE api_service LOGIN PASSWORD 'xxx' IN ROLE app_write;
 CREATE ROLE report_tool LOGIN PASSWORD 'yyy' IN ROLE app_read;
 ```
@@ -156,7 +156,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO analytics;
 ALTER ROLE analytics SET statement_timeout = '5min';       -- ← chặn truy vấn chạy mãi
 ALTER ROLE analytics SET default_transaction_read_only = on;
 
--- ═══ 4. SAO LUU ═══
+-- ═══ 4. SAO LƯU ═══
 CREATE ROLE backup_svc;
 GRANT CONNECT ON DATABASE mydb TO backup_svc;
 GRANT USAGE ON SCHEMA public TO backup_svc;
@@ -185,7 +185,7 @@ Ba dòng này chặn được ba loại sự cố phổ biến nhất: truy vấ
 ```sql
 -- Vai trò hỗ trợ khách hàng KHÔNG được xem số thẻ
 GRANT SELECT (id, email, name, created_at) ON users TO support_role;
--- KHONG cap cot card_number, ssn
+-- KHÔNG cấp cột card_number, ssn
 ```
 
 ```sql
@@ -267,7 +267,7 @@ Không có `WITH CHECK`, một tenant vẫn có thể **chèn** dòng mang `tena
 
    ✔  TRINH DUYET ──HTTP──▶ API ──▶ DATABASE
       → bí mật nằm ở server
-      → kiem tra quyen, gioi han tan suat, ghi nhat ky
+      → kiểm tra quyền, giới hạn tần suất, ghi nhật ký
 ```
 
 ### Bốn quy tắc cho tầng API
@@ -278,7 +278,7 @@ Không có `WITH CHECK`, một tenant vẫn có thể **chèn** dòng mang `tena
 # SAI — SQL injection
 cur.execute(f"SELECT * FROM users WHERE email = '{email}'")
 
-# DUNG — driver tu thoat
+# ĐÚNG — driver tự thoát
 cur.execute("SELECT * FROM users WHERE email = %s", (email,))
 ```
 
@@ -299,7 +299,7 @@ cur.execute(f"SELECT * FROM orders ORDER BY {sap_xep_theo} LIMIT %s", (limit,))
 # SAI — người dùng gửi limit=999999999
 cur.execute("SELECT * FROM events LIMIT %s", (request.args['limit'],))
 
-# DUNG — ap tran
+# ĐÚNG — áp trần
 limit = min(int(request.args.get('limit', 50)), 200)
 cur.execute("SELECT * FROM events LIMIT %s", (limit,))
 ```
@@ -319,7 +319,7 @@ except Exception as e:
 Thông báo này tiết lộ tên bảng, tên cột, và cả câu SQL — món quà cho kẻ tấn công.
 
 ```python
-# DUNG
+# ĐÚNG
 except Exception as e:
     log.exception("query failed", extra={"request_id": rid})
     return {"error": "Loi he thong", "request_id": rid}, 500
@@ -387,7 +387,7 @@ Bốn điều cần biết trước khi bật:
 Xử lý ba vấn đề sau:
 
 ```sql
--- Loai cot nhay cam
+-- Loại cột nhạy cảm
 to_jsonb(NEW) - 'password_hash' - 'card_number'
 
 -- Phân mảnh theo tháng

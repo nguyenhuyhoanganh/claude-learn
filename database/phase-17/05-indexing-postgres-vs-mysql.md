@@ -35,7 +35,7 @@ Cùng một câu lệnh `CREATE INDEX`, hai hệ, hai cấu trúc trên đĩa ho
                      phải tra CLUSTERED INDEX lần nữa
 
    → Tra khoá chính: 1 chặng  ✔
-   → Tra index phu : 3 chang  ✘
+   → Tra index phụ : 3 chặng  ✘
 ```
 
 Từ một khác biệt này sinh ra **tám** hệ quả.
@@ -45,17 +45,17 @@ Từ một khác biệt này sinh ra **tám** hệ quả.
 ## Hệ quả 1 — Số chặng tra cứu
 
 ```sql
--- Tra theo KHOA CHINH
+-- Tra theo KHOÁ CHÍNH
 SELECT * FROM users WHERE id = 42;
 ```
 
 ```text
-   PostgreSQL : index → ctid → heap                    2 CHANG
+   PostgreSQL : index → ctid → heap                    2 CHẶNG
    InnoDB     : clustered index → LÁ CÓ SẴN DỮ LIỆU    1 CHẶNG   ✔ nhanh hơn
 ```
 
 ```sql
--- Tra theo INDEX PHU
+-- Tra theo INDEX PHỤ
 SELECT * FROM users WHERE name = 'An';
 ```
 
@@ -69,16 +69,16 @@ Không bên nào thắng tuyệt đối. Bên nào thắng phụ thuộc **truy 
 ## Hệ quả 2 — Kích thước khoá chính lan toả
 
 ```text
-   INNODB: index phu chua GIA TRI KHOA CHINH.
+   INNODB: index phụ chứa GIÁ TRỊ KHOÁ CHÍNH.
    → khoá chính lớn → MỌI index phụ phình theo
 
    Bảng 100 triệu dòng, 5 index phụ:
      PK = BIGINT (8 byte)   :  100tr × 8  × 5 =  4,0 GB
      PK = UUID CHAR(36)     :  100tr × 36 × 5 = 18,0 GB
                                                  ────────
-                                       THEM 14 GB
+                                       THÊM 14 GB
 
-   POSTGRESQL: index phu chua `ctid` (6 byte, CO DINH)
+   POSTGRESQL: index phụ chứa `ctid` (6 byte, CỐ ĐỊNH)
    → kích thước khoá chính KHÔNG ảnh hưởng index phụ
 ```
 
@@ -93,7 +93,7 @@ UPDATE users SET last_login = now() WHERE id = 42;
 
 ```text
    POSTGRESQL: tạo PHIÊN BẢN MỚI → ctid đổi
-               → PHAI cap nhat CA 5 index
+               → PHẢI cập nhật CẢ 5 index
                → kể cả index trên cột không đổi
                (trừ khi đạt HOT update)
 
@@ -143,7 +143,7 @@ WHERE tablename = 'users' AND attname = 'id';
 Sắp xếp lại một lần:
 
 ```sql
-CLUSTER users USING users_pkey;   -- ⚠ KHOA TOAN BANG
+CLUSTER users USING users_pkey;   -- ⚠ KHOÁ TOÀN BẢNG
 ```
 
 Nhưng thứ tự này **không được duy trì** — dòng chèn sau đó lại nhét vào chỗ trống bất kỳ.
@@ -184,7 +184,7 @@ Dòng cuối là một ưu điểm ẩn của InnoDB: mọi index phụ đều *
 ```
 
 ```sql
--- PostgreSQL: kiem tra
+-- PostgreSQL: kiểm tra
 EXPLAIN (ANALYZE) SELECT name FROM users WHERE name = 'An';
 ```
 
@@ -284,7 +284,7 @@ ALTER TABLE t ADD INDEX idx (col), ALGORITHM=INPLACE, LOCK=NONE;
 ### Bài toán: bảng đơn hàng, truy vấn theo `user_id` + `created_at`
 
 ```sql
--- Truy van nong
+-- Truy vấn nóng
 SELECT id, total, status FROM orders
  WHERE user_id = 42 ORDER BY created_at DESC LIMIT 20;
 ```

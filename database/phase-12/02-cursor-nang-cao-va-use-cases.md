@@ -36,7 +36,7 @@ with open('/data/events.csv', 'w') as f:
 ```text
    500 triệu dòng:
      Cursor + ghi từng dòng :  ~94 phút
-     COPY TO STDOUT         :  ~11 phut      → NHANH HON 8,5 LAN
+     COPY TO STDOUT         :  ~11 phút      → NHANH HƠN 8,5 LẦN
 ```
 
 Vì sao nhanh hơn nhiều đến vậy:
@@ -61,7 +61,7 @@ with gzip.open('/data/events.csv.gz', 'wt') as f:
 ```
 
 ```text
-   CSV thuong  : 187 GB
+   CSV thường  : 187 GB
    CSV nén gzip:  22 GB     → NHỎ HƠN 8,5 LẦN
    Thời gian   : chậm hơn ~15% (CPU nén), nhưng tiết kiệm I/O nhiều hơn thế
 ```
@@ -86,7 +86,7 @@ with ThreadPoolExecutor(max_workers=8) as pool:
 ```
 
 ```text
-   1 luong  : 11 phut
+   1 luồng  : 11 phút
    8 luồng  :  2 phút      → NHANH HƠN 5,5 LẦN (không phải 8, do nghẽn I/O)
 ```
 
@@ -258,7 +258,7 @@ while True:
         c.execute("""
             WITH lo AS (
                 SELECT id FROM users
-                 WHERE email <> lower(email)      -- ← DIEU KIEN TU DUNG
+                 WHERE email <> lower(email)      -- ← ĐIỀU KIỆN TỰ DỪNG
                  ORDER BY id
                  LIMIT %s
                  FOR UPDATE SKIP LOCKED
@@ -290,7 +290,7 @@ Thêm một index tạm để tăng tốc rất nhiều:
 ```sql
 CREATE INDEX CONCURRENTLY idx_users_need_fix
     ON users (id) WHERE email <> lower(email);
--- ... chay job ...
+-- ... chạy job ...
 DROP INDEX CONCURRENTLY idx_users_need_fix;
 ```
 
@@ -416,7 +416,7 @@ Nginx mặc định **đệm phản hồi**, làm mất hết lợi ích của v
 ```nginx
 location /export {
     proxy_pass http://app;
-    proxy_buffering off;              # ← BAT BUOC
+    proxy_buffering off;              # ← BẮT BUỘC
     proxy_read_timeout 3600s;
     chunked_transfer_encoding on;
 }
@@ -444,17 +444,17 @@ Dòng cuối là lý do duy nhất **bắt buộc** phải dùng cursor: khi b�
 ## Ba câu hỏi để chọn đúng
 
 ```text
-   1. CO CAN ANH CHUP NHAT QUAN KHONG?
+   1. CÓ CẦN ẢNH CHỤP NHẤT QUÁN KHÔNG?
         Có     → CURSOR (chấp nhận giữ transaction)
         Không  → keyset (tốt hơn ở mọi mặt khác)
 
-   2. XU LY MOI DONG MAT BAO LAU?
+   2. XỬ LÝ MỖI DÒNG MẤT BAO LÂU?
         < 1 ms   → cursor on
         > 10 ms  → keyset + điểm dừng bền vững
 
-   3. CO PHAI CHI DE XUAT RA FILE KHONG?
-        Dung   → COPY
-        Khong  → cursor hoac keyset
+   3. CÓ PHẢI CHỈ ĐỂ XUẤT RA FILE KHÔNG?
+        Đúng   → COPY
+        Không  → cursor hoặc keyset
 ```
 
 ## Bẫy thường gặp

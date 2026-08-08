@@ -3,7 +3,7 @@
 Memcached ra đời năm 2003 cho LiveJournal, và hai mươi năm sau vẫn chạy ở Facebook, Wikipedia, Twitter, Reddit. Điều đáng học nhất ở nó không phải tính năng — mà là **những gì nó cố tình KHÔNG làm**.
 
 ```text
-   MEMCACHED KHONG CO:
+   MEMCACHED KHÔNG CÓ:
      ✘ Lưu xuống đĩa         ✘ Nhân bản
      ✘ Kiểu dữ liệu          ✘ Transaction
      ✘ Truy vấn              ✘ Xác thực mạnh
@@ -25,7 +25,7 @@ Danh sách "không có" dài hơn danh sách "có". Đó là chủ đích thiế
    └────┬────┘  └────┬────┘  └────┬────┘
         │            │            │
         └────────────┼────────────┘
-                     │  CLIENT tu quyet dinh di dau
+                     │  CLIENT tự quyết định đi đâu
         ┌────────────┼────────────┐
         ▼            ▼            ▼
    ┌─────────┐  ┌─────────┐  ┌─────────┐
@@ -33,7 +33,7 @@ Danh sách "không có" dài hơn danh sách "có". Đó là chủ đích thiế
    │ 64 GB   │  │ 64 GB   │  │ 64 GB   │
    └─────────┘  └─────────┘  └─────────┘
         ▲            ▲            ▲
-        └── CHUNG KHONG BIET NHAU TON TAI ──┘
+        └── CHÚNG KHÔNG BIẾT NHAU TỒN TẠI ──┘
 ```
 
 Đây là đặc điểm kiến trúc quan trọng nhất: **các máy chủ Memcached hoàn toàn độc lập**. Không có giao thức đồng bộ, không có bầu chọn lãnh đạo, không có gì cả.
@@ -71,9 +71,9 @@ Lợi ích của thiết kế này:
 
 ```text
    Nếu dùng malloc/free thông thường:
-     cap 100 byte, giai phong
-     cap 340 byte, giai phong
-     cap  27 byte, giai phong
+     cấp 100 byte, giải phóng
+     cấp 340 byte, giải phóng
+     cấp  27 byte, giải phóng
      ...
    → bộ nhớ đầy các lỗ trống kích thước lẻ
    → cấp một khối 500 byte → không có lỗ nào vừa
@@ -85,7 +85,7 @@ Với một tiến trình chạy nhiều tháng và cấp phát hàng tỷ lần
 ### Lời giải: chia thành các lớp kích thước cố định
 
 ```text
-   BO NHO CHIA THANH CAC TRANG (SLAB PAGE) 1 MB
+   BỘ NHỚ CHIA THÀNH CÁC TRANG (SLAB PAGE) 1 MB
    Mỗi trang thuộc một LỚP (slab class) với kích thước chunk CỐ ĐỊNH
 
    Lop 1  : chunk  96 byte  →  1 MB / 96   = 10.922 chunk
@@ -108,7 +108,7 @@ Lưu một giá trị:
 ```
 
 ```text
-   ƯU:  cap phat va giai phong O(1), KHONG BAO GIO phan manh
+   ƯU:  cấp phát và giải phóng O(1), KHÔNG BAO GIỜ phân mảnh
    NHƯỢC: lãng phí trung bình ~10-25% (gọi là "slab overhead")
 ```
 
@@ -207,7 +207,7 @@ Memcached 1.5 cải tiến thành **LRU phân đoạn**:
 ```
 
 ```bash
-memcached -t 8      # 8 luong
+memcached -t 8      # 8 luồng
 ```
 
 Số luồng quá cao gây tranh chấp khoá nội bộ; con số thực dụng là **4-8**, hiếm khi cần hơn.
@@ -258,7 +258,7 @@ echo "stats items" | nc localhost 11211
 ### Khi nào Memcached vẫn tốt hơn
 
 ```text
-   ✔ Chi can cache thuan tuy: get/set/delete
+   ✔ Chỉ cần cache thuần tuý: get/set/delete
    ✔ Giá trị có kích thước TƯƠNG TỰ nhau (tránh nghẽn lớp)
    ✔ Máy nhiều lõi, cần thông lượng tối đa
    ✔ Muốn vận hành đơn giản nhất có thể
@@ -271,8 +271,8 @@ echo "stats items" | nc localhost 11211
    ✔ Cần cấu trúc dữ liệu (hàng đợi, bảng xếp hạng, tập hợp)
    ✔ Cần dữ liệu sống sót qua khởi động lại
    ✔ Cần nhân bản / sẵn sàng cao
-   ✔ Can pub/sub hoac stream
-   ✔ Can thao tac nguyen tu phuc tap (script Lua)
+   ✔ Cần pub/sub hoặc stream
+   ✔ Cần thao tác nguyên tử phức tạp (script Lua)
 ```
 
 Quy tắc gọn:
