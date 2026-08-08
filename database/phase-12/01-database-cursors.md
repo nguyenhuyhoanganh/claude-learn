@@ -3,7 +3,7 @@
 Bạn viết một job xuất dữ liệu:
 
 ```python
-cur.execute("SELECT * FROM events")      # bang co 100 trieu dong
+cur.execute("SELECT * FROM events")      # bảng có 100 triệu dòng
 for row in cur:
     ghi_ra_file(row)
 ```
@@ -43,31 +43,31 @@ Bài này giải thích vì sao, và cho bạn công cụ để xử lý dữ li
 Đây là phân biệt quan trọng nhất, và cũng là chỗ hay bị hiểu sai.
 
 ```text
-   CLIENT-SIDE CURSOR (mac dinh o hau het thu vien)
+   CLIENT-SIDE CURSOR (mặc định ở hầu hết thư viện)
    ════════════════════════════════════════════════
    ┌──────────┐                        ┌──────────┐
    │  CLIENT  │◀─── TAT CA DU LIEU ────│ DATABASE │
    │          │                        │          │
-   │ 42 GB RAM│  cursor chi la con tro │ 0 trang thai
-   │          │  chay tren MANG DU LIEU│  luu lai │
+   │ 42 GB RAM│  cursor chỉ là con trỏ │ 0 trạng thái
+   │          │  chạy trên MẢNG DỮ LIỆU│  lưu lại │
    └──────────┘  DA NAM O CLIENT       └──────────┘
 
-   → "Cursor" o day chi la vong lap tren mot mang trong bo nho.
-   → Database da lam xong viec va quen ban roi.
+   → "Cursor" ở đây chỉ là vòng lặp trên một mảng trong bộ nhớ.
+   → Database đã làm xong việc và quên bạn rồi.
 
 
    SERVER-SIDE CURSOR
    ══════════════════
    ┌──────────┐                        ┌──────────┐
    │  CLIENT  │──── FETCH 1000 ───────▶│ DATABASE │
-   │          │◀─── 1000 dong ─────────│          │
+   │          │◀─── 1000 dòng ─────────│          │
    │  4 MB RAM│                        │ GIU vi tri│
-   │          │──── FETCH 1000 ───────▶│ va SNAPSHOT
-   │          │◀─── 1000 dong ─────────│          │
+   │          │──── FETCH 1000 ───────▶│ và SNAPSHOT
+   │          │◀─── 1000 dòng ─────────│          │
    └──────────┘                        └──────────┘
 
-   → Database GIU TRANG THAI: vi tri hien tai + anh chup du lieu
-   → Client chi giu 1000 dong tai mot thoi diem
+   → Database GIỮ TRẠNG THÁI: vị trí hiện tại + ảnh chụp dữ liệu
+   → Client chỉ giữ 1000 dòng tại một thời điểm
 ```
 
 | | Client-side | Server-side |
@@ -118,20 +118,20 @@ print(f"Sau execute: {do_ram_mb():.0f} MB, {time.time()-bat_dau:.1f}s")
 dem = 0
 for row in cur:
     dem += 1
-print(f"Sau vong lap: {do_ram_mb():.0f} MB, {dem} dong")
+print(f"Sau vòng lặp: {do_ram_mb():.0f} MB, {dem} dòng")
 ```
 
 ```text
 Truoc:  28 MB
 Sau execute: 4218 MB, 18.4s        ← DA TAI HET TRUOC KHI VAO VONG LAP
-Sau vong lap: 4218 MB, 10000000 dong
+Sau vòng lặp: 4218 MB, 10000000 dòng
 ```
 
 Hai điều đáng chú ý:
 
 ```text
-   1. RAM nhay len 4,2 GB NGAY SAU `execute`, truoc khi vong lap chay.
-   2. Mat 18,4 GIAY moi thay duoc dong DAU TIEN.
+   1. RAM nhảy lên 4,2 GB NGAY SAU `execute`, trước khi vòng lặp chạy.
+   2. Mất 18,4 GIÂY mới thấy được dòng ĐẦU TIÊN.
 ```
 
 Với bảng 100 triệu dòng thì con số đó thành 42 GB và 3 phút — và ứng dụng chết.
@@ -141,7 +141,7 @@ Với bảng 100 triệu dòng thì con số đó thành 42 GB và 3 phút — v
 ```python
 conn = psycopg2.connect("dbname=lab")
 cur = conn.cursor(name='cur_events')      # CO TEN → SERVER-SIDE
-cur.itersize = 2000                       # so dong moi lan FETCH
+cur.itersize = 2000                       # số dòng mỗi lần FETCH
 
 print(f"Truoc:  {do_ram_mb():.0f} MB")
 bat_dau = time.time()
@@ -152,16 +152,16 @@ dem = 0
 for row in cur:
     dem += 1
     if dem == 1:
-        print(f"Dong dau tien sau: {time.time()-bat_dau:.2f}s")
-print(f"Sau vong lap: {do_ram_mb():.0f} MB, {dem} dong")
+        print(f"Dòng đầu tiên sau: {time.time()-bat_dau:.2f}s")
+print(f"Sau vòng lặp: {do_ram_mb():.0f} MB, {dem} dòng")
 cur.close()
 ```
 
 ```text
 Truoc:  28 MB
 Sau execute: 29 MB, 0.01s
-Dong dau tien sau: 0.04s           ← NGAY LAP TUC
-Sau vong lap: 34 MB, 10000000 dong
+Dòng đầu tiên sau: 0.04s           ← NGAY LẬP TỨC
+Sau vòng lặp: 34 MB, 10000000 dòng
 ```
 
 ```text
@@ -178,7 +178,7 @@ Trong psycopg2, khác biệt giữa hai thế giới chỉ là **một tham số
 Cursor không phải khái niệm của thư viện — nó là lệnh SQL:
 
 ```sql
-BEGIN;                                    -- BAT BUOC: cursor song trong transaction
+BEGIN;                                    -- BẮT BUỘC: cursor sống trong transaction
 
 DECLARE cur_events CURSOR FOR
     SELECT id, user_id, payload FROM events WHERE user_id < 1000;
@@ -197,8 +197,8 @@ FETCH 5 FROM cur_events;
 ```
 
 ```sql
-FETCH 5 FROM cur_events;      -- 5 dong TIEP THEO
-MOVE 1000 IN cur_events;      -- nhay qua 1000 dong, khong tra ve
+FETCH 5 FROM cur_events;      -- 5 dòng TIẾP THEO
+MOVE 1000 IN cur_events;      -- nhảy qua 1000 dòng, không trả về
 FETCH 3 FROM cur_events;
 
 CLOSE cur_events;
@@ -224,19 +224,19 @@ BEGIN;
 DECLARE cur_hold CURSOR WITH HOLD FOR SELECT * FROM events;
 COMMIT;                    -- cursor VAN SONG
 
-FETCH 10 FROM cur_hold;    -- van chay duoc
+FETCH 10 FROM cur_hold;    -- vẫn chạy được
 CLOSE cur_hold;
 ```
 
 Nghe tiện, nhưng phải biết cái giá:
 
 ```text
-   Khi COMMIT, PostgreSQL phai VAT CHAT HOA toan bo ket qua con lai
-   vao mot file tam tren dia (vi anh chup transaction sap bien mat).
+   Khi COMMIT, PostgreSQL phải VẬT CHẤT HOÁ toàn bộ kết quả còn lại
+   vào một file tạm trên đĩa (vì ảnh chụp transaction sắp biến mất).
 
-   → COMMIT co the mat rat lau
-   → Ton dia cho file tam
-   → Mat het loi ich "chi lay tung phan"
+   → COMMIT có thể mất rất lâu
+   → Tốn đĩa cho file tạm
+   → Mất hết lợi ích "chỉ lấy từng phần"
 ```
 
 `WITH HOLD` chỉ đáng dùng khi kết quả **nhỏ** nhưng cần đọc dần trong thời gian dài.
@@ -250,21 +250,21 @@ Nghe tiện, nhưng phải biết cái giá:
 ### Nó giữ một transaction mở
 
 ```text
-   Cursor (khong WITH HOLD) BAT BUOC nam trong transaction.
-   Doc 100 trieu dong mat 2 gio → TRANSACTION MO 2 GIO.
+   Cursor (không WITH HOLD) BẮT BUỘC nằm trong transaction.
+   Đọc 100 triệu dòng mất 2 giờ → TRANSACTION MỞ 2 GIỜ.
 
-   HAU QUA (nhac lai tu [phase-2] va [phase-3]):
-     • Anh chup cua transaction do chan VACUUM don rac
+   HẬU QUẢ (nhắc lại từ [phase-2] và [phase-3]):
+     • Ảnh chụp của transaction đó chặn VACUUM dọn rác
        TREN TOAN BO DATABASE
-     • Bang bi UPDATE nhieu phinh len khong ngung
-     • Neu doc tu replica: replica TUT LAI hoac truy van bi HUY
-     • idle_in_transaction_session_timeout se GIET no
+     • Bảng bị UPDATE nhiều phình lên không ngừng
+     • Nếu đọc từ replica: replica TỤT LẠI hoặc truy vấn bị HUỶ
+     • idle_in_transaction_session_timeout sẽ GIẾT nó
 ```
 
 Kiểm tra hậu quả:
 
 ```sql
--- Transaction lau nhat dang mo — no chan VACUUM
+-- Transaction lâu nhất đang mở — nó chặn VACUUM
 SELECT pid, now() - xact_start AS mo_bao_lau, state, left(query, 50)
 FROM pg_stat_activity
 WHERE xact_start IS NOT NULL
@@ -276,25 +276,25 @@ ORDER BY xact_start LIMIT 5;
 Đây là rủi ro nghiêm trọng nhất của server-side cursor, và nó ít được nhắc tới vì nó chỉ lộ ra khi có tải thật.
 
 ```text
-   Client-side cursor: du lieu nam o CLIENT.
-     → client chet → bo nho duoc thu hoi → SERVER khong biet gi
-     → khong ro ri duoc
+   Client-side cursor: dữ liệu nằm ở CLIENT.
+     → client chết → bộ nhớ được thu hồi → SERVER không biết gì
+     → không rò rỉ được
 
-   Server-side cursor: SERVER giu trang thai.
+   Server-side cursor: SERVER giữ trạng thái.
      → client chet giua chung, hoac code quen `cur.close()`
-     → cursor VAN SONG tren server cho toi khi ket noi dut
-     → moi cursor giu: mot anh chup + bo nho + co the ca file tam
+     → cursor VẪN SỐNG trên server cho tới khi kết nối đứt
+     → mỗi cursor giữ: một ảnh chụp + bộ nhớ + có thể cả file tạm
 ```
 
 ```python
-# RO RI: co ngoai le thi `close()` KHONG BAO GIO chay
+# RÒ RỈ: có ngoại lệ thì `close()` KHÔNG BAO GIỜ chạy
 cur = conn.cursor(name='cur_export')
 cur.execute("SELECT * FROM events")
 for row in cur:
-    xu_ly(row)              # ← nem ngoai le o day
-cur.close()                 # ← khong bao gio toi duoc
+    xu_ly(row)              # ← ném ngoại lệ ở đây
+cur.close()                 # ← không bao giờ tới được
 
-# DUNG: context manager dam bao dong trong MOI truong hop
+# ĐÚNG: context manager đảm bảo đóng trong MỌI trường hợp
 with conn.cursor(name='cur_export') as cur:
     cur.execute("SELECT * FROM events")
     for row in cur:
@@ -304,21 +304,21 @@ with conn.cursor(name='cur_export') as cur:
 Vì sao nó nguy hiểm ở quy mô lớn:
 
 ```text
-   1.000 client, moi client mo mot server-side cursor va ro ri
-     → 1.000 anh chup dong bang tren server
+   1.000 client, mỗi client mở một server-side cursor và rò rỉ
+     → 1.000 ảnh chụp đóng băng trên server
      → 1.000 transaction mo
-     → `VACUUM` KHONG don duoc gi TREN TOAN BO DATABASE
-     → bang phinh khong ngung, do dai XID tang
-     → cuoi cung: he thong dung de tranh XID wraparound
+     → `VACUUM` KHÔNG dọn được gì TRÊN TOÀN BỘ DATABASE
+     → bảng phình không ngừng, độ dài XID tăng
+     → cuối cùng: hệ thống dừng để tránh XID wraparound
 ```
 
 Săn cursor bị rò rỉ:
 
 ```sql
--- Cursor dang mo trong PHIEN hien tai
+-- Cursor đang mở trong PHIÊN hiện tại
 SELECT name, statement, is_holdable, creation_time FROM pg_cursors;
 
--- Ket noi dang giu transaction mo ma khong lam gi — dau hieu ro ri
+-- Kết nối đang giữ transaction mở mà không làm gì — dấu hiệu rò rỉ
 SELECT pid,
        now() - xact_start   AS transaction_mo,
        now() - state_change AS im_lang_bao_lau,
@@ -333,11 +333,11 @@ ORDER BY xact_start;
 Phòng thủ bắt buộc khi dùng server-side cursor trong sản phẩm thật:
 
 ```sql
--- Database tu cat ket noi bo quen
+-- Database tự cắt kết nối bỏ quên
 ALTER SYSTEM SET idle_in_transaction_session_timeout = '5min';
 
--- Va gioi han thoi gian mot cau lenh
-ALTER SYSTEM SET statement_timeout = '30min';   -- dat theo VAI TRO, xem [phase-14 bai 2]
+-- Và giới hạn thời gian một câu lệnh
+ALTER SYSTEM SET statement_timeout = '30min';   -- đặt theo VAI TRÒ, xem [phase-14 bài 2]
 SELECT pg_reload_conf();
 ```
 
@@ -346,23 +346,23 @@ SELECT pg_reload_conf();
 ### Nó tốn nhiều vòng mạng
 
 ```text
-   10 trieu dong, itersize = 100
+   10 triệu dòng, itersize = 100
      → 100.000 lan FETCH
-     → 100.000 vong mang × 0,5 ms = 50 GIAY chi de di lai
+     → 100.000 vòng mạng × 0,5 ms = 50 GIÂY chỉ để đi lại
 
    itersize = 10.000
      → 1.000 lan FETCH
      → 0,5 GIAY
 
-   → itersize QUA NHO lam cham gap 100 lan
+   → itersize QUÁ NHỎ làm chậm gấp 100 lần
 ```
 
 Chọn `itersize`:
 
 ```text
-   Qua nho (< 100)     → qua nhieu vong mang
-   Qua lon (> 100.000) → mat loi ich tiet kiem RAM
-   KHUYEN NGHI: 1.000 - 10.000 dong, tuy kich thuoc dong
+   Quá nhỏ (< 100)     → quá nhiều vòng mạng
+   Quá lớn (> 100.000) → mất lợi ích tiết kiệm RAM
+   KHUYẾN NGHỊ: 1.000 - 10.000 dòng, tuỳ kích thước dòng
 ```
 
 ### Kế hoạch truy vấn có thể tệ hơn
@@ -376,7 +376,7 @@ Tham số này nói với planner: *"người dùng có thể chỉ lấy 10% k�
 Nếu bạn chắc chắn sẽ đọc hết:
 
 ```sql
-SET cursor_tuple_fraction = 1.0;    -- toi uu cho TONG thoi gian
+SET cursor_tuple_fraction = 1.0;    -- tối ưu cho TỔNG thời gian
 ```
 
 Đây là một trong những chỉnh sửa ít người biết nhưng có thể tăng tốc job xuất dữ liệu vài lần.
@@ -410,15 +410,15 @@ while True:
 
 ```text
    ƯU so voi cursor:
-     ✔ KHONG giu transaction mo → khong chan VACUUM
-     ✔ DUNG duoc giua chung roi CHAY TIEP tu `moc` da luu
-     ✔ Chay song song duoc (chia khoang id cho nhieu worker)
-     ✔ An toan khi ket noi bi dut
+     ✔ KHÔNG giữ transaction mở → không chặn VACUUM
+     ✔ DỪNG được giữa chừng rồi CHẠY TIẾP từ `moc` đã lưu
+     ✔ Chạy song song được (chia khoảng id cho nhiều worker)
+     ✔ An toàn khi kết nối bị đứt
 
    NHUOC:
-     ✘ Moi lo la mot truy van moi → thay du lieu MOI THEM VAO
-       (khong co anh chup nhat quan)
-     ✘ Can mot cot co index de lam moc
+     ✘ Mỗi lô là một truy vấn mới → thấy dữ liệu MỚI THÊM VÀO
+       (không có ảnh chụp nhất quán)
+     ✘ Cần một cột có index để làm mốc
 ```
 
 Dòng nhược điểm đầu tiên chính là điểm đánh đổi: **cursor cho ảnh chụp nhất quán, keyset thì không**. Nếu bạn cần "trạng thái tại một thời điểm" thì phải dùng cursor.
@@ -435,8 +435,8 @@ with open('/tmp/out.csv', 'w') as f:
 ```
 
 ```text
-   10 trieu dong:
-     Cursor + ghi tung dong :  118 s
+   10 triệu dòng:
+     Cursor + ghi từng dòng :  118 s
      COPY TO STDOUT         :   14 s      → NHANH HON 8 LAN
 ```
 
@@ -449,11 +449,11 @@ with open('/tmp/out.csv', 'w') as f:
 ### MySQL — luồng dữ liệu
 
 ```java
-// JDBC: mac dinh tai HET vao RAM
+// JDBC: mặc định tải HẾT vào RAM
 PreparedStatement st = conn.prepareStatement("SELECT * FROM events");
 
-// Bat che do luong — CAN CA HAI dong nay
-st.setFetchSize(Integer.MIN_VALUE);          // ← bat buoc voi MySQL
+// Bật chế độ luồng — CẦN CẢ HAI dòng này
+st.setFetchSize(Integer.MIN_VALUE);          // ← bắt buộc với MySQL
 ResultSet rs = st.executeQuery();
 while (rs.next()) { ... }
 ```
@@ -465,9 +465,9 @@ Và cảnh báo quan trọng: khi ở chế độ luồng, **kết nối đó b�
 ### PostgreSQL JDBC
 
 ```java
-conn.setAutoCommit(false);                    // ← BAT BUOC, neu khong se khong co tac dung
+conn.setAutoCommit(false);                    // ← BẮT BUỘC, nếu không sẽ không có tác dụng
 PreparedStatement st = conn.prepareStatement("SELECT * FROM events");
-st.setFetchSize(1000);                        // → dung server-side cursor
+st.setFetchSize(1000);                        // → dùng server-side cursor
 ResultSet rs = st.executeQuery();
 ```
 

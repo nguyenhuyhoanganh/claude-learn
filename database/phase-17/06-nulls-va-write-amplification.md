@@ -11,9 +11,9 @@ Hai chủ đề không liên quan gì nhau về mặt khái niệm, nhưng chún
 Đây là điểm khởi đầu, và hiểu sai nó là gốc của mọi bẫy sau:
 
 ```text
-   NULL nghia la "KHONG BIET", khong phai "rong" hay "khong co gi".
+   NULL nghĩa là "KHÔNG BIẾT", không phải "rỗng" hay "không có gì".
 
-   → Moi phep so sanh voi NULL cho ra NULL, KHONG phai TRUE hay FALSE.
+   → Mọi phép so sánh với NULL cho ra NULL, KHÔNG phải TRUE hay FALSE.
 ```
 
 ```sql
@@ -27,7 +27,7 @@ SELECT NULL = NULL       AS a,
 ```text
  a | b | c | d | e
 ---+---+---+---+---
-   |   |   |   |          ← TAT CA deu la NULL, khong phai true/false
+   |   |   |   |          ← TẤT CẢ đều là NULL, không phải true/false
 ```
 
 SQL dùng **logic ba giá trị**: `TRUE`, `FALSE`, `NULL`.
@@ -51,14 +51,14 @@ SELECT * FROM users WHERE status <> 'active';
 ```
 
 ```text
-   `WHERE` chi giu dong co dieu kien TRUE.
-   NULL <> 'active'  →  NULL  →  KHONG duoc giu
+   `WHERE` chỉ giữ dòng có điều kiện TRUE.
+   NULL <> 'active'  →  NULL  →  KHÔNG được giữ
 
-   → Dong co status = NULL BI BO QUA AM THAM
+   → Dòng có status = NULL BỊ BỎ QUA ÂM THẦM
 ```
 
 ```sql
--- Cach dung
+-- Cách đúng
 WHERE status IS DISTINCT FROM 'active';
 -- hoac
 WHERE status <> 'active' OR status IS NULL;
@@ -75,13 +75,13 @@ SELECT * FROM orders WHERE user_id NOT IN (SELECT id FROM banned_users);
 ```
 
 ```text
-   Neu `banned_users.id` co DU MOT gia tri NULL:
+   Nếu `banned_users.id` có DÙ MỘT giá trị NULL:
      user_id NOT IN (1, 2, NULL)
      ≡ user_id <> 1 AND user_id <> 2 AND user_id <> NULL
      ≡ TRUE AND TRUE AND NULL
      ≡ NULL
-   → KHONG dong nao duoc giu
-   → KET QUA LUON RONG, khong bao gio bao loi
+   → KHÔNG dòng nào được giữ
+   → KẾT QUẢ LUÔN RỖNG, không bao giờ báo lỗi
 ```
 
 ```sql
@@ -100,8 +100,8 @@ INSERT INTO users VALUES (NULL), (NULL), (NULL);   -- CHAP NHAN CA BA
 ```
 
 ```text
-   Vi NULL <> NULL, nen cac NULL KHONG duoc coi la trung nhau.
-   → dung theo chuan SQL, nhung thuong khong phai y dinh cua ban
+   Vì NULL <> NULL, nên các NULL KHÔNG được coi là trùng nhau.
+   → đúng theo chuẩn SQL, nhưng thường không phải ý định của bạn
 ```
 
 PostgreSQL 15 thêm cách kiểm soát:
@@ -109,7 +109,7 @@ PostgreSQL 15 thêm cách kiểm soát:
 ```sql
 CREATE TABLE users (
     email TEXT,
-    UNIQUE NULLS NOT DISTINCT (email)      -- chi cho MOT NULL
+    UNIQUE NULLS NOT DISTINCT (email)      -- chỉ cho MỘT NULL
 );
 ```
 
@@ -124,9 +124,9 @@ SELECT count(*), count(email), avg(age) FROM users;
 -------+-------+------
   1000 |   842 | 34.2
     ▲      ▲      ▲
-    │      │      └ trung binh cua 842 dong CO tuoi, khong phai 1.000
-    │      └ dem dong co email KHAC NULL
-    └ dem MOI dong
+    │      │      └ trung bình của 842 dòng CÓ tuổi, không phải 1.000
+    │      └ đếm dòng có email KHÁC NULL
+    └ đếm MỌI dòng
 ```
 
 Đây thường là hành vi bạn muốn, nhưng phải biết nó xảy ra — nếu không, `AVG` sẽ cho con số khác với `SUM / COUNT(*)`.
@@ -136,25 +136,25 @@ SELECT count(*), count(email), avg(age) FROM users;
 Trái với trực giác, `NULL` **tiết kiệm** chỗ:
 
 ```text
-   POSTGRESQL luu mot BITMAP NULL o dau moi tuple: 1 bit moi cot.
-   → cot NULL KHONG chiem byte du lieu nao
+   POSTGRESQL lưu một BITMAP NULL ở đầu mỗi tuple: 1 bit mỗi cột.
+   → cột NULL KHÔNG chiếm byte dữ liệu nào
 
    Bang 20 cot, trung binh 15 cot NULL:
-     Dung NULL      : 23 byte header + 3 byte bitmap + 5 cot du lieu
-     Dung chuoi rong: 23 byte header + 20 cot du lieu
-   → NULL GON HON dang ke
+     Dùng NULL      : 23 byte header + 3 byte bitmap + 5 cột dữ liệu
+     Dùng chuỗi rỗng: 23 byte header + 20 cột dữ liệu
+   → NULL GỌN HƠN đáng kể
 ```
 
 Và quan trọng hơn — **index bỏ qua `NULL` được**:
 
 ```sql
--- Bang 100 trieu dong, chi 50.000 dong co `deleted_at` khac NULL
+-- Bảng 100 triệu dòng, chỉ 50.000 dòng có `deleted_at` khác NULL
 CREATE INDEX idx_deleted ON orders (deleted_at) WHERE deleted_at IS NOT NULL;
 ```
 
 ```text
-   Index day du  : 2,1 GB
-   Index bo phan : 1,8 MB      → NHO HON ~1.200 LAN
+   Index đầy đủ  : 2,1 GB
+   Index bộ phận : 1,8 MB      → NHỎ HƠN ~1.200 LẦN
 ```
 
 Ba cột rất hợp với kỹ thuật này: `deleted_at`, `error_message`, `cancelled_at` — những cột "hiếm khi có giá trị".
@@ -173,8 +173,8 @@ Ba cột rất hợp với kỹ thuật này: `deleted_at`, `error_message`, `ca
 Quy tắc gọn:
 
 ```text
-   NULL khi thieu du lieu la CO NGHIA.
-   Mac dinh khi thieu du lieu chi la PHIEN PHUC.
+   NULL khi thiếu dữ liệu là CÓ NGHĨA.
+   Mặc định khi thiếu dữ liệu chỉ là PHIỀN PHỨC.
 ```
 
 ---
@@ -186,8 +186,8 @@ Quy tắc gọn:
 ```text
    khuech_dai_ghi = so_byte_GHI_THAT_XUONG_DIA / so_byte_DU_LIEU_LOGIC
 
-   Ban UPDATE mot cot 4 byte.
-   Dia phai ghi bao nhieu?  → thuong la HANG NGHIN byte.
+   Bạn UPDATE một cột 4 byte.
+   Đĩa phải ghi bao nhiêu?  → thường là HÀNG NGHÌN byte.
 ```
 
 ## Sáu tầng khuếch đại
@@ -197,24 +197,24 @@ Quy tắc gọn:
    │  UPDATE users SET last_login = now() WHERE id = 42;        │
    │  Du lieu logic: 8 byte                                     │
    ├─ TANG 2: MVCC ─────────────────────────────────────────────┤
-   │  PostgreSQL tao PHIEN BAN MOI cua CA DONG                  │
-   │  → ~200 byte (ca dong, khong chi cot doi)                  │
+   │  PostgreSQL tạo PHIÊN BẢN MỚI của CẢ DÒNG                  │
+   │  → ~200 byte (cả dòng, không chỉ cột đổi)                  │
    ├─ TANG 3: INDEX ────────────────────────────────────────────┤
    │  ctid doi → cap nhat 5 index × ~40 byte                    │
    │  → ~200 byte                                               │
    ├─ TANG 4: WAL ──────────────────────────────────────────────┤
-   │  Ghi ban ghi WAL cho dong + cho moi index                  │
+   │  Ghi bản ghi WAL cho dòng + cho mọi index                  │
    │  → ~400 byte                                               │
-   │  VA neu la lan dau page bi sua sau checkpoint:              │
+   │  VÀ nếu là lần đầu page bị sửa sau checkpoint:              │
    │  → GHI CA PAGE 8 KB × (1 heap + 5 index) = 48 KB   ⚠       │
    ├─ TANG 5: HE DIEU HANH ─────────────────────────────────────┤
    │  Ghi theo don vi 4 KB                                      │
    ├─ TANG 6: SSD ──────────────────────────────────────────────┤
-   │  Ghi theo don vi 16 KB, va COLLECT GARBAGE ben trong       │
+   │  Ghi theo đơn vị 16 KB, và GOM RÁC bên trong               │
    │  → khuech dai them 1,5-4 lan                               │
    └────────────────────────────────────────────────────────────┘
 
-   TONG: 8 byte logic  →  co the thanh 50-200 KB ghi that
+   TỔNG: 8 byte logic  →  có thể thành 50-200 KB ghi thật
                           KHUECH DAI 6.000 - 25.000 LAN
 ```
 
@@ -223,7 +223,7 @@ Con số này nghe khó tin, nhưng đo được.
 ## Đo trên máy thật
 
 ```sql
--- Do WAL sinh ra boi mot thao tac
+-- Đo WAL sinh ra bởi một thao tác
 SELECT pg_current_wal_lsn() AS truoc \gset
 UPDATE users SET last_login = now() WHERE id < 100000;
 SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), :'truoc')) AS wal;
@@ -236,9 +236,9 @@ SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), :'truoc')) AS wal;
 ```
 
 ```text
-   100.000 dong × 8 byte du lieu logic = 800 KB
+   100.000 dòng × 8 byte dữ liệu logic = 800 KB
    WAL sinh ra                          =  47 MB
-   → KHUECH DAI ~60 LAN (chi rieng tang WAL)
+   → KHUẾCH ĐẠI ~60 LẦN (chỉ riêng tầng WAL)
 ```
 
 Thống kê tổng thể:
@@ -262,21 +262,21 @@ FROM pg_stat_wal;
 
 ```text
    1. TUOI THO SSD
-      SSD chi chiu duoc so lan ghi HUU HAN moi o.
-      Khuech dai 50 lan → SSD mon nhanh hon 50 lan.
-      → 5 nam thanh 1 nam
+      SSD chỉ chịu được số lần ghi HỮU HẠN mỗi ô.
+      Khuếch đại 50 lần → SSD mòn nhanh hơn 50 lần.
+      → 5 năm thành 1 năm
 
    2. BANG THONG DIA
       SSD 500 MB/s ghi, khuech dai 50 lan
-      → chi ghi duoc 10 MB/s DU LIEU LOGIC
+      → chỉ ghi được 10 MB/s DỮ LIỆU LOGIC
 
    3. BANG THONG NHAN BAN
-      WAL duoc gui NGUYEN VEN cho replica.
-      Khuech dai cao → luu luong nhan ban cao
-      → dat khi xuyen trung tam du lieu
+      WAL được gửi NGUYÊN VẸN cho replica.
+      Khuếch đại cao → lưu lượng nhân bản cao
+      → đắt khi xuyên trung tâm dữ liệu
 
    4. DUNG LUONG SAO LUU
-      Sao luu tang dan dua tren WAL → cang lon
+      Sao lưu tăng dần dựa trên WAL → càng lớn
 ```
 
 ## Tám cách giảm
@@ -297,17 +297,17 @@ ALTER TABLE users SET (fillfactor = 80);
 ```
 
 ```text
-   HOT update: neu phien ban moi nam CUNG PAGE va KHONG cot duoc danh index
-   bi doi → KHONG cap nhat index nao
-   → xoa bo TANG 3 hoan toan
+   HOT update: nếu phiên bản mới nằm CÙNG PAGE và KHÔNG cột được đánh index
+   bị đổi → KHÔNG cập nhật index nào
+   → xoá bỏ TẦNG 3 hoàn toàn
 ```
 
 ### 3. Đừng đánh index cột hay thay đổi
 
 ```text
-   Index tren `last_login` (cap nhat moi lan dang nhap)
-   → PHA VO HOT cho MOI `UPDATE` cua bang do
-   → ke ca cac UPDATE khong lien quan gi toi last_login
+   Index trên `last_login` (cập nhật mỗi lần đăng nhập)
+   → PHÁ VỠ HOT cho MỌI `UPDATE` của bảng đó
+   → kể cả các UPDATE không liên quan gì tới last_login
 ```
 
 Đây là điều phản trực giác nhất trong danh sách: **một index sai chỗ làm hỏng HOT cho toàn bảng**.
@@ -320,8 +320,8 @@ ALTER SYSTEM SET max_wal_size = '8GB';           -- mac dinh 1GB
 ```
 
 ```text
-   Checkpoint THUA → moi page chi phai ghi ca page MOT LAN
-   trong khoang thoi gian dai hon
+   Checkpoint THƯA → mỗi page chỉ phải ghi cả page MỘT LẦN
+   trong khoảng thời gian dài hơn
    → giam manh `wal_fpi`
 ```
 
@@ -332,9 +332,9 @@ ALTER SYSTEM SET wal_compression = 'zstd';   -- PG15+
 ```
 
 ```text
-   Nen rieng cac ban ghi GHI CA PAGE
+   Nén riêng các bản ghi GHI CẢ PAGE
    → thuong giam 40-70% luong WAL
-   → chi phi CPU nho
+   → chi phí CPU nhỏ
 ```
 
 ### 6. Gộp lô lệnh ghi
@@ -353,11 +353,11 @@ conn.commit()
 ### 7. Tách cột lớn ra bảng riêng
 
 ```text
-   Cot TEXT 5 KB nam cung bang nong:
-     moi UPDATE bat ky cot nao → tao phien ban moi CUA CA DONG
-     → 5 KB duoc ghi lai du khong doi
+   Cột TEXT 5 KB nằm cùng bảng nóng:
+     mọi UPDATE bất kỳ cột nào → tạo phiên bản mới CỦA CẢ DÒNG
+     → 5 KB được ghi lại dù không đổi
 
-   Tach ra bang rieng → bang nong gon → khuech dai giam manh
+   Tách ra bảng riêng → bảng nóng gọn → khuếch đại giảm mạnh
 ```
 
 > PostgreSQL đã tự làm một phần bằng **TOAST** (giá trị > ~2 KB tự đẩy sang bảng phụ, và **không ghi lại nếu không đổi**). Nhưng tách tay vẫn tốt hơn khi bạn biết rõ cột nào hiếm dùng.
@@ -365,8 +365,8 @@ conn.commit()
 ### 8. Cân nhắc engine LSM cho tải ghi cực nặng
 
 ```text
-   MyRocks o Facebook: khuech dai ghi GIAM ~10 LAN so voi InnoDB
-   → doi lai doc cham hon mot chut
+   MyRocks ở Facebook: khuếch đại ghi GIẢM ~10 LẦN so với InnoDB
+   → đổi lại đọc chậm hơn một chút
    → xem [phase-11 bai 3]
 ```
 
@@ -375,23 +375,23 @@ conn.commit()
 Tầng cuối cùng thường bị bỏ qua:
 
 ```text
-   SSD KHONG GHI DE TAI CHO. Muon sua mot o, phai:
-     1. Doc ca KHOI (thuong 256 KB - 4 MB)
-     2. Xoa ca khoi
-     3. Ghi lai ca khoi
+   SSD KHÔNG GHI ĐÈ TẠI CHỖ. Muốn sửa một ô, phải:
+     1. Đọc cả KHỐI (thường 256 KB - 4 MB)
+     2. Xoá cả khối
+     3. Ghi lại cả khối
 
-   → COLLECT GARBAGE ben trong SSD gay khuech dai 1,5-4 lan
-   → SSD doanh nghiep co "over-provisioning" (du dung luong an)
-     de giam chuyen nay
+   → GOM RÁC bên trong SSD gây khuếch đại 1,5-4 lần
+   → SSD doanh nghiệp có "over-provisioning" (dư dung lượng ẩn)
+     để giảm chuyện này
 ```
 
 Hai điều làm giảm:
 
 ```text
-   • TRIM/discard: bao cho SSD biet khoi nao khong con dung
-     → mount voi tuy chon `discard`, hoac chay `fstrim` dinh ky
-   • Giu SSD khong day qua 80%
-     → con nhieu khoi trong → it phai gom rac
+   • TRIM/discard: báo cho SSD biết khối nào không còn dùng
+     → mount với tuỳ chọn `discard`, hoặc chạy `fstrim` định kỳ
+   • Giữ SSD không đầy quá 80%
+     → còn nhiều khối trống → ít phải gom rác
 ```
 
 ## Bảng tổng kết các nguồn khuếch đại
