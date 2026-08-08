@@ -2,9 +2,9 @@
 
 > Container và điều phối container — từ `docker run` tới cụm Kubernetes production.
 
-73 bài đi từ Docker cơ bản (image, layer, volume, network, Compose) sang Kubernetes (pod, workload, service, ingress, config, storage, RBAC) và các chủ đề vận hành thật: bảo mật image, giới hạn tài nguyên, autoscaling, quan sát hệ thống.
+88 bài đi từ Docker cơ bản (image, layer, volume, network, Compose) sang Kubernetes (pod, workload, service, ingress, config, storage, RBAC) và các chủ đề vận hành thật: workload đầy đủ (StatefulSet, DaemonSet, Job/CronJob), giới hạn tài nguyên và autoscaling, bảo mật image và cụm, quan sát hệ thống và sổ tay chẩn đoán sự cố.
 
-**73 bài** trong 16 phần.
+**88 bài** trong 20 phần.
 
 ## Mục lục
 
@@ -161,13 +161,51 @@
 |---|---|
 | [01](phase-16/01-tong-ket-khoa-hoc.md) | Phase 16 — Tổng Kết Khóa Học Docker & Kubernetes |
 
+### Phase 17 — workload đầy đủ
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-17/01-statefulset.md) | Bài 1: StatefulSet — khi Pod không thể thay thế lẫn nhau |
+| [02](phase-17/02-daemonset.md) | Bài 2: DaemonSet — chạy đúng một Pod trên mỗi node |
+| [03](phase-17/03-job-va-cronjob.md) | Bài 3: Job và CronJob — công việc có điểm kết thúc |
+| [04](phase-17/04-chon-workload-va-tong-ket.md) | Bài 4: Chọn workload nào — bảng quyết định và tổng kết |
+
+### Phase 18 — tài nguyên và autoscaling
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-18/01-requests-limits-va-qos.md) | Bài 1: Requests, Limits và QoS — vì sao Pod bị OOMKilled |
+| [02](phase-18/02-probes-va-bay-liveness.md) | Bài 2: Ba loại probe — và vì sao livenessProbe nguy hiểm |
+| [03](phase-18/03-hpa-tu-dong-scale.md) | Bài 3: HorizontalPodAutoscaler — tự động scale theo tải |
+| [04](phase-18/04-cluster-autoscaler-va-tong-ket.md) | Bài 4: Cluster Autoscaler, VPA và tổng kết |
+
+### Phase 19 — bảo mật
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-19/01-bao-mat-image.md) | Bài 1: Bảo mật image — quét lỗ hổng, non-root, distroless |
+| [02](phase-19/02-rbac-va-serviceaccount.md) | Bài 2: RBAC và ServiceAccount — ai được làm gì trong cụm |
+| [03](phase-19/03-secret-that-su-an-toan.md) | Bài 3: Secret không hề bí mật — mã hoá, xoay vòng, quản lý bên ngoài |
+| [04](phase-19/04-networkpolicy-va-tong-ket.md) | Bài 4: NetworkPolicy và Pod Security — tổng kết |
+
+### Phase 20 — quan sát và gỡ lỗi
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-20/01-log-va-event.md) | Bài 1: Log và Event — hai nguồn thông tin đầu tiên khi có sự cố |
+| [02](phase-20/02-bo-cong-cu-go-loi.md) | Bài 2: Bộ công cụ gỡ lỗi — kubectl debug và các trạng thái hỏng |
+| [03](phase-20/03-chi-so-giam-sat-va-so-tay.md) | Bài 3: Chỉ số, giám sát và sổ tay chẩn đoán |
+
 ## Nên bắt đầu từ đâu
 
 | Bạn đang ở tình huống | Đọc từ |
 |---|---|
 | Chưa từng dùng Docker | bắt đầu từ phase đầu, làm theo từng lệnh |
 | Đã dùng Docker, chuyển sang K8s | nhảy tới phase Kubernetes |
-| Chuẩn bị đưa hệ thống lên production | các phase về bảo mật, tài nguyên và quan sát |
+| Chuẩn bị đưa hệ thống lên production | phase-18 (tài nguyên), phase-19 (bảo mật), phase-20 (quan sát) |
+| Pod bị OOMKilled hoặc chạy chậm bất thường | phase-18 bài 1 |
+| Cần chạy database hoặc Kafka trong cụm | phase-17 bài 1 (StatefulSet) |
+| Đang có sự cố, cần tra nhanh | phase-20 bài 3 — sổ tay chẩn đoán |
 
 ---
 

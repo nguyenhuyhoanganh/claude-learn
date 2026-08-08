@@ -383,4 +383,6 @@ hiện đại. Cứ áp dụng vào project thật — đó là cách tốt nh�
 
 *Hoàn thành khóa Docker & Kubernetes — The Practical Guide*
 
+**Phase kế tiếp** → [Bài 1: StatefulSet — khi Pod không thể thay thế lẫn nhau](../phase-17/01-statefulset.md)
+
 **Quay lại** → [Mục lục khoá Docker & Kubernetes](../README.md)
