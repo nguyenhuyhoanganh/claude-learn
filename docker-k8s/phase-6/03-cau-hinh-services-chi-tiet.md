@@ -130,6 +130,70 @@ services:
 
 **Lưu ý quan trọng:** `depends_on` đảm bảo **thứ tự start**, không đảm bảo service đã "ready" (ví dụ MongoDB chưa accept connections khi container vừa start). Để xử lý điều này cần `healthcheck` (nâng cao).
 
+### Vì sao `depends_on` thường không đủ — và cách làm đúng
+
+Đây là nguồn của lỗi "chạy `up` lần đầu thì hỏng, chạy lại thì được" mà rất nhiều người gặp.
+
+```text
+   depends_on: [mongodb]  chỉ đảm bảo:
+
+   t=0.0s   Docker START container mongodb   ← xong nhiệm vụ của depends_on
+   t=0.1s   Docker START container backend
+   t=0.2s   backend gọi mongodb:27017        → ECONNREFUSED
+   t=8.0s   mongodb mới THẬT SỰ sẵn sàng nhận kết nối
+                     ▲
+        Có 8 giây mà backend đã chết vì không kết nối được
+```
+
+Cách đúng — kết hợp `healthcheck` với `condition`:
+
+```yaml
+services:
+  mongodb:
+    image: mongo:7
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s          # kiểm tra mỗi 5 giây
+      timeout: 3s
+      retries: 10           # thử 10 lần rồi mới báo hỏng
+      start_period: 20s     # 20 giây đầu không tính là thất bại
+
+  backend:
+    build: ./backend
+    depends_on:
+      mongodb:
+        condition: service_healthy      # ← CHỜ ĐẾN KHI THẬT SỰ SẴN SÀNG
+```
+
+Ba giá trị của `condition`:
+
+| Giá trị | Chờ đến khi |
+|---|---|
+| `service_started` | Container đã start (bằng `depends_on` dạng danh sách) |
+| **`service_healthy`** | **`healthcheck` báo khoẻ** — đây là thứ bạn thường cần |
+| `service_completed_successfully` | Container đã chạy xong và thoát mã 0 (hợp cho container chạy migration) |
+
+`start_period` là tham số hay bị bỏ quên nhưng quan trọng: nó cho dịch vụ một khoảng "khởi động" mà thất bại **không bị tính** vào `retries`. Không có nó, một database mất 30 giây để khởi động sẽ bị đánh dấu `unhealthy` trước khi kịp sẵn sàng.
+
+> **Nhưng vẫn nên có logic thử lại trong ứng dụng.** `healthcheck` giải quyết lúc khởi động; nó **không** giải quyết trường hợp database khởi động lại giữa chừng khi hệ thống đang chạy. Ở production, ứng dụng phải tự chịu được việc mất kết nối tạm thời.
+
+Mẫu chạy migration trước khi khởi động ứng dụng:
+
+```yaml
+  migrate:
+    build: ./backend
+    command: ["npm", "run", "migrate"]
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully    # chờ migrate XONG HẲN
+```
+
 ---
 
 ## `stdin_open` và `tty` — Interactive Mode
@@ -248,6 +312,44 @@ volumes:
 | `--rm` | Tự động (remove on down) | |
 | `-it` | `stdin_open: true` + `tty: true` | |
 | `--build-arg` | `build.args: {}` | |
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Triệu chứng | Cách xử lý |
+|---|---|---|
+| Dựa vào `depends_on` để chờ database sẵn sàng | Lần `up` đầu hỏng, chạy lại thì được | `healthcheck` + `condition: service_healthy` |
+| Quên `start_period` trong healthcheck | Dịch vụ khởi động chậm bị đánh dấu `unhealthy` oan | Đặt `start_period` rộng rãi |
+| Đặt `container_name` cho service cần scale | `docker compose up --scale api=3` **thất bại** vì trùng tên | Bỏ `container_name` đi |
+| Dùng `environment` cho mật khẩu rồi commit lên Git | Lộ bí mật | Dùng `env_file` và cho `.env` vào `.gitignore` |
+| `ports: "8080:80"` mà quên nháy kép ở `"80:80"` | YAML hiểu `56:80` là **số phút giây**, không phải chuỗi | **Luôn để nháy kép** quanh giá trị `ports` |
+| Named volume khai báo ở service nhưng quên khai ở cấp trên cùng | `service refers to undefined volume` | Phải khai **hai chỗ** |
+| Thụt lề bằng tab | `found character '\t' that cannot start any token` | YAML **chỉ chấp nhận dấu cách** |
+| Tưởng `env_file` ghi đè `environment` | Ngược lại — `environment` **thắng** | Thứ tự ưu tiên: shell > `environment` > `env_file` |
+
+Bẫy `ports` đáng xem vì nó âm thầm:
+
+```yaml
+ports:
+  - 56:80          # ✗ YAML đọc "56:80" thành số 3360 (56 phút 80 giây)
+  - "56:80"        # ✓
+```
+
+Với cặp cổng thường dùng (`3000:3000`, `8080:80`) thì không sao vì có số lớn hơn 59, nhưng đúng một lần bạn viết `22:22` hoặc `56:80` là gặp lỗi rất khó hiểu. Cứ để nháy kép cho mọi trường hợp.
+
+---
+
+## Tóm tắt bài 3
+
+- `ports`, `environment`, `env_file`, `volumes`, `depends_on` là năm khoá bạn dùng nhiều nhất — chúng ánh xạ gần một-một với cờ của `docker run`.
+- Thứ tự ưu tiên biến môi trường: **shell > `environment` > `env_file`**.
+- **`depends_on` chỉ đảm bảo thứ tự START, không đảm bảo dịch vụ SẴN SÀNG.** Đây là nguyên nhân của lỗi "lần đầu hỏng, chạy lại thì được".
+- Cách đúng: **`healthcheck` + `depends_on.condition: service_healthy`**, kèm **`start_period`** cho dịch vụ khởi động chậm.
+- `condition: service_completed_successfully` là cách chuẩn để **chạy migration xong rồi mới khởi động ứng dụng**.
+- Vẫn cần **logic thử lại trong ứng dụng** — healthcheck chỉ lo lúc khởi động, không lo lúc database khởi động lại giữa chừng.
+- **Luôn để nháy kép quanh giá trị `ports`**, nếu không YAML có thể đọc thành số phút giây.
+- **Đừng đặt `container_name`** cho service cần scale.
 
 ---
 

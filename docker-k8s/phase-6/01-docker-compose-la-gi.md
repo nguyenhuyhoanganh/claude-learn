@@ -129,6 +129,60 @@ docker compose version
 docker-compose version
 ```
 
+### `docker compose` (v2) khác `docker-compose` (v1) chỗ nào
+
+Bạn sẽ gặp cả hai cách viết trong tài liệu trên mạng, và chúng **không hoàn toàn giống nhau**:
+
+| | `docker-compose` (có gạch nối) | `docker compose` (có dấu cách) |
+|---|---|---|
+| Phiên bản | v1 — viết bằng Python | **v2 — viết bằng Go, tích hợp vào Docker CLI** |
+| Trạng thái | **Đã ngừng hỗ trợ từ 7/2023** | Hiện hành |
+| Tên container sinh ra | `duan_service_1` (gạch dưới) | `duan-service-1` (**gạch nối**) |
+| Trường `version:` trong file | Bắt buộc | **Không cần, đã lỗi thời** |
+| Tốc độ | Chậm hơn | Nhanh hơn rõ rệt |
+
+Hai hệ quả thực tế:
+
+**Một — trường `version: "3.8"` ở đầu file giờ đã thừa.** Compose v2 bỏ qua nó và thậm chí cảnh báo:
+
+```text
+WARN[0000] the attribute `version` is obsolete, it will be ignored
+```
+
+Giữ lại cũng không sao (để tương thích ngược), nhưng file mới thì không cần viết nữa.
+
+**Hai — script cũ dựa vào tên container có thể hỏng.** Nếu bạn có script gọi `docker exec myapp_backend_1`, nó sẽ không tìm thấy nữa vì v2 đặt tên là `myapp-backend-1`.
+
+```bash
+# Cách viết KHÔNG phụ thuộc quy ước đặt tên — nên dùng
+docker compose exec backend sh
+docker compose logs -f backend
+```
+
+Dùng `docker compose exec <tên service>` thay vì `docker exec <tên container>` là thói quen đáng hình thành: nó đúng ở mọi phiên bản và không phụ thuộc cách Compose sinh tên.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả |
+|---|---|
+| Copy tài liệu cũ dùng `docker-compose` (gạch nối) trên máy chỉ có v2 | `command not found` |
+| Tưởng Compose thay thế được Kubernetes | Compose chỉ chạy trên **một máy**, không có tự phục hồi, không scale qua nhiều máy |
+| Tưởng Compose là công cụ production | Nó **dùng được** ở production quy mô nhỏ (một máy chủ), nhưng không có HA |
+| Giữ `version: "3.8"` rồi lo lắng vì cảnh báo | Vô hại, chỉ là đã lỗi thời |
+| Script gọi container theo tên `duan_service_1` | v2 đặt tên bằng **gạch nối** — dùng `docker compose exec <service>` |
+
+---
+
+## Tóm tắt bài 1
+
+- Docker Compose thay **nhiều lệnh `docker run` dài dòng** bằng **một file YAML** kiểm soát được bằng Git — đúng tinh thần "môi trường là mã nguồn" ở [Phase 1](../phase-1/01-docker-la-gi-va-tai-sao-can.md).
+- Nó **không phải** công cụ điều phối nhiều máy chủ, **không** thay Kubernetes, và **không** tự phục hồi khi máy chết.
+- **`docker compose` (v2, dấu cách) là bản hiện hành**; `docker-compose` (v1, gạch nối) đã ngừng hỗ trợ từ 7/2023.
+- Trường **`version:` đã lỗi thời** — file mới không cần viết.
+- Ưu tiên **`docker compose exec <tên service>`** thay vì `docker exec <tên container>` để không phụ thuộc quy ước đặt tên.
+
 ---
 
 **Bài kế tiếp** → [Bài 2: Cấu trúc File docker-compose.yml](02-cau-truc-docker-compose-yml.md)

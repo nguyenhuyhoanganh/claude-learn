@@ -95,4 +95,72 @@ docker run -it -v $(pwd):/app node-util node --version
 
 ---
 
+## Ba cờ hay quên khi chạy lệnh trong container
+
+```bash
+docker run -it --rm -u $(id -u):$(id -g) -v $(pwd):/app -w /app node:18 npm init
+#          ▲▲▲ ▲▲▲▲ ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲                        ▲▲▲▲▲▲▲
+```
+
+| Cờ | Nếu thiếu thì sao |
+|---|---|
+| `-it` | Lệnh hỏi tương tác (`npm init`) sẽ **treo hoặc bỏ qua mọi câu hỏi** |
+| **`--rm`** | Container dừng **tích tụ lại mãi mãi** — chạy 50 lệnh là 50 container rác |
+| `-w /app` | Lệnh chạy ở thư mục gốc `/`, không phải thư mục dự án → tạo file sai chỗ |
+| `-u $(id -u):$(id -g)` | File tạo ra thuộc **root** trên Linux |
+
+Kiểm tra xem mình đã tích tụ bao nhiêu rác:
+
+```bash
+docker ps -a --filter "status=exited" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}" | head
+docker container prune
+```
+
+### Đặt bí danh cho gọn
+
+Gõ dòng lệnh dài mỗi lần là lý do chính khiến người ta bỏ kỹ thuật này. Chữa bằng bí danh:
+
+```bash
+# Thêm vào ~/.zshrc hoặc ~/.bashrc
+dnode() {
+  docker run -it --rm \
+    -u "$(id -u):$(id -g)" \
+    -v "$(pwd)":/app -w /app \
+    node:18 "$@"
+}
+```
+
+```bash
+dnode npm init -y
+dnode npm install express
+dnode node --version
+```
+
+Giờ nó gõ gần bằng lệnh gốc, mà vẫn không cài Node lên máy.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách xử lý |
+|---|---|---|
+| Quên `--rm` | Hàng chục container rác chiếm đĩa | Luôn có `--rm` cho lệnh chạy một lần |
+| Quên `-w` | File tạo ra ở `/` thay vì thư mục dự án | Thêm `-w /app`, hoặc `WORKDIR` trong Dockerfile |
+| Quên `-it` với lệnh hỏi tương tác | Lệnh treo, hoặc nhận toàn giá trị mặc định | `-it` |
+| Dùng `docker exec` cho container **đã dừng** | `container is not running` | `exec` chỉ chạy với container **đang chạy**. Dùng `docker run` |
+| Ghi đè `CMD` mà quên `ENTRYPOINT` vẫn còn | Lệnh bị nối vào sau ENTRYPOINT, ra kết quả lạ | Dùng `--entrypoint` để ghi đè hẳn |
+| Chạy lệnh phá hoại vì không giới hạn | Xoá nhầm dữ liệu trên máy thật qua bind mount | Dùng `ENTRYPOINT` giới hạn phạm vi ([bài 3](03-entrypoint-va-bind-mounts.md)) |
+
+---
+
+## Tóm tắt bài 2
+
+- Hai cách chạy lệnh: **`docker exec`** (vào container **đang chạy**) và **ghi đè `CMD`** khi `docker run` (tạo container mới).
+- Ghi đè `CMD` **thay thế hoàn toàn** lệnh mặc định của image.
+- Bốn cờ cần có cho lệnh tiện ích: **`-it`** (tương tác), **`--rm`** (không để rác), **`-w`** (đúng thư mục), **`-u`** (đúng chủ sở hữu file trên Linux).
+- Dòng lệnh dài là lý do chính khiến người ta bỏ kỹ thuật này — **đặt bí danh** trong `~/.zshrc` để gõ gần bằng lệnh gốc.
+- Cách này **linh hoạt nhưng không có giới hạn**: ai cũng chạy được lệnh bất kỳ, kể cả lệnh phá hoại qua bind mount. `ENTRYPOINT` ở bài sau giải quyết điều đó.
+
+---
+
 **Bài kế tiếp** → [Bài 3: ENTRYPOINT và Bind Mounts](03-entrypoint-va-bind-mounts.md)

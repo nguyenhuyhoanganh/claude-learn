@@ -251,4 +251,87 @@ docker compose down -v
 
 ---
 
+## Bốn lệnh hay bị nhầm lẫn
+
+Đây là bảng phân biệt đáng dán lên tường:
+
+| Lệnh | Container | Image | Volume | Network |
+|---|---|---|---|---|
+| `docker compose stop` | **Dừng**, giữ lại | Giữ | Giữ | Giữ |
+| `docker compose down` | **Xoá** | Giữ | **Giữ** | Xoá |
+| `docker compose down -v` | Xoá | Giữ | **XOÁ — mất dữ liệu** | Xoá |
+| `docker compose down --rmi all` | Xoá | **Xoá** | Giữ | Xoá |
+
+```text
+   Muốn tạm nghỉ, mai làm tiếp     →  docker compose stop
+   Muốn dọn sạch nhưng GIỮ dữ liệu →  docker compose down
+   Muốn làm lại từ đầu HOÀN TOÀN   →  docker compose down -v    ⚠ mất dữ liệu
+```
+
+> **`docker compose down -v` là lệnh xoá dữ liệu.** Nó xoá named volume của dự án — nghĩa là toàn bộ dữ liệu database local. Không có hoàn tác. Nhiều người gõ nó theo phản xạ khi "muốn cho sạch" rồi mất dữ liệu thử nghiệm đã dựng cả buổi.
+
+### Khi nào cần `--build`
+
+```text
+   Sửa file trong Dockerfile         →  BẮT BUỘC --build
+   Thêm/xoá thư viện (package.json)  →  BẮT BUỘC --build
+   Chỉ sửa code, CÓ bind mount       →  KHÔNG cần gì, hot reload lo
+   Chỉ sửa code, KHÔNG bind mount    →  BẮT BUỘC --build
+   Sửa docker-compose.yml            →  chỉ cần `up` lại (Compose tự nhận ra)
+   Sửa file .env                     →  `up` lại (không cần --build)
+```
+
+```bash
+# Build lại và bỏ qua toàn bộ bộ nhớ đệm — khi nghi build bị "kẹt" cache cũ
+docker compose build --no-cache
+docker compose up -d --force-recreate
+```
+
+`--force-recreate` cũng đáng biết: nó tạo lại container **kể cả khi Compose nghĩ là không có gì đổi**. Hữu ích khi bạn sửa thứ Compose không theo dõi được.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách xử lý |
+|---|---|---|
+| `docker compose down -v` theo phản xạ | **Mất toàn bộ dữ liệu** database local | Dùng `down` không có `-v` |
+| Sửa Dockerfile rồi chỉ `up` | Vẫn chạy image cũ, sửa gì cũng không thấy | `up --build` |
+| Chạy `up` ở thư mục khác | Compose không tìm thấy file, hoặc tạo dự án **mới** với volume mới | `cd` đúng chỗ, hoặc `-f duong/dan/docker-compose.yml` |
+| Đổi tên thư mục dự án | Compose coi là **dự án khác** → volume cũ thành mồ côi | Đặt `name:` ở đầu file, hoặc dùng `-p ten-du-an` |
+| `up` bị treo ở `Attaching to...` | Không phải treo — đó là chế độ gắn kèm | Ctrl+C để thoát, hoặc dùng `-d` ngay từ đầu |
+| Ctrl+C khi đang `up` (không có `-d`) | Container dừng theo | Đó là hành vi đúng. Dùng `-d` nếu muốn chạy nền |
+| `port is already allocated` | Cổng bị dự án Compose khác chiếm | `docker ps` tìm thủ phạm, hoặc đổi cổng |
+| Quên `docker compose down` dự án cũ | Nhiều dự án tranh cổng, và tốn RAM | `docker compose ls` xem dự án nào đang chạy |
+
+Dòng "đổi tên thư mục" đáng nói thêm vì nó gây mất dữ liệu một cách bất ngờ:
+
+```text
+   Thư mục my-app/     →  Compose đặt tên volume: my-app_mongo-data
+   Đổi tên thành myapp/ →  Compose tìm volume:    myapp_mongo-data  (chưa có!)
+                        →  tạo volume RỖNG mới
+                        →  database trống trơn, dữ liệu cũ vẫn nằm ở volume kia
+```
+
+Chữa bằng cách khai báo tên dự án tường minh:
+
+```yaml
+name: my-app        # Compose v2.20+, đặt ở đầu file
+services:
+  ...
+```
+
+---
+
+## Tóm tắt bài 4
+
+- `up` tự làm rất nhiều: tạo network, tạo volume, build image nếu chưa có, khởi động theo thứ tự `depends_on`.
+- Phân biệt bốn lệnh: **`stop`** (giữ container), **`down`** (xoá container, **giữ volume**), **`down -v`** (**xoá cả dữ liệu**), `down --rmi all` (xoá cả image).
+- **`docker compose down -v` không có hoàn tác.** Đừng gõ theo phản xạ.
+- **Sửa Dockerfile hoặc `package.json` thì bắt buộc `--build`.** Sửa `docker-compose.yml` hoặc `.env` thì chỉ cần `up` lại.
+- Compose lấy **tên thư mục** làm tên dự án, và tên dự án là tiền tố của volume/network. **Đổi tên thư mục là mất dấu volume cũ** — khai `name:` ở đầu file để tránh.
+- `docker compose ls` cho biết những dự án nào đang chạy — hữu ích khi tranh cổng.
+
+---
+
 **Bài kế tiếp** → [Bài 5: Tổng kết Docker Compose](05-tong-ket-docker-compose.md)
