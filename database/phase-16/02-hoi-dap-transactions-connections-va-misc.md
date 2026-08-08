@@ -23,7 +23,7 @@ Bảy câu hỏi về transaction và kết nối. Ba câu đầu là những c�
 
 ```text
    READ COMMITTED
-     → MOI CAU LENH lay MOT ANH CHUP MOI
+     → MỖI CÂU LỆNH lấy MỘT ẢNH CHỤP MỚI
      → nên câu lệnh thứ hai thấy được thay đổi mà câu thứ nhất không thấy
 
    REPEATABLE READ
@@ -70,17 +70,17 @@ Chi tiết đầy đủ ở [phase-2 bài 3](../phase-2/03-isolation-va-read-phe
 Câu trả lời phụ thuộc vào **hệ nào**:
 
 ```text
-   TRONG POSTGRESQL:  KHONG KHAC GI CA.
+   TRONG POSTGRESQL:  KHÔNG KHÁC GÌ CẢ.
      PostgreSQL cài đặt REPEATABLE READ BẰNG snapshot isolation.
      Hai tên gọi, một cơ chế.
 
-   TRONG SQL SERVER:  LA HAI MUC KHAC NHAU.
+   TRONG SQL SERVER:  LÀ HAI MỨC KHÁC NHAU.
      REPEATABLE READ  → dùng KHOÁ
      SNAPSHOT         → dùng phiên bản (giống Postgres)
      → phải bật riêng: ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION ON
 
-   TRONG LY THUYET:
-     Snapshot Isolation MANH HON Repeatable Read chuan ANSI
+   TRONG LÝ THUYẾT:
+     Snapshot Isolation MẠNH HƠN Repeatable Read chuẩn ANSI
      (vì nó chặn luôn phantom), nhưng YẾU HƠN Serializable
      (vì nó không chặn write skew).
 ```
@@ -143,13 +143,13 @@ Ba cách chữa:
 ```text
    1. SERIALIZABLE
       → PostgreSQL theo dõi phụ thuộc đọc-ghi và huỷ một transaction
-      → CAN VONG LAP THU LAI
+      → CẦN VÒNG LẶP THỬ LẠI
 
-   2. KHOA MOT DONG "CHA" DAI DIEN
+   2. KHOÁ MỘT DÒNG "CHA" ĐẠI DIỆN
       SELECT * FROM rooms WHERE id = 7 FOR UPDATE;   -- khoá CHÍNH cái phòng
       → mọi người vào phòng 7 đều phải xếp hàng qua dòng này
 
-   3. KHOA TU VAN
+   3. KHOÁ TƯ VẤN
       SELECT pg_advisory_xact_lock(hashtext('room:7'));
       → không cần dòng thật để khoá
 ```
@@ -175,7 +175,7 @@ Cách 2 đơn giản nhất và thường là câu trả lời đúng trong th�
 **Về mặt kỹ thuật: được. Về mặt an toàn: rất nguy hiểm.**
 
 ```text
-   MOT KET NOI POSTGRES CO TRANG THAI:
+   MỘT KẾT NỐI POSTGRES CÓ TRẠNG THÁI:
      • transaction hiện tại
      • bien phien (SET search_path, SET timezone, SET role...)
      • bảng tạm
@@ -236,16 +236,16 @@ Danh sách đầy đủ những gì PgBouncer transaction mode phá vỡ ở [ph
 ### Trường hợp 1 — Nhiều truy vấn phải nhất quán với nhau
 
 ```text
-   BAO CAO KHONG CO TRANSACTION
+   BÁO CÁO KHÔNG CÓ TRANSACTION
 
    10:00:00.000  SELECT SUM(amount) FROM orders;   → 5.000.000.000
    10:00:00.100     ⟵ một đơn hàng 3.000.000 được ghi vào
    10:00:00.200  SELECT COUNT(*) FROM orders;      → 12.001
 
-   TO BAO CAO IN RA:
+   TỜ BÁO CÁO IN RA:
      Tổng doanh thu : 5.000.000.000   (trên 12.000 đơn)
-     So don         : 12.001
-   → HAI CON SO KHONG KHOP NHAU
+     Số đơn         : 12.001
+   → HAI CON SỐ KHÔNG KHỚP NHAU
 ```
 
 ```sql
@@ -275,7 +275,7 @@ BEGIN TRANSACTION READ ONLY;
 ### Khi nào **không** cần
 
 ```text
-   ✘ Mot cau SELECT don le
+   ✘ Một câu SELECT đơn lẻ
      → nó ĐÃ nằm trong một transaction ngầm rồi (autocommit)
      → bọc thêm BEGIN/COMMIT chỉ tốn hai vòng mạng
 ```
@@ -305,7 +305,7 @@ UPDATE users SET last_login = now() WHERE id = 42;
 Lý do nằm ở mô hình MVCC:
 
 ```text
-   PostgreSQL KHONG SUA TAI CHO.
+   PostgreSQL KHÔNG SỬA TẠI CHỖ.
    `UPDATE` = tạo một PHIÊN BẢN MỚI của dòng ở vị trí KHÁC.
    → ctid doi tu (0,1) sang (0,4)
 
@@ -322,7 +322,7 @@ Lý do nằm ở mô hình MVCC:
    1. Phiên bản mới nằm CÙNG PAGE với phiên bản cũ
    2. KHÔNG cột nào ĐƯỢC ĐÁNH INDEX bị thay đổi
 
-   → Index KHONG can cap nhat.
+   → Index KHÔNG cần cập nhật.
    → Chỉ tạo một chuỗi liên kết trong chính page đó.
 ```
 
@@ -378,7 +378,7 @@ SELECT count(*) FROM orders;   -- bảng 50 triệu dòng → ~4 giây
 
 ```text
    MyISAM lưu sẵn số dòng trong metadata → trả về tức thì.
-   PostgreSQL PHAI DEM THAT.
+   PostgreSQL PHẢI ĐẾM THẬT.
 
    VI SAO?  Vi MVCC:
      Transaction A đang chạy thấy 50.000.000 dòng
@@ -411,13 +411,13 @@ EXPLAIN ANALYZE SELECT count(g) FROM grades WHERE id BETWEEN 1000 AND 4000;
 Aggregate  (actual time=12.442..12.443 rows=1 loops=1)
   ->  Index Scan using grades_pkey on grades  (rows=3001 loops=1)
         Index Cond: ((id >= 1000) AND (id <= 4000))
-Execution Time: 12.488 ms                             ← MAT chu "Only"
+Execution Time: 12.488 ms                             ← MẤT chữ "Only"
 ```
 
 Vì sao khác nhau:
 
 ```text
-   COUNT(*)     →  "dem SO DONG"
+   COUNT(*)     →  "đếm SỐ DÒNG"
                    không cần biết giá trị nào cả
                    → index là đủ → INDEX ONLY SCAN  ✔
 

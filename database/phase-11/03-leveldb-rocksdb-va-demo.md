@@ -119,14 +119,14 @@ Không có ba thứ này, LSM sẽ không dùng được.
 Mỗi file SST có một bloom filter ([phase-4 bài 4](../phase-4/04-bloom-filter-va-uuid-performance.md)):
 
 ```text
-   Truoc khi MO file SST:
+   Trước khi MỞ file SST:
      bloom.co_the_chua(key)?
-       KHONG  →  BO QUA file, khong cham dia            ✔
-       CO THE →  mo file ra tim (co the la duong tinh gia)
+       KHÔNG  →  BỎ QUA file, không chạm đĩa            ✔
+       CÓ THỂ →  mở file ra tìm (có thể là dương tính giả)
 
    Voi ti le duong tinh gia 1%:
-     → 99% cac file KHONG chua khoa bi loai ngay tai RAM
-     → doc diem tro nen kha thi
+     → 99% các file KHÔNG chứa khoá bị loại ngay tại RAM
+     → đọc điểm trở nên khả thi
 ```
 
 Đây là ứng dụng quan trọng nhất của bloom filter trong thực tế.
@@ -292,23 +292,23 @@ with db.write_batch() as wb:
         wb.put(f'key{i:08d}'.encode(), f'value-{i}'.encode())
 print(f"Ghi 1 trieu: {time.time() - bat_dau:.2f}s")
 
-# DOC NGAU NHIEN
+# ĐỌC NGẪU NHIÊN
 import random
 bat_dau = time.time()
 for _ in range(10_000):
     db.get(f'key{random.randint(0, 999999):08d}'.encode())
-print(f"Doc 10.000 ngau nhien: {time.time() - bat_dau:.3f}s")
+print(f"Đọc 10.000 ngẫu nhiên: {time.time() - bat_dau:.3f}s")
 
-# QUET KHOANG — cho tay lam LSM manh
+# QUÉT KHOẢNG — chỗ LSM mạnh nhất
 bat_dau = time.time()
 dem = sum(1 for _ in db.iterator(start=b'key00050000', stop=b'key00060000'))
-print(f"Quet 10.000 khoa lien tiep: {time.time() - bat_dau:.3f}s, {dem} ban ghi")
+print(f"Quét 10.000 khoá liên tiếp: {time.time() - bat_dau:.3f}s, {dem} bản ghi")
 ```
 
 ```text
-Ghi 1 trieu: 2.84s                          → ~352.000 ban ghi/giay
-Doc 10.000 ngau nhien: 0.412s               → ~24.000 doc/giay
-Quet 10.000 khoa lien tiep: 0.018s, 10000   → RAT nhanh (da sap xep)
+Ghi 1 triệu: 2.84s                          → ~352.000 bản ghi/giây
+Đọc 10.000 ngẫu nhiên: 0.412s               → ~24.000 đọc/giây
+Quét 10.000 khoá liên tiếp: 0.018s, 10000   → RẤT nhanh (đã sắp xếp)
 ```
 
 Xem cấu trúc tầng thật:
@@ -346,7 +346,7 @@ Dòng `4@0 + 1@1` nghĩa là: gộp 4 file ở tầng 0 với 1 file ở tầng 
 Quan sát tác động của xoá:
 
 ```python
-# Xoa mot nua
+# Xoá một nửa
 with db.write_batch() as wb:
     for i in range(0, 1_000_000, 2):
         wb.delete(f'key{i:08d}'.encode())
@@ -356,7 +356,7 @@ print(subprocess.run(['du','-sh','/tmp/leveldb-lab'], capture_output=True, text=
 ```
 
 ```text
-28M    /tmp/leveldb-lab        ← LON HON truoc khi xoa!
+28M    /tmp/leveldb-lab        ← LỚN HƠN trước khi xoá!
 ```
 
 Vì sao: xoá **ghi thêm** một triệu bia mộ. Dung lượng chỉ giảm sau khi compaction chạy:
@@ -367,7 +367,7 @@ print(subprocess.run(['du','-sh','/tmp/leveldb-lab'], capture_output=True, text=
 ```
 
 ```text
-9.2M   /tmp/leveldb-lab        ← gio moi giam
+9.2M   /tmp/leveldb-lab        ← giờ mới giảm
 ```
 
 Đây là đặc tính quan trọng nhất cần nhớ về LSM: **xoá làm dữ liệu TO RA trước khi nhỏ lại**.

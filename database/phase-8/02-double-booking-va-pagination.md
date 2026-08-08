@@ -81,7 +81,7 @@ with conn:
     cur.execute("SELECT is_booked FROM seats WHERE id = %s FOR UPDATE", (seat_id,))
     (da_dat,) = cur.fetchone()
     if da_dat:
-        raise GheDaCoNguoi()                      # B roi vao day
+        raise GheDaCoNguoi()                      # B rơi vào đây
     cur.execute("UPDATE seats SET is_booked=true, name=%s WHERE id=%s",
                 (ten, seat_id))
 ```
@@ -102,7 +102,7 @@ Không đọc trước, để chính câu `UPDATE` làm luôn việc kiểm tra:
 UPDATE seats
    SET is_booked = true, name = 'Hung'
  WHERE id = 13
-   AND is_booked = false            -- ← DIEU KIEN NAM TRONG CHINH CAU LENH
+   AND is_booked = false            -- ← ĐIỀU KIỆN NẰM TRONG CHÍNH CÂU LỆNH
 RETURNING id;
 ```
 
@@ -117,10 +117,10 @@ if cur.rowcount == 0:
 Vì sao an toàn: câu `UPDATE` **tự khoá dòng và tự đọc giá trị mới nhất**. Không có khe hở nào giữa đọc và ghi — chúng là **một** thao tác.
 
 ```text
-   A: UPDATE ... WHERE is_booked=false   → khoa dong, thay false → ghi → 1 dong
+   A: UPDATE ... WHERE is_booked=false   → khoá dòng, thấy false → ghi → 1 dòng
    B: UPDATE ... WHERE is_booked=false   → CHO A
-                                          → sau khi A commit, doc lai: true
-                                          → dieu kien KHONG khop → 0 dong
+                                          → sau khi A commit, đọc lại: true
+                                          → điều kiện KHÔNG khớp → 0 dòng
 ```
 
 | Ưu | Nhược |
@@ -138,19 +138,19 @@ ALTER TABLE seats ADD COLUMN version INT NOT NULL DEFAULT 0;
 ```
 
 ```python
-# Doc
+# Đọc
 cur.execute("SELECT is_booked, version FROM seats WHERE id=%s", (seat_id,))
 da_dat, phien_ban = cur.fetchone()
 if da_dat:
     raise GheDaCoNguoi()
 
-# ... co the co logic nghiep vu phuc tap o day, khong giu khoa nao ...
+# ... có thể có logic nghiệp vụ phức tạp ở đây, không giữ khoá nào ...
 
-# Ghi: chi thanh cong neu KHONG AI sua trong luc do
+# Ghi: chỉ thành công nếu KHÔNG AI sửa trong lúc đó
 cur.execute("""UPDATE seats SET is_booked=true, name=%s, version=version+1
                WHERE id=%s AND version=%s""", (ten, seat_id, phien_ban))
 if cur.rowcount == 0:
-    raise XungDotPhienBan()      # → thu lai tu dau
+    raise XungDotPhienBan()      # → thử lại từ đầu
 ```
 
 | Ưu | Nhược |
@@ -165,7 +165,7 @@ if cur.rowcount == 0:
 
 ```sql
 CREATE TABLE bookings (
-    seat_id INT PRIMARY KEY REFERENCES seats(id),   -- ← MOT ghe = MOT booking
+    seat_id INT PRIMARY KEY REFERENCES seats(id),   -- ← MỘT ghế = MỘT booking
     name    TEXT NOT NULL,
     created TIMESTAMPTZ DEFAULT now()
 );
@@ -203,12 +203,12 @@ Thực tế đặt vé không chỉ có "đặt" và "trống" — còn có "đa
 ```sql
 ALTER TABLE seats ADD COLUMN giu_boi TEXT, ADD COLUMN giu_den TIMESTAMPTZ;
 
--- Giu cho: thanh cong neu ghe trong HOAC lan giu truoc DA HET HAN
+-- Giữ chỗ: thành công nếu ghế trống HOẶC lần giữ trước ĐÃ HẾT HẠN
 UPDATE seats
    SET giu_boi = %s, giu_den = now() + interval '10 minutes'
  WHERE id = %s
    AND is_booked = false
-   AND (giu_den IS NULL OR giu_den < now())        -- ← tu het han
+   AND (giu_den IS NULL OR giu_den < now())        -- ← tự hết hạn
 RETURNING id;
 ```
 
@@ -229,17 +229,17 @@ Trực giác: *"nhảy tới dòng thứ 100.000 rồi lấy 10 dòng."*
 Thực tế:
 
 ```text
-   OFFSET nghia la: LAY ROI VUT BO n dong dau tien.
+   OFFSET nghĩa là: LẤY RỒI VỨT BỎ n dòng đầu tiên.
 
-   Database phai:
-     1. Doc dong thu 1     → vut
-     2. Doc dong thu 2     → vut
+   Database phải:
+     1. Đọc dòng thứ 1     → vứt
+     2. Đọc dòng thứ 2     → vứt
      ...
-     100.000. Doc dong 100.000  → vut
-     100.001-100.010: doc va TRA VE
+     100.000. Đọc dòng 100.000  → vứt
+     100.001-100.010: đọc và TRẢ VỀ
 
-   → Doc 100.010 dong de tra ve 10 dong.
-   → Va cang sang trang sau thi cang cham.
+   → Đọc 100.010 dòng để trả về 10 dòng.
+   → Và càng sang trang sau thì càng chậm.
 ```
 
 ## Đo trên máy thật
@@ -267,7 +267,7 @@ EXPLAIN ANALYZE SELECT title FROM news ORDER BY id DESC LIMIT 10 OFFSET 1000;
 ```text
 Limit  (actual time=0.842..0.851 rows=10 loops=1)
   ->  Index Scan Backward using news_pkey on news  (actual ... rows=1010 loops=1)
-                                                                    ▲ 1010 dong
+                                                                    ▲ 1010 dòng
 Execution Time: 0.882 ms
 ```
 
@@ -278,7 +278,7 @@ EXPLAIN ANALYZE SELECT title FROM news ORDER BY id DESC LIMIT 10 OFFSET 100000;
 ```text
 Limit  (actual time=78.118..78.126 rows=10 loops=1)
   ->  Index Scan Backward using news_pkey on news  (actual ... rows=100010 loops=1)
-                                                                    ▲ 100.010 dong
+                                                                    ▲ 100.010 dòng
 Execution Time: 78.442 ms
 ```
 
@@ -293,15 +293,15 @@ Execution Time: 619.226 ms
 ```
 
 ```text
-   OFFSET         DONG PHAI DOC       THOI GIAN
+   OFFSET         DÒNG PHẢI ĐỌC       THỜI GIAN
    ─────────      ──────────────      ─────────
          0                    10        0,06 ms
      1.000                 1.010        0,88 ms
    100.000               100.010          78 ms
  1.000.000             1.000.010         619 ms
 
-   → TUYEN TINH theo OFFSET. Trang cang sau cang cham.
-   → Va do la voi cache NONG. Lan chay dau tien co the cham gap 10 lan.
+   → TUYẾN TÍNH theo OFFSET. Trang càng sau càng chậm.
+   → Và đó là với cache NÓNG. Lần chạy đầu tiên có thể chậm gấp 10 lần.
 ```
 
 ## Vấn đề thứ hai: dòng trùng và dòng bị bỏ sót
@@ -309,26 +309,26 @@ Execution Time: 619.226 ms
 Chậm chưa phải điều tệ nhất. `OFFSET` còn cho **kết quả sai** khi dữ liệu thay đổi giữa các trang:
 
 ```text
-   BAN GHI HIEN TAI (sap xep id giam dan):
+   BẢN GHI HIỆN TẠI (sắp xếp id giảm dần):
       id 105, 104, 103, 102, 101, 100, 99, 98, ...
 
-   NGUOI DUNG XEM TRANG 1:  LIMIT 3 OFFSET 0
+   NGƯỜI DÙNG XEM TRANG 1:  LIMIT 3 OFFSET 0
       → 105, 104, 103
 
-   ⟵ AI DO CHEN BAN GHI MOI id=106
+   ⟵ AI ĐÓ CHÈN BẢN GHI MỚI id=106
 
    DANH SACH BAY GIO:
       id 106, 105, 104, 103, 102, 101, ...
 
-   NGUOI DUNG XEM TRANG 2:  LIMIT 3 OFFSET 3
+   NGƯỜI DÙNG XEM TRANG 2:  LIMIT 3 OFFSET 3
       → 103, 102, 101
-          ▲ ID 103 XUAT HIEN LAI — nguoi dung thay TRUNG
+          ▲ ID 103 XUẤT HIỆN LẠI — người dùng thấy TRÙNG
 ```
 
 Và ngược lại, nếu có bản ghi bị **xoá** thì một bản ghi sẽ **biến mất** khỏi kết quả mà không ai biết.
 
 ```text
-   OFFSET dem theo VI TRI, ma vi tri thi THAY DOI khi du lieu thay doi.
+   OFFSET đếm theo VỊ TRÍ, mà vị trí thì THAY ĐỔI khi dữ liệu thay đổi.
 ```
 
 Với cuộn vô hạn (infinite scroll), lỗi này rất dễ nhận ra và rất khó chịu.
@@ -340,13 +340,13 @@ Với cuộn vô hạn (infinite scroll), lỗi này rất dễ nhận ra và r�
 Thay vì "bỏ qua 100.000 dòng", hãy nói **"lấy các dòng sau giá trị này"**:
 
 ```sql
--- Trang dau
+-- Trang đầu
 SELECT id, title FROM news ORDER BY id DESC LIMIT 10;
--- → tra ve, dong cuoi cung co id = 4999991
+-- → trả về, dòng cuối cùng có id = 4999991
 
--- Trang tiep theo: dung id cua dong cuoi lam moc
+-- Trang tiếp theo: dùng id của dòng cuối làm mốc
 SELECT id, title FROM news
- WHERE id < 4999991                    -- ← DIEU KIEN, khong phai OFFSET
+ WHERE id < 4999991                    -- ← ĐIỀU KIỆN, không phải OFFSET
  ORDER BY id DESC LIMIT 10;
 ```
 
@@ -358,16 +358,16 @@ SELECT id, title FROM news WHERE id < 4000000 ORDER BY id DESC LIMIT 10;
 ```text
 Limit  (actual time=0.041..0.048 rows=10 loops=1)
   ->  Index Scan Backward using news_pkey on news  (actual ... rows=10 loops=1)
-        Index Cond: (id < 4000000)                          ▲ CHI 10 DONG
+        Index Cond: (id < 4000000)                          ▲ CHỈ 10 DÒNG
 Execution Time: 0.078 ms
 ```
 
 ```text
-   OFFSET 1.000.000 :  619,00 ms,  doc 1.000.010 dong
-   Keyset           :    0,08 ms,  doc         10 dong
+   OFFSET 1.000.000 :  619,00 ms,  đọc 1.000.010 dòng
+   Keyset           :    0,08 ms,  đọc         10 dòng
 
-                       → NHANH HON ~7.700 LAN
-                       → VA THOI GIAN KHONG DOI du o trang nao
+                       → NHANH HƠN ~7.700 LẦN
+                       → VÀ THỜI GIAN KHÔNG ĐỔI dù ở trang nào
 ```
 
 Dòng cuối là điểm quan trọng nhất: **trang thứ 1 và trang thứ 100.000 mất thời gian như nhau**.
@@ -378,10 +378,10 @@ Dòng cuối là điểm quan trọng nhất: **trang thứ 1 và trang thứ 10
    OFFSET                              KEYSET
    ══════                              ══════
    Index Scan Backward                 Index Scan Backward
-     (khong co Index Cond)               Index Cond: (id < 4000000)
-     → di tu dau, dem tung dong          → NHAY THANG toi vi tri id=4000000
-     → vut bo 1 trieu dong               → doc 10 dong ke tiep tren la
-     → LIMIT ap o TREN CUNG              → dung
+     (không có Index Cond)               Index Cond: (id < 4000000)
+     → đi từ đầu, đếm từng dòng          → NHẢY THẲNG tới vị trí id=4000000
+     → vứt bỏ 1 triệu dòng               → đọc 10 dòng kế tiếp trên lá
+     → LIMIT áp ở TRÊN CÙNG              → dừng
 ```
 
 Nó tận dụng đúng thứ B+Tree giỏi nhất: **nhảy tới một điểm rồi đi ngang trên tầng lá** — như đã phân tích ở [phase-5 bài 2](../phase-5/02-btree-plus-va-ung-dung-thuc-te.md).
@@ -393,10 +393,10 @@ Nếu sắp xếp theo `created` (có thể trùng nhau), chỉ dùng `WHERE cre
 Cách đúng: dùng **so sánh bộ giá trị** (*row value comparison*):
 
 ```sql
--- SAI: bo sot cac dong cung `created`
+-- SAI: bỏ sót các dòng cùng `created`
 SELECT * FROM news WHERE created < '2026-08-01 10:00:00' ORDER BY created DESC LIMIT 10;
 
--- DUNG: them mot cot DUY NHAT lam tie-breaker
+-- ĐÚNG: thêm một cột DUY NHẤT làm tie-breaker
 SELECT * FROM news
  WHERE (created, id) < ('2026-08-01 10:00:00', 4999991)
  ORDER BY created DESC, id DESC
@@ -452,17 +452,17 @@ Keyset không phải lúc nào cũng dùng được:
 Ba cách xử lý khi bắt buộc phải có "nhảy tới trang N":
 
 ```text
-   1. GIOI HAN so trang
-      → chi cho nhay toi trang 100, sau do bat buoc dung tim kiem/loc
-      → Google cung lam vay: khong the nhay toi trang 1000 ket qua
+   1. GIỚI HẠN số trang
+      → chỉ cho nhảy tới trang 100, sau đó bắt buộc dùng tìm kiếm/lọc
+      → Google cũng làm vậy: không thể nhảy tới trang 1000 kết quả
 
-   2. OFFSET NUA VOI
-      → dung keyset toi trang gan nhat da biet, roi OFFSET mot doan NGAN
+   2. OFFSET NỬA VỜI
+      → dùng keyset tới trang gần nhất đã biết, rồi OFFSET một đoạn NGẮN
       → WHERE id < <moc> ORDER BY id DESC LIMIT 10 OFFSET 40
 
-   3. BANG MOC TRANG tinh san
-      → dinh ky tinh "trang 100 bat dau tu id = X" va luu lai
-      → hop voi du lieu it thay doi
+   3. BẢNG MỐC TRANG tính sẵn
+      → định kỳ tính "trang 100 bắt đầu từ id = X" và lưu lại
+      → hợp với dữ liệu ít thay đổi
 ```
 
 ### Và `COUNT(*)` cũng là một cái bẫy
@@ -481,7 +481,7 @@ Execution Time: 448.882 ms
 Ba cách giảm nhẹ:
 
 ```sql
--- 1. Uoc luong tu thong ke (rat nhanh, sai so vai phan tram)
+-- 1. Ước lượng từ thống kê (rất nhanh, sai số vài phần trăm)
 SELECT reltuples::BIGINT AS uoc_luong FROM pg_class WHERE relname = 'news';
 ```
 
@@ -492,11 +492,11 @@ SELECT reltuples::BIGINT AS uoc_luong FROM pg_class WHERE relname = 'news';
 ```
 
 ```sql
--- 2. Dem co GIOI HAN: "hon 1000 ket qua" thay vi con so chinh xac
+-- 2. Đếm có GIỚI HẠN: "hơn 1000 kết quả" thay vì con số chính xác
 SELECT count(*) FROM (SELECT 1 FROM news WHERE ... LIMIT 1001) t;
 
--- 3. Khong dem gi ca: chi hoi "co trang sau khong?"
-SELECT ... LIMIT 11;    -- lay 11, hien 10, con 1 dong nghia la con trang sau
+-- 3. Không đếm gì cả: chỉ hỏi "có trang sau không?"
+SELECT ... LIMIT 11;    -- lấy 11, hiện 10, còn 1 dòng nghĩa là còn trang sau
 ```
 
 Cách 3 là cách các API hiện đại dùng, và nó rẻ nhất.

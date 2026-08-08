@@ -11,12 +11,12 @@ Bài cuối của phase này gồm ba phần: một engine có lịch sử đán
 BerkeleyDB (thường viết tắt **BDB**) ra đời năm 1991 tại Đại học California, Berkeley. Nó là **kho khoá-giá trị nhúng** — cùng ý tưởng với LevelDB nhưng sớm hơn hai mươi năm.
 
 ```text
-   BDB CUNG CAP BA CAU TRUC LUU TRU, CHON LUC TAO
+   BDB CUNG CẤP BA CẤU TRÚC LƯU TRỮ, CHỌN LÚC TẠO
    ═══════════════════════════════════════════════
-   BTREE   →  co sap xep, ho tro quet khoang       (giong InnoDB)
-   HASH    →  tra chinh xac cuc nhanh, khong sap   (giong bang bam)
-   QUEUE   →  ban ghi kich thuoc co dinh, FIFO     (giong hang doi)
-   RECNO   →  danh so ban ghi tuan tu
+   BTREE   →  có sắp xếp, hỗ trợ quét khoảng       (giống InnoDB)
+   HASH    →  tra chính xác cực nhanh, không sắp   (giống bảng băm)
+   QUEUE   →  bản ghi kích thước cố định, FIFO     (giống hàng đợi)
+   RECNO   →  đánh số bản ghi tuần tự
 ```
 
 Đây là điểm khác biệt lớn nhất so với các engine hiện đại: **bạn chọn cấu trúc dữ liệu phù hợp với bài toán**, thay vì nhận một cấu trúc cố định.
@@ -24,11 +24,11 @@ BerkeleyDB (thường viết tắt **BDB**) ra đời năm 1991 tại Đại h�
 Và nó có ACID đầy đủ:
 
 ```text
-   • Transaction voi commit/rollback
-   • Ghi nhat ky truoc (WAL)
-   • Phuc hoi sau su co
-   • Khoa muc dong hoac muc page
-   • Nhan ban
+   • Transaction với commit/rollback
+   • Ghi nhật ký trước (WAL)
+   • Phục hồi sau sự cố
+   • Khoá mức dòng hoặc mức page
+   • Nhân bản
 ```
 
 Một kho khoá-giá trị nhúng có ACID đầy đủ — vào năm 1991. Rất nhiều ý tưởng ngày nay coi là hiển nhiên đã có ở đây từ trước.
@@ -36,12 +36,12 @@ Một kho khoá-giá trị nhúng có ACID đầy đủ — vào năm 1991. Rấ
 ## Nó từng ở đâu
 
 ```text
-   • Backend cua MySQL (engine BDB, den MySQL 5.1)
-   • Backend cua OpenLDAP
-   • Backend cua Subversion (den phien ban 1.4)
-   • Bitcoin Core (vi tien, den nay van con dau vet)
+   • Backend của MySQL (engine BDB, đến MySQL 5.1)
+   • Backend của OpenLDAP
+   • Backend của Subversion (đến phiên bản 1.4)
+   • Bitcoin Core (ví tiền, đến nay vẫn còn dấu vết)
    • Postfix, Sendmail, Cyrus IMAP
-   • Rat nhieu he thong Unix
+   • Rất nhiều hệ thống Unix
 ```
 
 ## Vì sao nó biến mất
@@ -49,31 +49,31 @@ Một kho khoá-giá trị nhúng có ACID đầy đủ — vào năm 1991. Rấ
 Đây là phần đáng học nhất, và nó **không phải** một câu chuyện kỹ thuật.
 
 ```text
-   1996  Sleepycat Software thanh lap, ban BDB thuong mai
+   1996  Sleepycat Software thành lập, bán BDB thương mại
    2006  Oracle mua Sleepycat
-   2013  Oracle DOI GIAY PHEP tu Sleepycat License sang AGPLv3
+   2013  Oracle ĐỔI GIẤY PHÉP từ Sleepycat License sang AGPLv3
 ```
 
 Điều đó nghĩa là gì:
 
 ```text
-   AGPLv3: neu phan mem cua ban dung BDB VA duoc truy cap qua MANG,
-           ban PHAI cong khai toan bo ma nguon cua minh
-           — hoac mua giay phep thuong mai cua Oracle.
+   AGPLv3: nếu phần mềm của bạn dùng BDB VÀ được truy cập qua MẠNG,
+           bạn PHẢI công khai toàn bộ mã nguồn của mình
+           — hoặc mua giấy phép thương mại của Oracle.
 
-   → Moi ung dung web dung BDB dot ngot doi mat:
-       "mo ma nguon" hoac "tra tien"
+   → Mọi ứng dụng web dùng BDB đột ngột đối mặt:
+       "mở mã nguồn" hoặc "trả tiền"
 ```
 
 Phản ứng của cộng đồng diễn ra rất nhanh:
 
 ```text
-   Debian, Ubuntu, Red Hat  →  giu lai ban 5.3 (giay phep cu) VINH VIEN
-                                khong bao gio nang cap nua
-   OpenLDAP                 →  chuyen sang LMDB (tu viet)
-   Subversion               →  chuyen han sang FSFS
-   Bitcoin Core             →  ghim mai o ban 4.8 (2010)
-   MySQL                    →  bo engine BDB tu 5.1
+   Debian, Ubuntu, Red Hat  →  giữ lại bản 5.3 (giấy phép cũ) VĨNH VIỄN
+                                không bao giờ nâng cấp nữa
+   OpenLDAP                 →  chuyển sang LMDB (tự viết)
+   Subversion               →  chuyển hẳn sang FSFS
+   Bitcoin Core             →  ghim mãi ở bản 4.8 (2010)
+   MySQL                    →  bỏ engine BDB từ 5.1
 ```
 
 Trong vòng vài năm, một engine từng chạy trên hàng triệu máy chủ gần như biến mất hoàn toàn.
@@ -164,7 +164,7 @@ Nó đang chạy trong OpenLDAP, Monero, và nhiều hệ thống cần đọc c
 ## Xem engine hiện tại
 
 ```sql
--- Cac engine may nay ho tro
+-- Các engine máy này hỗ trợ
 SHOW ENGINES;
 ```
 
@@ -182,7 +182,7 @@ SHOW ENGINES;
 ```
 
 ```sql
--- Engine cua tung bang, kem kich thuoc
+-- Engine của từng bảng, kèm kích thước
 SELECT table_name, engine,
        ROUND(data_length/1024/1024)  AS data_mb,
        ROUND(index_length/1024/1024) AS index_mb,
@@ -195,13 +195,13 @@ ORDER BY data_length DESC;
 ## Ba engine đặc biệt đáng biết
 
 ```sql
--- MEMORY: toan bo trong RAM, MAT KHI KHOI DONG LAI
+-- MEMORY: toàn bộ trong RAM, MẤT KHI KHỞI ĐỘNG LẠI
 CREATE TABLE session_tmp (...) ENGINE = MEMORY;
 
--- ARCHIVE: nen manh, CHI cho INSERT va SELECT (khong UPDATE/DELETE)
+-- ARCHIVE: nén mạnh, CHỈ cho INSERT và SELECT (không UPDATE/DELETE)
 CREATE TABLE audit_2025 (...) ENGINE = ARCHIVE;
 
--- BLACKHOLE: nhan moi thu roi VUT DI, nhung VAN ghi binlog
+-- BLACKHOLE: nhận mọi thứ rồi VỨT ĐI, nhưng VẪN ghi binlog
 CREATE TABLE relay (...) ENGINE = BLACKHOLE;
 ```
 
@@ -214,7 +214,7 @@ CREATE TABLE relay (...) ENGINE = BLACKHOLE;
 ### Bước 1 — Kiểm tra điều kiện
 
 ```sql
--- Bang nao KHONG co khoa chinh?  (bat buoc phai co truoc khi sang InnoDB)
+-- Bảng nào KHÔNG có khoá chính?  (bắt buộc phải có trước khi sang InnoDB)
 SELECT t.table_name
 FROM information_schema.tables t
 LEFT JOIN information_schema.table_constraints c
@@ -235,15 +235,15 @@ ALTER TABLE bang_thieu_khoa ADD COLUMN id BIGINT AUTO_INCREMENT PRIMARY KEY FIRS
 ### Bước 2 — Ước lượng dung lượng
 
 ```text
-   InnoDB ton them 20-40% so voi MyISAM cho CUNG du lieu
-   (vi co thong tin MVCC, undo log, va page day khoang 90%)
+   InnoDB tốn thêm 20-40% so với MyISAM cho CÙNG dữ liệu
+   (vì có thông tin MVCC, undo log, và page đầy khoảng 90%)
 
-   VA: ALTER TABLE tao BAN SAO TAM
-   → can du chỗ cho CA BANG CU LAN BANG MOI cung luc
+   VÀ: ALTER TABLE tạo BẢN SAO TẠM
+   → cần đủ chỗ cho CẢ BẢNG CŨ LẪN BẢNG MỚI cùng lúc
 
-   Vi du: bang MyISAM 100 GB
+   Ví dụ: bảng MyISAM 100 GB
      → InnoDB ~130 GB
-     → trong luc ALTER can 100 + 130 = 230 GB trong
+     → trong lúc ALTER cần 100 + 130 = 230 GB trống
 ```
 
 Đây là nguyên nhân thất bại phổ biến nhất khi chuyển đổi.
@@ -251,18 +251,18 @@ ALTER TABLE bang_thieu_khoa ADD COLUMN id BIGINT AUTO_INCREMENT PRIMARY KEY FIRS
 ### Bước 3 — Chuyển, có phanh
 
 ```sql
--- Bang nho (< 1 GB): lam truc tiep
+-- Bảng nhỏ (< 1 GB): làm trực tiếp
 ALTER TABLE users ENGINE = InnoDB;
 ```
 
 ```bash
-# Bang lon: dung cong cu, KHONG khoa bang
+# Bảng lớn: dùng công cụ, KHÔNG khoá bảng
 pt-online-schema-change \
   --alter "ENGINE=InnoDB" \
   D=mydb,t=big_table \
   --execute
 
-# Hoac
+# Hoặc
 gh-ost --database=mydb --table=big_table \
        --alter="ENGINE=InnoDB" --execute
 ```
@@ -270,11 +270,11 @@ gh-ost --database=mydb --table=big_table \
 Cách hai công cụ này hoạt động (cùng nguyên lý với chiến lược 3 ở [phase-6 bài 2](../phase-6/02-partitioning-thuc-hanh-postgres.md)):
 
 ```text
-   1. Tao bang moi voi cau truc dich
-   2. Chep du lieu theo LO, chay nen
-   3. Bat moi thay doi moi (pt dung TRIGGER, gh-ost doc BINLOG)
-   4. Khi bat kip: doi ten hai bang trong mot giao dich NGAN
-   → Thoi gian dung dich vu: vai GIAY
+   1. Tạo bảng mới với cấu trúc đích
+   2. Chép dữ liệu theo LÔ, chạy nền
+   3. Bắt mọi thay đổi mới (pt dùng TRIGGER, gh-ost đọc BINLOG)
+   4. Khi bắt kịp: đổi tên hai bảng trong một giao dịch NGẮN
+   → Thời gian dừng dịch vụ: vài GIÂY
 ```
 
 Khác biệt giữa hai công cụ: `pt-online-schema-change` dùng trigger (đơn giản hơn nhưng thêm tải lên bảng gốc); `gh-ost` đọc binlog (không đụng gì vào bảng gốc, an toàn hơn với bảng rất nóng).
@@ -282,31 +282,31 @@ Khác biệt giữa hai công cụ: `pt-online-schema-change` dùng trigger (đ�
 ### Bước 4 — Kiểm tra sau khi chuyển
 
 ```sql
--- Xac nhan da doi
+-- Xác nhận đã đổi
 SELECT table_name, engine FROM information_schema.tables
 WHERE table_schema = DATABASE();
 
--- Xac nhan so dong khong doi
+-- Xác nhận số dòng không đổi
 SELECT COUNT(*) FROM users;
 
--- Xac nhan transaction hoat dong
+-- Xác nhận transaction hoạt động
 START TRANSACTION;
 UPDATE users SET name = 'test' WHERE id = 1;
 ROLLBACK;
-SELECT name FROM users WHERE id = 1;   -- PHAI la gia tri cu
+SELECT name FROM users WHERE id = 1;   -- PHẢI là giá trị cũ
 ```
 
 ### Bước 5 — Chỉnh cấu hình sau khi chuyển
 
 ```ini
-# MyISAM dung key_buffer_size; InnoDB thi KHONG DUNG NO
-key_buffer_size = 64M                 # giam xuong, khong con can nhieu
+# MyISAM dùng key_buffer_size; InnoDB thì KHÔNG DÙNG NÓ
+key_buffer_size = 64M                 # giảm xuống, không còn cần nhiều
 
-# InnoDB can buffer pool lon
+# InnoDB cần buffer pool lớn
 innodb_buffer_pool_size = 12G         # 50-75% RAM
 innodb_flush_log_at_trx_commit = 1
 innodb_flush_method = O_DIRECT
-innodb_file_per_table = ON            # moi bang mot file .ibd
+innodb_file_per_table = ON            # mỗi bảng một file .ibd
 ```
 
 Bước này rất hay bị quên: sau khi chuyển sang InnoDB mà vẫn để `key_buffer_size` chiếm phần lớn RAM thì InnoDB không còn chỗ cho buffer pool, và hệ thống **chậm hơn cả trước khi chuyển**.

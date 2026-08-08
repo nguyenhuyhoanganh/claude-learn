@@ -100,9 +100,9 @@ Trong MySQL, mỗi bảng chọn engine riêng:
 
 ```sql
 CREATE TABLE orders     (...) ENGINE = InnoDB;    -- can transaction
-CREATE TABLE page_views (...) ENGINE = MyISAM;    -- chi doc, dem nhanh
-CREATE TABLE cache_tmp  (...) ENGINE = MEMORY;    -- trong RAM, mat khi restart
-CREATE TABLE audit_log  (...) ENGINE = ARCHIVE;   -- nen manh, chi noi them
+CREATE TABLE page_views (...) ENGINE = MyISAM;    -- chỉ đọc, đếm nhanh
+CREATE TABLE cache_tmp  (...) ENGINE = MEMORY;    -- trong RAM, mất khi restart
+CREATE TABLE audit_log  (...) ENGINE = ARCHIVE;   -- nén mạnh, chỉ nối thêm
 ```
 
 Nghe rất linh hoạt. Nhưng có ba cái bẫy:

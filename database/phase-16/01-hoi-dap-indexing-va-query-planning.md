@@ -42,7 +42,7 @@ Mọi thứ được quy về "đọc tuần tự một page = 1,0". Kiểm ch�
 ```text
    Bảng grades:  8.334 page,  1.000.000 dòng
 
-   Chi phi Seq Scan = (so_page × seq_page_cost)
+   Chi phí Seq Scan = (số_page × seq_page_cost)
                     + (so_dong × cpu_tuple_cost)
                     + (so_dong × cpu_operator_cost)     ← đánh giá điều kiện WHERE
                     = 8.334 × 1,0
@@ -196,7 +196,7 @@ CREATE INDEX idx_status ON orders (status);
 Trong B+Tree, các khoá trùng nhau **nằm liền nhau ở tầng lá**:
 
 ```text
-   LA CUA INDEX:
+   LÁ CỦA INDEX:
    ['cancelled' → ctid1] ['cancelled' → ctid2] ... ['paid' → ctid1] ...
     └──────── 2 trieu muc ────────┘             └── 7 trieu muc ──┘
 ```
@@ -211,14 +211,14 @@ Trong B+Tree, các khoá trùng nhau **nằm liền nhau ở tầng lá**:
 **Từ PostgreSQL 13, có khử trùng lặp** giúp index nhỏ đi rất nhiều:
 
 ```text
-   TRUOC PG13                        TU PG13
+   TRƯỚC PG13                        TỪ PG13
    ══════════                        ═══════
    'paid' → ctid1                    'paid' → [ctid1, ctid2, ctid3, ...]
    'paid' → ctid2                            ▲ MỘT mục, danh sách con trỏ
    'paid' → ctid3
    ... × 7 trieu
 
-   Index: 380 MB                     Index: 92 MB    → NHO HON 4,1 LAN
+   Index: 380 MB                     Index: 92 MB    → NHỎ HƠN 4,1 LẦN
 ```
 
 Nhưng nhỏ hơn **không** làm nó hữu ích hơn cho `WHERE status = 'paid'` — vẫn phải nhảy 7 triệu lần vào heap.
@@ -264,19 +264,19 @@ ORDER BY pg_relation_size(s.indexrelid) DESC;
 ### Ba điều phải kiểm tra
 
 ```text
-   1. THONG KE DA DU DAI CHUA?
+   1. THỐNG KÊ ĐÃ ĐỦ DÀI CHƯA?
       Nếu vừa pg_stat_reset() tuần trước thì báo cáo cuối quý CHƯA CHẠY.
       → Quan sát ít nhất MỘT CHU KỲ NGHIỆP VỤ đầy đủ (thường 1 quý).
 
-   2. NO CO DANG THUC THI RANG BUOC KHONG?
+   2. NÓ CÓ ĐANG THỰC THI RÀNG BUỘC KHÔNG?
       Index của PRIMARY KEY và UNIQUE luôn hiện idx_scan = 0
       nhưng TUYỆT ĐỐI không được xoá.
       → Câu truy vấn trên đã lọc sẵn.
 
-   3. NO CO DUOC DUNG TREN REPLICA KHONG?
+   3. NÓ CÓ ĐƯỢC DÙNG TRÊN REPLICA KHÔNG?
       pg_stat_user_indexes là thống kê CỦA TỪNG MÁY.
       Index không dùng trên primary có thể đang phục vụ báo cáo trên replica.
-      → Phai kiem tra TREN MOI MAY.
+      → Phải kiểm tra TRÊN MỌI MÁY.
 ```
 
 Điều thứ ba là cái bẫy nguy hiểm nhất, và rất ít người kiểm tra.
@@ -315,7 +315,7 @@ Dòng cuối ít người biết: mỗi index thừa làm tăng thời gian lậ
 Nó lấp khoảng trống giữa `Index Scan` và `Seq Scan`:
 
 ```text
-   RAT IT DONG          VUA PHAI              RAT NHIEU DONG
+   RẤT ÍT DÒNG          VỪA PHẢI              RẤT NHIỀU DÒNG
    (< ~1%)              (1-20%)               (> ~20%)
    ─────────            ────────              ──────────────
    Index Scan           Bitmap Scan           Seq Scan
@@ -326,14 +326,14 @@ Nó lấp khoảng trống giữa `Index Scan` và `Seq Scan`:
 Ba giá trị cụ thể:
 
 ```text
-   1. MOI PAGE CHI DOC MOT LAN
+   1. MỖI PAGE CHỈ ĐỌC MỘT LẦN
       Index Scan: 10.000 mục khớp → có thể đọc một page 50 lần
       Bitmap    : gom lại → mỗi page đọc đúng một lần
 
-   2. DOC HEAP THEO THU TU TANG DAN
+   2. ĐỌC HEAP THEO THỨ TỰ TĂNG DẦN
       → gần với I/O TUẦN TỰ, tận dụng được đọc trước của hệ điều hành
 
-   3. KET HOP NHIEU INDEX (BitmapAnd / BitmapOr)
+   3. KẾT HỢP NHIỀU INDEX (BitmapAnd / BitmapOr)
       → hai index riêng lẻ HỢP TÁC được với nhau
       → không cần tạo index composite cho mọi tổ hợp
 ```
@@ -360,7 +360,7 @@ Chú ý dòng `lossy` trong kế hoạch:
 **Cảnh báo nghiêm túc:**
 
 ```sql
-EXPLAIN ANALYZE DELETE FROM users WHERE id > 100;   -- XOA THAT!
+EXPLAIN ANALYZE DELETE FROM users WHERE id > 100;   -- XOÁ THẬT!
 EXPLAIN ANALYZE UPDATE orders SET status = 'x';     -- SUA THAT!
 ```
 
@@ -389,7 +389,7 @@ EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS, WAL, FORMAT TEXT) <query>;
 ### Chi phí của việc đo
 
 ```text
-   `EXPLAIN ANALYZE` GOI DONG HO CHO MOI DONG o MOI NUT.
+   `EXPLAIN ANALYZE` GỌI ĐỒNG HỒ CHO MỖI DÒNG ở MỖI NÚT.
    Với truy vấn trả về hàng triệu dòng, chi phí đo có thể
    làm truy vấn CHẬM HƠN 2-3 LẦN so với khi chạy bình thường.
 
@@ -406,7 +406,7 @@ EXPLAIN (ANALYZE, TIMING OFF, BUFFERS) <query>;
 ### Ba con số cần đọc
 
 ```text
-   1. rows= UOC LUONG  vs  rows= THUC TE
+   1. rows= ƯỚC LƯỢNG  vs  rows= THỰC TẾ
       Lệch > 100 lần → thống kê sai
 
    2. Buffers: shared hit=X read=Y
@@ -449,7 +449,7 @@ Nó quét bảng **hai lần** (lần hai để nhặt các dòng đã đổi tr
 Ba lý do, xếp theo mức độ căn bản:
 
 ```text
-   1. PHAN CUNG KHONG CHO DOC MOT BYTE
+   1. PHẦN CỨNG KHÔNG CHO ĐỌC MỘT BYTE
       SSD đọc theo trang 4-16 KB; HDD đọc theo cung 512 byte.
       Đọc 1 byte và đọc 8.192 byte tốn GẦN NHƯ BẰNG NHAU.
       → đọc lẻ là lãng phí thuần tuý
@@ -458,7 +458,7 @@ Ba lý do, xếp theo mức độ căn bản:
       Dữ liệu được đọc cùng nhau thường nằm cạnh nhau.
       Đọc cả page = "khuyến mãi" các dòng kế bên, thường dùng tiếp ngay.
 
-   3. QUAN LY BO NHO DEM DON GIAN
+   3. QUẢN LÝ BỘ NHỚ ĐỆM ĐƠN GIẢN
       Buffer pool quản lý các ô CỐ ĐỊNH 8 KB → cấp phát và thay thế
       cực kỳ đơn giản, không bao giờ phân mảnh.
       Nếu quản lý theo dòng (kích thước thay đổi) → bài toán phân mảnh

@@ -188,7 +188,7 @@ Có, theo ba hướng — và hướng thứ hai là hướng ít người biế
      1 bit cho mỗi cột
      → cột NULL KHÔNG chiếm byte dữ liệu nào
 
-   Bang 20 cot, 15 cot NULL:
+   Bảng 20 cột, 15 cột NULL:
      Với NULL      : 23 byte header + 3 byte bitmap + 5 cột dữ liệu
      Với chuỗi rỗng: 23 byte header + 20 cột dữ liệu
    → NULL GỌN HƠN đáng kể
@@ -258,7 +258,7 @@ SELECT * FROM orders o WHERE NOT EXISTS (
 
    ✔ UUID v7  (KHÔNG phải v4)
      • Cần sinh khoá ở nhiều nơi
-     • Khong muon lo quy mo kinh doanh
+     • Không muốn lộ quy mô kinh doanh
      • TĂNG DẦN theo thời gian → không gây tách page
 
    ✘ UUID v4
@@ -273,7 +273,7 @@ Và quy tắc lưu trữ:
    PostgreSQL : kiểu UUID (16 byte)         — KHÔNG dùng TEXT
    MySQL      : BINARY(16)                  — KHÔNG dùng CHAR(36)
 
-   CHAR(36) lang phi 20 byte MOI GIA TRI,
+   CHAR(36) lãng phí 20 byte MỖI GIÁ TRỊ,
    và trên InnoDB còn bị NHÂN LÊN trong MỌI index phụ.
 ```
 
@@ -293,7 +293,7 @@ CREATE TABLE orders (
 ## Câu 6 — Xoá mềm hay xoá thật?
 
 ```sql
--- Xoa mem
+-- Xoá mềm
 ALTER TABLE orders ADD COLUMN deleted_at TIMESTAMPTZ;
 UPDATE orders SET deleted_at = now() WHERE id = 42;
 ```
@@ -314,8 +314,8 @@ Ba vấn đề của xoá mềm, và cách xử lý:
 -- → Giải: dùng VIEW hoặc Row Level Security
 CREATE VIEW active_orders AS SELECT * FROM orders WHERE deleted_at IS NULL;
 
--- VAN DE 2: UNIQUE gay
--- → Giai: index BO PHAN
+-- VẤN ĐỀ 2: UNIQUE gãy
+-- → Giải: index BỘ PHẬN
 CREATE UNIQUE INDEX idx_email_active ON users (email) WHERE deleted_at IS NULL;
 
 -- VẤN ĐỀ 3: bảng phình mãi
@@ -348,14 +348,14 @@ Chủ đề này được đào sâu ở [sql-interview/phase-6](../../sql-inter
 
 ```text
    ┌─────────────────────────────────────────────────────────┐
-   │ NEN O DATABASE — BAT BIEN VE DU LIEU                    │
+   │ NÊN Ở DATABASE — BẤT BIẾN VỀ DỮ LIỆU                    │
    │   • Rang buoc: NOT NULL, CHECK, UNIQUE, FOREIGN KEY     │
    │   • Kiểu dữ liệu đúng (đừng TEXT cho mọi thứ)           │
    │   • Cach ly tenant (Row Level Security)                 │
    │   → VÌ: chúng KHÔNG THỂ bị bỏ qua, kể cả khi ứng dụng   │
    │     có bug, hoặc khi có ứng dụng THỨ HAI ghi vào        │
    ├─────────────────────────────────────────────────────────┤
-   │ NEN O UNG DUNG — QUY TAC NGHIEP VU                      │
+   │ NÊN Ở ỨNG DỤNG — QUY TẮC NGHIỆP VỤ                      │
    │   • Quy trình, luồng trạng thái                          │
    │   • Tinh toan gia, khuyen mai                            │
    │   • Goi dich vu ngoai                                    │
@@ -395,7 +395,7 @@ Chủ đề này được đào sâu ở [sql-interview/phase-6](../../sql-inter
    ✔ HOP: bo dem phi chuan hoa, ghi audit, cap nhat updated_at
      → những việc PHẢI luôn xảy ra, không được quên
 
-   ✘ KHONG HOP: logic nghiep vu phuc tap, goi dich vu ngoai
+   ✘ KHÔNG HỢP: logic nghiệp vụ phức tạp, gọi dịch vụ ngoài
      → logic ẨN, đọc code ứng dụng không thấy nó tồn tại
      → gây ra "hành vi ma thuật" rất khó gỡ
 ```
@@ -434,7 +434,7 @@ Dạng 3 an toàn nhất vì nó **không phải nguồn sự thật** — sai t
 Quy tắc bắt buộc:
 
 ```text
-   MOI cot phi chuan hoa PHAI di kem MOT TRUY VAN DOI SOAT.
+   MỖI cột phi chuẩn hoá PHẢI đi kèm MỘT TRUY VẤN ĐỐI SOÁT.
    Nếu không viết được truy vấn đối soát → đừng phi chuẩn hoá cột đó.
 ```
 

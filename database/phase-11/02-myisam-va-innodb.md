@@ -10,8 +10,8 @@ ROLLBACK;
 ```
 
 ```text
-   Bang dung InnoDB  →  ca hai lenh bi hoan tac.  Du lieu nguyen ven.  ✔
-   Bang dung MyISAM  →  ROLLBACK khong lam gi ca.  Tien da bi tru.     ✘
+   Bảng dùng InnoDB  →  cả hai lệnh bị hoàn tác.  Dữ liệu nguyên vẹn.  ✔
+   Bảng dùng MyISAM  →  ROLLBACK không làm gì cả.  Tiền đã bị trừ.     ✘
 ```
 
 Không có lỗi nào được báo. MySQL chỉ đưa ra một cảnh báo mà hầu như không ai đọc. Bài này giải thích vì sao, và vì sao MyISAM vẫn đáng học dù gần như không nên dùng nữa.
@@ -25,9 +25,9 @@ Không có lỗi nào được báo. MySQL chỉ đưa ra một cảnh báo mà 
 Mỗi bảng MyISAM là **ba file riêng biệt**:
 
 ```text
-   users.frm   →  dinh nghia cau truc bang (cot, kieu du lieu)
-   users.MYD   →  MyData — du lieu that
-   users.MYI   →  MyIndex — moi index
+   users.frm   →  định nghĩa cấu trúc bảng (cột, kiểu dữ liệu)
+   users.MYD   →  MyData — dữ liệu thật
+   users.MYI   →  MyIndex — mọi index
 ```
 
 Có thể **chép ba file này sang máy khác** và bảng hoạt động ngay. Đây từng là một ưu điểm lớn — sao lưu chỉ là chép file.
@@ -118,12 +118,12 @@ Nhưng đó chỉ là **cảnh báo**, không phải lỗi. Ứng dụng chạy 
 **Thiếu sót 2 — Chỉ có khoá mức bảng**
 
 ```text
-   MOT lenh UPDATE → khoa TOAN BANG
+   MỘT lệnh UPDATE → khoá TOÀN BẢNG
 
-   Ket qua: chi MOT nguoi ghi duoc tai mot thoi diem.
-   Voi 100 nguoi dung cung ghi:
-     → 99 nguoi xep hang
-     → thong luong ghi = thong luong cua MOT luong
+   Kết quả: chỉ MỘT người ghi được tại một thời điểm.
+   Với 100 người dùng cùng ghi:
+     → 99 người xếp hàng
+     → thông lượng ghi = thông lượng của MỘT luồng
 ```
 
 Đây là lý do MyISAM không dùng được cho tải ghi đồng thời, dù ghi tuần tự của nó rất nhanh.
@@ -241,15 +241,15 @@ Hai thành phần đáng nói riêng:
 
 ```ini
 # 1. Kich thuoc buffer pool — QUAN TRONG NHAT
-innodb_buffer_pool_size = 12G        # 50-75% RAM may
+innodb_buffer_pool_size = 12G        # 50-75% RAM máy
 
-# 2. Muc do ben vung khi commit
-innodb_flush_log_at_trx_commit = 1   # 1 = ACID day du (mac dinh)
-                                     # 2 = fsync moi giay, mat toi da 1s khi MAY chet
-                                     # 0 = nhanh nhat, mat toi da 1s ke ca khi MySQL chet
+# 2. Mức độ bền vững khi commit
+innodb_flush_log_at_trx_commit = 1   # 1 = ACID đầy đủ (mặc định)
+                                     # 2 = fsync mỗi giây, mất tối đa 1s khi MÁY chết
+                                     # 0 = nhanh nhất, mất tối đa 1s kể cả khi MySQL chết
 
-# 3. Phuong thuc ghi
-innodb_flush_method = O_DIRECT       # bo qua cache cua he dieu hanh
+# 3. Phương thức ghi
+innodb_flush_method = O_DIRECT       # bỏ qua cache của hệ điều hành
                                      # → tranh cache HAI LAN (buffer pool + OS)
 ```
 
@@ -315,7 +315,7 @@ SELECT 'innodb', val FROM t_innodb;
 | engine | val  |
 +--------+------+
 | myisam |  999 |    ← ROLLBACK BI BO QUA
-| innodb |  100 |    ← hoan tac dung
+| innodb |  100 |    ← hoàn tác đúng
 +--------+------+
 ```
 
@@ -326,13 +326,13 @@ SELECT 'innodb', val FROM t_innodb;
 ```sql
 START TRANSACTION;
 UPDATE t_innodb SET val = 1 WHERE id = 1;
--- giu nguyen
+-- giữ nguyên
 ```
 
 **Phiên B:**
 
 ```sql
-INSERT INTO t_innodb VALUES (2, 200);   -- CHAY NGAY, khong bi chan
+INSERT INTO t_innodb VALUES (2, 200);   -- CHẠY NGAY, không bị chặn
 ```
 
 Bây giờ với MyISAM:
@@ -346,7 +346,7 @@ LOCK TABLES t_myisam WRITE;
 **Phiên B:**
 
 ```sql
-SELECT * FROM t_myisam;   -- BI CHAN — ke ca lenh DOC
+SELECT * FROM t_myisam;   -- BỊ CHẶN — kể cả lệnh ĐỌC
 ```
 
 ### Thí nghiệm 3 — `COUNT(*)`
@@ -355,14 +355,14 @@ SELECT * FROM t_myisam;   -- BI CHAN — ke ca lenh DOC
 INSERT INTO t_myisam SELECT n, n FROM
   (SELECT ROW_NUMBER() OVER () AS n FROM information_schema.columns
    LIMIT 1000000) x;
--- tuong tu cho t_innodb
+-- tương tự cho t_innodb
 
 SELECT BENCHMARK(1, (SELECT COUNT(*) FROM t_myisam));
 SELECT BENCHMARK(1, (SELECT COUNT(*) FROM t_innodb));
 ```
 
 ```text
-   MyISAM :  0,00 sec   (doc metadata)
+   MyISAM :  0,00 sec   (đọc metadata)
    InnoDB :  0,18 sec   (quet index)
 ```
 
@@ -380,7 +380,7 @@ Con số này là ước lượng (sai số có thể tới vài chục phần t
 ## Chuyển bảng từ MyISAM sang InnoDB
 
 ```sql
--- Tim moi bang con dung MyISAM
+-- Tìm mọi bảng còn dùng MyISAM
 SELECT table_schema, table_name, engine,
        ROUND(data_length/1024/1024) AS data_mb
 FROM information_schema.tables
