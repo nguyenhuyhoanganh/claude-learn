@@ -9,16 +9,16 @@ PostgreSQL là **đa tiến trình**, không phải đa luồng:
 ```text
    ┌──────────────────────────────────────────────────────────────┐
    │  POSTMASTER  (tien trinh cha)                                │
-   │   • lang nghe cong 5432                                      │
-   │   • fork() mot tien trinh con cho MOI ket noi                │
-   │   • khoi dong va giam sat cac tien trinh nen                 │
+   │   • lắng nghe cổng 5432                                      │
+   │   • fork() một tiến trình con cho MỖI kết nối                │
+   │   • khởi động và giám sát các tiến trình nền                 │
    └──────────┬───────────────────────────────────────────────────┘
               │
      ┌────────┼────────────────────────────────────────────┐
      ▼        ▼                                            ▼
    ┌──────┐ ┌──────┐                              ┌─────────────────┐
    │BACKEND│ │BACKEND│  ... 1 tien trinh          │ TIEN TRINH NEN  │
-   │ #1   │ │ #2   │      moi ket noi             ├─────────────────┤
+   │ #1   │ │ #2   │      mỗi kết nối             ├─────────────────┤
    └──────┘ └──────┘                              │ • checkpointer  │
                                                   │ • background    │
                                                   │   writer        │
@@ -92,18 +92,18 @@ ls -la /var/lib/postgresql/data/
 ```
 
 ```text
-base/              ← DU LIEU THAT (moi database mot thu muc)
-global/            ← catalog dung chung toan cum (pg_database, pg_authid)
+base/              ← DỮ LIỆU THẬT (mỗi database một thư mục)
+global/            ← catalog dùng chung toàn cụm (pg_database, pg_authid)
 pg_wal/            ← file WAL
-pg_xact/           ← trang thai commit cua tung transaction
-pg_multixact/      ← khoa nhieu transaction tren mot dong
+pg_xact/           ← trạng thái commit của từng transaction
+pg_multixact/      ← khoá nhiều transaction trên một dòng
 pg_subtrans/       ← sub-transaction (SAVEPOINT)
-pg_tblspc/         ← lien ket toi cac tablespace ngoai
-pg_stat/           ← thong ke luu ben
-pg_logical/        ← trang thai nhan ban logic
+pg_tblspc/         ← liên kết tới các tablespace ngoài
+pg_stat/           ← thống kê lưu bền
+pg_logical/        ← trạng thái nhân bản logic
 postgresql.conf    ← cau hinh chinh
-pg_hba.conf        ← quy tac xac thuc
-postmaster.pid     ← PID va thong tin tien trinh dang chay
+pg_hba.conf        ← quy tắc xác thực
+postmaster.pid     ← PID và thông tin tiến trình đang chạy
 ```
 
 ### Tìm file của một bảng cụ thể
@@ -117,8 +117,8 @@ SELECT pg_relation_filepath('orders');
 ----------------------
  base/16384/24576
       ▲     ▲
-      │     └ OID cua bang (filenode)
-      └ OID cua database
+      │     └ OID của bảng (filenode)
+      └ OID của database
 ```
 
 ```bash
@@ -135,13 +135,13 @@ ls -la /var/lib/postgresql/data/base/16384/24576*
 Bốn file, mỗi cái một vai trò:
 
 ```text
-   24576       →  du lieu chinh.  Toi da 1 GB moi file.
-   24576.1     →  phan tiep theo (bang 1,7 GB → hai file)
-   24576_fsm   →  FREE SPACE MAP: page nao con cho trong
-                  → INSERT dung de tim cho nhanh
-   24576_vm    →  VISIBILITY MAP: page nao "moi dong deu nhin thay duoc"
-                  → INDEX ONLY SCAN dua vao day  ← nho [phase-4 bai 2]
-                  → VACUUM cung dua vao day de bo qua page sach
+   24576       →  dữ liệu chính.  Tối đa 1 GB mỗi file.
+   24576.1     →  phần tiếp theo (bảng 1,7 GB → hai file)
+   24576_fsm   →  FREE SPACE MAP: page nào còn chỗ trống
+                  → INSERT dùng để tìm chỗ nhanh
+   24576_vm    →  VISIBILITY MAP: page nào "mọi dòng đều nhìn thấy được"
+                  → INDEX ONLY SCAN dựa vào đây  ← nhớ [phase-4 bài 2]
+                  → VACUUM cũng dựa vào đây để bỏ qua page sạch
 ```
 
 Giới hạn 1 GB mỗi file là chủ đích: nó tương thích với các hệ tập tin cũ có giới hạn 2 GB, và làm việc sao chép/di chuyển dễ hơn.
@@ -149,15 +149,15 @@ Giới hạn 1 GB mỗi file là chủ đích: nó tương thích với các h�
 ### Vì sao `_vm` quan trọng đến vậy
 
 ```text
-   Index KHONG luu thong tin MVCC.
-   → Index Only Scan phai kiem tra dong con song khong
+   Index KHÔNG lưu thông tin MVCC.
+   → Index Only Scan phải kiểm tra dòng còn sống không
 
-   Visibility map cho phep TRA LOI MA KHONG VAO HEAP:
-     bit bat  →  "moi dong trong page nay deu nhin thay duoc" → tin index
-     bit tat  →  phai vao heap kiem tra
+   Visibility map cho phép TRẢ LỜI MÀ KHÔNG VÀO HEAP:
+     bit bật  →  "mọi dòng trong page này đều nhìn thấy được" → tin index
+     bit tắt  →  phải vào heap kiểm tra
 
-   CHI `VACUUM` moi bat bit do.
-   → Vua ghi nhieu ma chua VACUUM → Heap Fetches cao → Index Only Scan mat tac dung
+   CHỈ `VACUUM` mới bật bit đó.
+   → Vừa ghi nhiều mà chưa VACUUM → Heap Fetches cao → Index Only Scan mất tác dụng
 ```
 
 ---
@@ -165,28 +165,28 @@ Giới hạn 1 GB mỗi file là chủ đích: nó tương thích với các h�
 ## Bố cục bộ nhớ
 
 ```text
-   ┌─ BO NHO DUNG CHUNG (moi tien trinh deu thay) ─────────────┐
+   ┌─ BỘ NHỚ DÙNG CHUNG (mọi tiến trình đều thấy) ─────────────┐
    │                                                          │
-   │  shared_buffers            (mac dinh 128 MB → dat 25% RAM)│
-   │    └ cache page du lieu va index                         │
+   │  shared_buffers            (mặc định 128 MB → đặt 25% RAM)│
+   │    └ cache page dữ liệu và index                         │
    │                                                          │
    │  wal_buffers               (mac dinh 1/32 shared_buffers) │
-   │    └ dem WAL truoc khi ghi xuong dia                     │
+   │    └ đệm WAL trước khi ghi xuống đĩa                     │
    │                                                          │
-   │  Bang khoa, bang tien trinh, thong ke                    │
+   │  Bảng khoá, bảng tiến trình, thống kê                    │
    └──────────────────────────────────────────────────────────┘
 
-   ┌─ BO NHO RIENG (MOI KET NOI mot ban) ─────────────────────┐
+   ┌─ BỘ NHỚ RIÊNG (MỖI KẾT NỐI một bản) ─────────────────────┐
    │                                                          │
    │  work_mem            (mac dinh 4 MB)                     │
-   │    └ sap xep, bang bam                                   │
-   │    ⚠ MOI THAO TAC, MOI KET NOI — khong phai tong         │
+   │    └ sắp xếp, bảng băm                                   │
+   │    ⚠ MỖI THAO TÁC, MỖI KẾT NỐI — không phải tổng         │
    │                                                          │
    │  maintenance_work_mem (mac dinh 64 MB)                   │
    │    └ CREATE INDEX, VACUUM, ALTER TABLE                   │
    │                                                          │
    │  temp_buffers        (mac dinh 8 MB)                     │
-   │    └ bang tam                                            │
+   │    └ bảng tạm                                            │
    └──────────────────────────────────────────────────────────┘
 ```
 
@@ -195,11 +195,11 @@ Giới hạn 1 GB mỗi file là chủ đích: nó tương thích với các h�
 Đây là tham số gây sự cố hết bộ nhớ nhiều nhất:
 
 ```text
-   `work_mem` KHONG phai gioi han tong.
-   No la gioi han cho MOI THAO TAC SAP XEP/BAM, trong MOI KET NOI.
+   `work_mem` KHÔNG phải giới hạn tổng.
+   Nó là giới hạn cho MỖI THAO TÁC SẮP XẾP/BĂM, trong MỖI KẾT NỐI.
 
-   Mot truy van co 4 phep sap xep + 3 phep hash join = 7 thao tac.
-   50 ket noi cung chay truy van do:
+   Một truy vấn có 4 phép sắp xếp + 3 phép hash join = 7 thao tác.
+   50 kết nối cùng chạy truy vấn đó:
 
       50 × 7 × work_mem
 
@@ -211,7 +211,7 @@ Cách an toàn: giữ mặc định thấp, nâng **theo từng truy vấn**:
 
 ```sql
 BEGIN;
-SET LOCAL work_mem = '512MB';     -- chi cho truy van bao cao nay
+SET LOCAL work_mem = '512MB';     -- chỉ cho truy vấn báo cáo này
 SELECT ... ORDER BY ...;
 COMMIT;
 ```
@@ -231,27 +231,27 @@ FROM pg_stat_database WHERE temp_files > 0 ORDER BY temp_bytes DESC;
 Và trong `EXPLAIN`:
 
 ```text
-Sort Method: external merge  Disk: 27912kB     ← TRAN RA DIA, work_mem khong du
-Sort Method: quicksort  Memory: 4218kB         ← vua trong RAM, tot
+Sort Method: external merge  Disk: 27912kB     ← TRÀN RA ĐĨA, work_mem không đủ
+Sort Method: quicksort  Memory: 4218kB         ← vừa trong RAM, tốt
 ```
 
 ### `shared_buffers` — vì sao chỉ 25%?
 
 ```text
-   PostgreSQL DUA VAO CACHE CUA HE DIEU HANH nhu mot lop thu hai.
-   Dat shared_buffers qua cao (> 40%) gay CACHE HAI LAN:
-     cung mot page nam ca trong shared_buffers LAN trong page cache cua HDH
+   PostgreSQL DỰA VÀO CACHE CỦA HỆ ĐIỀU HÀNH như một lớp thứ hai.
+   Đặt shared_buffers quá cao (> 40%) gây CACHE HAI LẦN:
+     cùng một page nằm cả trong shared_buffers LẪN trong page cache của HĐH
    → lang phi RAM
 
-   MySQL InnoDB thi nguoc lai: dat 50-75% VA dung O_DIRECT
-   de BO QUA cache HDH hoan toan.
+   MySQL InnoDB thì ngược lại: đặt 50-75% VÀ dùng O_DIRECT
+   để BỎ QUA cache HĐH hoàn toàn.
 ```
 
 Đây là khác biệt thiết kế, không phải một bên đúng một bên sai.
 
 ```sql
-ALTER SYSTEM SET shared_buffers = '8GB';           -- 25% cua 32 GB
-ALTER SYSTEM SET effective_cache_size = '24GB';    -- 75% — chi la GOI Y cho planner
+ALTER SYSTEM SET shared_buffers = '8GB';           -- 25% của 32 GB
+ALTER SYSTEM SET effective_cache_size = '24GB';    -- 75% — chỉ là GỢI Ý cho planner
 ```
 
 `effective_cache_size` **không cấp phát gì cả** — nó chỉ nói với planner "khoảng ngần này dữ liệu có thể đang nằm trong cache", để planner ước lượng chi phí index scan chính xác hơn.
@@ -262,31 +262,31 @@ ALTER SYSTEM SET effective_cache_size = '24GB';    -- 75% — chi la GOI Y cho p
 
 ```text
    ┌─ 1. KET NOI ────────────────────────────────────────────────┐
-   │  postmaster nhan ket noi → fork() mot backend moi           │
-   │  → 1-5 ms, va ~5-10 MB RAM                                  │
+   │  postmaster nhận kết nối → fork() một backend mới           │
+   │  → 1-5 ms, và ~5-10 MB RAM                                  │
    └────────────────────────────┬────────────────────────────────┘
    ┌─ 2. PARSER ────────────────▼────────────────────────────────┐
    │  Kiem tra cu phap → cay cu phap                             │
-   │  Tra catalog: bang co ton tai? cot co dung kieu?            │
+   │  Tra catalog: bảng có tồn tại? cột có đúng kiểu?            │
    └────────────────────────────┬────────────────────────────────┘
    ┌─ 3. REWRITER ──────────────▼────────────────────────────────┐
-   │  Thay VIEW bang dinh nghia cua no                           │
-   │  Ap dung quy tac RULE, va dieu kien Row Level Security      │
+   │  Thay VIEW bằng định nghĩa của nó                           │
+   │  Áp dụng quy tắc RULE, và điều kiện Row Level Security      │
    └────────────────────────────┬────────────────────────────────┘
    ┌─ 4. PLANNER ───────────────▼────────────────────────────────┐
-   │  Doc pg_statistic → uoc luong so dong                       │
-   │  Sinh cac phuong an, tinh cost, chon cai re nhat            │
-   │  → day la buoc `EXPLAIN` cho ban xem                        │
+   │  Đọc pg_statistic → ước lượng số dòng                       │
+   │  Sinh các phương án, tính cost, chọn cái rẻ nhất            │
+   │  → đây là bước `EXPLAIN` cho bạn xem                        │
    └────────────────────────────┬────────────────────────────────┘
    ┌─ 5. EXECUTOR ──────────────▼────────────────────────────────┐
    │  Chay cay ke hoach                                          │
-   │  Xin page tu shared_buffers → khong co thi doc dia          │
-   │  Kiem tra MVCC: phien ban nay co thuoc snapshot cua toi?    │
-   │  Lay khoa neu can ghi                                       │
-   │  Ghi WAL neu co thay doi                                    │
+   │  Xin page từ shared_buffers → không có thì đọc đĩa          │
+   │  Kiểm tra MVCC: phiên bản này có thuộc snapshot của tôi?    │
+   │  Lấy khoá nếu cần ghi                                       │
+   │  Ghi WAL nếu có thay đổi                                    │
    └────────────────────────────┬────────────────────────────────┘
                                 ▼
-                       Tra ket qua qua giao thuc
+                       Trả kết quả qua giao thức
 ```
 
 Bước 3 chứa một chi tiết ít người biết: **Row Level Security được áp ở tầng rewriter**, nghĩa là điều kiện chính sách được **thêm vào câu truy vấn** trước khi lập kế hoạch — nên nó cũng ảnh hưởng tới kế hoạch được chọn.
@@ -299,13 +299,13 @@ Bước 3 chứa một chi tiết ít người biết: **Row Level Security đư
 CREATE TABLESPACE fast_ssd LOCATION '/mnt/nvme/pgdata';
 CREATE TABLESPACE cold_hdd LOCATION '/mnt/hdd/pgdata';
 
--- Bang nong tren NVMe
+-- Bảng nóng trên NVMe
 ALTER TABLE orders SET TABLESPACE fast_ssd;
 
--- Du lieu cu tren HDD re
+-- Dữ liệu cũ trên HDD rẻ
 ALTER TABLE events_2024 SET TABLESPACE cold_hdd;
 
--- Index tren o rieng
+-- Index trên ổ riêng
 CREATE INDEX idx_orders_user ON orders (user_id) TABLESPACE fast_ssd;
 ```
 
@@ -313,24 +313,24 @@ Ba cách dùng thực tế:
 
 ```text
    1. PHAN TANG LUU TRU
-      Manh gan day → NVMe;  manh cu → HDD
-      → ket hop voi partitioning ([phase-6])
+      Mảnh gần đây → NVMe;  mảnh cũ → HDD
+      → kết hợp với partitioning ([phase-6])
 
    2. TACH WAL RA O RIENG
-      WAL la ghi TUAN TU lien tuc;  du lieu la ghi NGAU NHIEN
-      → de chung nhau thi chung tranh dau doc/hang doi I/O
+      WAL là ghi TUẦN TỰ liên tục;  dữ liệu là ghi NGẪU NHIÊN
+      → để chung nhau thì chúng tranh đầu đọc/hàng đợi I/O
 
    3. TACH INDEX KHOI DU LIEU
-      Trong mot truy van, index va heap duoc doc GAN NHU DONG THOI
-      → o rieng cho phep song song that
+      Trong một truy vấn, index và heap được đọc GẦN NHƯ ĐỒNG THỜI
+      → ổ riêng cho phép song song thật
 ```
 
 Cảnh báo:
 
 ```text
-   ⚠ ALTER TABLE ... SET TABLESPACE KHOA BANG va CHEP TOAN BO du lieu.
-     Bang 500 GB → hang gio khong dung duoc.
-     → Lam trong cua so bao tri, hoac dung pg_repack --tablespace
+   ⚠ ALTER TABLE ... SET TABLESPACE KHOÁ BẢNG và CHÉP TOÀN BỘ dữ liệu.
+     Bảng 500 GB → hàng giờ không dùng được.
+     → Làm trong cửa sổ bảo trì, hoặc dùng pg_repack --tablespace
 ```
 
 ---
@@ -352,12 +352,12 @@ Cảnh báo:
 Hai lưu ý về bảng này:
 
 ```text
-   • `max_connections` cao KHONG phai lua chon tot ([phase-8 bai 3]).
-     Con so tren gia dinh CO connection pool phia truoc.
-     Khong co pool thi phai tinh lai theo (loi × 2) + so dia.
+   • `max_connections` cao KHÔNG phải lựa chọn tốt ([phase-8 bài 3]).
+     Con số trên giả định CÓ connection pool phía trước.
+     Không có pool thì phải tính lại theo (lõi × 2) + số đĩa.
 
-   • `work_mem` phai nhan voi (so ket noi × so thao tac moi truy van).
-     Con so tren la BAO THU co chu dich.
+   • `work_mem` phải nhân với (số kết nối × số thao tác mỗi truy vấn).
+     Con số trên là BẢO THỦ có chủ đích.
 ```
 
 ## Bẫy thường gặp

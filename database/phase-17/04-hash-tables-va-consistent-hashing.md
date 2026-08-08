@@ -5,7 +5,7 @@ Bảng băm là cấu trúc dữ liệu cơ bản nhất trong khoa học máy t
 ## Bảng băm hoạt động thế nào
 
 ```text
-   Ham bam h(khoa) → mot so → chia lay du cho so o → vi tri
+   Hàm băm h(khoá) → một số → chia lấy dư cho số ô → vị trí
 
    h("user:42")  = 8842119  →  8842119 % 8 = 7  →  o 7
    h("user:88")  = 1204883  →  1204883 % 8 = 3  →  o 3
@@ -14,7 +14,7 @@ Bảng băm là cấu trúc dữ liệu cơ bản nhất trong khoa học máy t
    │ 0 │ 1 │ 2 │  user:88│ 4 │ 5 │ 6 │  user:42│
    └───┴───┴───┴─────────┴───┴───┴───┴─────────┘
 
-   → Tra cuu: O(1) — mot phep bam, mot lan truy cap
+   → Tra cứu: O(1) — một phép băm, một lần truy cập
 ```
 
 ### Va chạm — điều luôn xảy ra
@@ -24,19 +24,19 @@ Hai khoá khác nhau cho cùng một ô. Điều này **không tránh được**
 ```text
    PHUONG PHAP 1 — NOI CHUOI (chaining)
    ┌───┬───┬─────────────────────────┐
-   │ 0 │ 1 │ user:42 → user:99 → ... │  ← danh sach lien ket trong mot o
+   │ 0 │ 1 │ user:42 → user:99 → ... │  ← danh sách liên kết trong một ô
    └───┴───┴─────────────────────────┘
-   ✔ Don gian, xoa de
-   ✘ Con tro tan mat → kem thanh thoi CPU cache
+   ✔ Đơn giản, xoá dễ
+   ✘ Con trỏ tản mát → kém thân thiện với CPU cache
 
    PHUONG PHAP 2 — DIA CHI MO (open addressing)
-   o day roi → thu o ke tiep
+   ô đầy rồi → thử ô kế tiếp
    ┌───┬─────────┬─────────┬───┐
-   │ 0 │ user:42 │ user:99 │ 3 │  ← user:99 le ra o o 1, bi day sang o 2
+   │ 0 │ user:42 │ user:99 │ 3 │  ← user:99 lẽ ra ở ô 1, bị đẩy sang ô 2
    └───┴─────────┴─────────┴───┘
-   ✔ Du lieu lien tuc → CPU cache rat tot
-   ✘ Xoa phuc tap (phai danh dau "bia mo")
-   ✘ Xuong cap nhanh khi bang gan day
+   ✔ Dữ liệu liên tục → CPU cache rất tốt
+   ✘ Xoá phức tạp (phải đánh dấu "bia mộ")
+   ✘ Xuống cấp nhanh khi bảng gần đầy
 ```
 
 Java `HashMap` dùng nối chuỗi (và chuyển sang cây đỏ-đen khi chuỗi quá dài); Python `dict` và Go `map` dùng biến thể của địa chỉ mở.
@@ -46,13 +46,13 @@ Java `HashMap` dùng nối chuỗi (và chuyển sang cây đỏ-đen khi chuỗ
 ```text
    he_so_tai = so_phan_tu / so_o
 
-   0,5  →  it va cham, nhanh, ton bo nho
-   0,75 →  can bang (mac dinh cua Java HashMap)
-   0,9  →  tiet kiem bo nho, nhieu va cham
-   1,0+ →  voi dia chi mo: XUONG CAP THAM HAI
+   0,5  →  ít va chạm, nhanh, tốn bộ nhớ
+   0,75 →  cân bằng (mặc định của Java HashMap)
+   0,9  →  tiết kiệm bộ nhớ, nhiều va chạm
+   1,0+ →  với địa chỉ mở: XUỐNG CẤP THẢM HẠI
 
-   Vuot nguong → PHONG TO: cap bang moi GAP DOI, BAM LAI MOI PHAN TU
-   → O(n), va gay KHUNG dot ngot
+   Vượt ngưỡng → PHÓNG TO: cấp bảng mới GẤP ĐÔI, BĂM LẠI MỌI PHẦN TỬ
+   → O(n), và gây KHỰNG đột ngột
 ```
 
 Đây là lý do các hệ nhạy cảm với độ trễ dùng **phóng to tăng dần** (rehash dần dần qua nhiều thao tác) thay vì phóng to một lần — Redis làm đúng như vậy.
@@ -76,17 +76,17 @@ Hash Join  (cost=3854.00..28471.11 rows=1000000 width=48)
 
 ```text
    CACH LAM:
-     1. Quet bang NHO HON (users) → dung BANG BAM trong RAM
-     2. Quet bang LON HON (orders) → moi dong, tra bang bam
+     1. Quét bảng NHỎ HƠN (users) → dựng BẢNG BĂM trong RAM
+     2. Quét bảng LỚN HƠN (orders) → mỗi dòng, tra bảng băm
    → O(n + m) thay vi O(n × m)
 ```
 
 Ba dòng cần đọc trong kế hoạch:
 
 ```text
-   Buckets: 131072       → so o cua bang bam
-   Batches: 1            → CHI MOT lo → vua trong work_mem  ✔
-   Memory Usage: 6242kB  → bang bam chiem 6 MB
+   Buckets: 131072       → số ô của bảng băm
+   Batches: 1            → CHỈ MỘT lô → vừa trong work_mem  ✔
+   Memory Usage: 6242kB  → bảng băm chiếm 6 MB
 ```
 
 Khi `Batches > 1` thì có vấn đề:
@@ -94,8 +94,8 @@ Khi `Batches > 1` thì có vấn đề:
 ```text
 Batches: 16  Memory Usage: 4096kB
         ▲
-   work_mem KHONG DU → phai chia 16 lo, GHI RA DIA roi doc lai
-   → cham hon nhieu
+   work_mem KHÔNG ĐỦ → phải chia 16 lô, GHI RA ĐĨA rồi đọc lại
+   → chậm hơn nhiều
 ```
 
 Chữa: tăng `work_mem` **cho truy vấn đó** (`SET LOCAL`), không phải toàn cục — nhớ bẫy ở [phase-17 bài 2](01-luu-tru-du-lieu-va-kien-truc-postgres.md).
@@ -120,7 +120,7 @@ Thực tế: **B-Tree gần như luôn là lựa chọn đúng**. Hash index ch�
 Với khoá rất dài, có cách tốt hơn cả hai:
 
 ```sql
--- Danh index tren BAM cua cot, thay vi tren chinh cot
+-- Đánh index trên BĂM của cột, thay vì trên chính cột
 CREATE INDEX idx_url_hash ON pages (md5(url));
 SELECT * FROM pages WHERE md5(url) = md5('https://rat/dai/...');
 ```
@@ -151,19 +151,19 @@ HashAggregate  (cost=22709.00..22709.03 rows=3 width=16)
 ## Vấn đề mà `% N` gây ra
 
 ```text
-   3 MAY:  vi_tri = hash(khoa) % 3
+   3 MÁY:  vi_tri = hash(khoa) % 3
 
    key='a' → 100 % 3 = 1  →  MAY 1
    key='b' → 101 % 3 = 2  →  MAY 2
 
-   THEM MOT MAY → hash(khoa) % 4
+   THÊM MỘT MÁY → hash(khoa) % 4
 
    key='a' → 100 % 4 = 0  →  MAY 0   DOI CHO ✘
    key='b' → 101 % 4 = 1  →  MAY 1   DOI CHO ✘
 
-   → Di tu N len N+1 may: khoang N/(N+1) du lieu PHAI DI CHUYEN
-      3 →  4 may:  75%
-      9 → 10 may:  90%
+   → Đi từ N lên N+1 máy: khoảng N/(N+1) dữ liệu PHẢI DI CHUYỂN
+      3 →  4 máy:  75%
+      9 → 10 máy:  90%
 ```
 
 Với 2 TB dữ liệu, chuyển 90% nghĩa là **1,8 TB đi qua mạng** trong khi hệ thống vẫn phải phục vụ. Với cache, nó nghĩa là **mất gần hết cache cùng lúc** — và database bên dưới lãnh trọn cú sốc.
@@ -185,41 +185,41 @@ Với 2 TB dữ liệu, chuyển 90% nghĩa là **1,8 TB đi qua mạng** trong 
                  └─────────────┘
 
    DINH TUYEN:
-     bam khoa → duoc mot diem tren vong
-     → di THEO CHIEU KIM DONG HO toi may DAU TIEN gap duoc
+     băm khoá → được một điểm trên vòng
+     → đi THEO CHIỀU KIM ĐỒNG HỒ tới máy ĐẦU TIÊN gặp được
 ```
 
 Thêm một máy:
 
 ```text
-   TRUOC                     SAU khi them MAY D
+   TRƯỚC                     SAU khi thêm MÁY D
    ─────                     ──────────────────
      A                          A
      ●                          ●
-                                     ● D   ← chen vao day
+                                     ● D   ← chèn vào đây
      ● B                        ● B
      ● C                        ● C
 
-   Chi khoa nam GIUA C VA D phai chuyen sang D.
-   Moi khoa khac GIU NGUYEN.
+   Chỉ khoá nằm GIỮA C VÀ D phải chuyển sang D.
+   Mọi khoá khác GIỮ NGUYÊN.
 
-   → ~1/N du lieu di chuyen, thay vi N/(N+1)
+   → ~1/N dữ liệu di chuyển, thay vì N/(N+1)
 ```
 
 ## Nút ảo — chữa phân bố lệch
 
 ```text
-   VAN DE: voi it may, chung co the roi vao vi tri lech
-        A ●●  B          → C phai ganh 80% vong
+   VẤN ĐỀ: với ít máy, chúng có thể rơi vào vị trí lệch
+        A ●●  B          → C phải gánh 80% vòng
              ↑
         ● C
 
-   GIAI: moi may xuat hien 100-200 LAN tren vong,
-         o cac vi tri bam khac nhau
+   GIẢI: mỗi máy xuất hiện 100-200 LẦN trên vòng,
+         ở các vị trí băm khác nhau
 
         A₁ B₃ C₂ A₇ C₉ B₁ A₄ C₅ B₈ ...
-   → phan bo xap xi deu
-   → khi them/bot may, phan chuyen cung duoc RAI DEU
+   → phân bố xấp xỉ đều
+   → khi thêm/bớt máy, phần chuyển cũng được RẢI ĐỀU
 ```
 
 Con số thực tế: **150-256 nút ảo mỗi máy vật lý** cho độ lệch dưới vài phần trăm.
@@ -242,7 +242,7 @@ class VongBam:
         for i in range(self.so_nut_ao):
             vt = self._bam(f"{ten}#{i}")
             self.vong[vt] = ten
-            bisect.insort(self.vi_tri, vt)      # giu danh sach da sap
+            bisect.insort(self.vi_tri, vt)      # giữ danh sách đã sắp
 
     def xoa_may(self, ten):
         for i in range(self.so_nut_ao):
@@ -256,7 +256,7 @@ class VongBam:
         h = self._bam(khoa)
         idx = bisect.bisect_right(self.vi_tri, h)    # TIM NHI PHAN — O(log n)
         if idx == len(self.vi_tri):
-            idx = 0                                  # vong lai dau
+            idx = 0                                  # vòng lại đầu
         return self.vong[self.vi_tri[idx]]
 ```
 
@@ -271,13 +271,13 @@ for m in ['may1', 'may2', 'may3']:
 khoa = [f"user:{i}" for i in range(100_000)]
 truoc = {k: vong.tim_may(k) for k in khoa}
 
-# Phan bo truoc khi them
+# Phân bố trước khi thêm
 from collections import Counter
-print("Truoc:", Counter(truoc.values()))
+print("Trước:", Counter(truoc.values()))
 
 vong.them_may('may4')
 doi_cho = sum(1 for k in khoa if vong.tim_may(k) != truoc[k])
-print(f"Phai di chuyen: {doi_cho/len(khoa)*100:.1f}%")
+print(f"Phải di chuyển: {doi_cho/len(khoa)*100:.1f}%")
 print("Sau  :", Counter(vong.tim_may(k) for k in khoa))
 ```
 
@@ -288,9 +288,9 @@ Sau  : Counter({'may2': 25883, 'may4': 24812, 'may1': 24771, 'may3': 24534})
 ```
 
 ```text
-   `% N`        :  75,0% phai di chuyen
-   Vong bam     :  24,8% phai di chuyen     → IT HON 3 LAN
-   Do lech phan bo:  duoi 3%                → chap nhan duoc
+   `% N`        :  75,0% phải di chuyển
+   Vòng băm     :  24,8% phải di chuyển     → ÍT HƠN 3 LẦN
+   Độ lệch phân bố:  dưới 3%                → chấp nhận được
 ```
 
 So sánh với `% N`:
@@ -300,11 +300,11 @@ def modulo(khoa, n):
     return int(hashlib.md5(khoa.encode()).hexdigest()[:8], 16) % n
 
 doi = sum(1 for k in khoa if modulo(k, 3) != modulo(k, 4))
-print(f"Modulo — phai di chuyen: {doi/len(khoa)*100:.1f}%")
+print(f"Modulo — phải di chuyển: {doi/len(khoa)*100:.1f}%")
 ```
 
 ```text
-Modulo — phai di chuyen: 74.9%
+Modulo — phải di chuyển: 74.9%
 ```
 
 ## Nó được dùng ở đâu
@@ -322,30 +322,30 @@ Modulo — phai di chuyen: 74.9%
 ### Redis Cluster — vì sao 16.384 khe
 
 ```text
-   Thay vi vong lien tuc, Redis dung 16.384 KHE ROI RAC:
-     khe = CRC16(khoa) mod 16384
+   Thay vì vòng liên tục, Redis dùng 16.384 KHE RỜI RẠC:
+     khe = CRC16(khoá) mod 16384
 
-   Vi sao con so nay?
-     • DU NHO de bang khe vua trong goi tin trao doi giua cac nut
-       (16.384 bit = 2 KB dang bitmap)
-     • DU LON de chia min cho hang tram nut
+   Vì sao con số này?
+     • ĐỦ NHỎ để bảng khe vừa trong gói tin trao đổi giữa các nút
+       (16.384 bit = 2 KB dạng bitmap)
+     • ĐỦ LỚN để chia mịn cho hàng trăm nút
 
-   Uu diem so voi vong lien tuc:
-     → di chuyen theo TUNG KHE, kiem soat duoc tung buoc
-     → biet chinh xac dang di chuyen cai gi
+   Ưu điểm so với vòng liên tục:
+     → di chuyển theo TỪNG KHE, kiểm soát được từng bước
+     → biết chính xác đang di chuyển cái gì
 ```
 
 ### Cassandra — nút ảo
 
 ```yaml
 # cassandra.yaml
-num_tokens: 256      # so nut ao moi nut vat ly
+num_tokens: 256      # số nút ảo mỗi nút vật lý
 ```
 
 ```text
-   256 nut ao cho phan bo rat deu,
-   va khi them nut moi, du lieu duoc keo ve TU NHIEU NUT CUNG LUC
-   → nhanh hon nhieu so voi keo tu mot nut
+   256 nút ảo cho phân bố rất đều,
+   và khi thêm nút mới, dữ liệu được kéo về TỪ NHIỀU NÚT CÙNG LÚC
+   → nhanh hơn nhiều so với kéo từ một nút
 ```
 
 ## Băm nhất quán có giới hạn ràng buộc
@@ -353,11 +353,11 @@ num_tokens: 256      # so nut ao moi nut vat ly
 Biến thể quan trọng: nếu chỉ dùng vòng băm thuần, một máy có thể bị dồn quá tải (khoá nóng). **Bounded-load consistent hashing** thêm một trần:
 
 ```text
-   Neu may dich da vuot (1 + ε) × tai_trung_binh
-     → di tiep theo chieu kim dong ho toi may ke tiep
+   Nếu máy đích đã vượt (1 + ε) × tai_trung_binh
+     → đi tiếp theo chiều kim đồng hồ tới máy kế tiếp
 
-   → dam bao khong may nao qua tai qua ε
-   → doi lai: mot so khoa khong o "dung" may cua no
+   → đảm bảo không máy nào quá tải quá ε
+   → đổi lại: một số khoá không ở "đúng" máy của nó
 ```
 
 Google dùng biến thể này trong hạ tầng cân bằng tải của họ.
