@@ -11,9 +11,9 @@ Bài cuối của phase 17 gồm hai phần: khung tư duy để chọn giữa h
 ```text
    BI QUAN (pessimistic)                LAC QUAN (optimistic)
    ═════════════════════                ═════════════════════
-   "Chac chan se co nguoi tranh."       "Chac chang ai tranh dau."
-   → KHOA TRUOC khi lam                 → cu lam, KIEM TRA luc commit
-   → nguoi khac CHO                     → neu co tranh thi HUY va THU LAI
+   "Chắc chắn sẽ có người tranh."       "Chắc chẳng ai tranh đâu."
+   → KHOÁ TRƯỚC khi làm                 → cứ làm, KIỂM TRA lúc commit
+   → người khác CHỜ                     → nếu có tranh thì HUỶ và THỬ LẠI
 
    Chi phi: THOI GIAN CHO                Chi phi: LAM LAI VIEC DA LAM
 ```
@@ -24,18 +24,18 @@ Bài cuối của phase 17 gồm hai phần: khung tư duy để chọn giữa h
 
 ```sql
 BEGIN;
-SELECT * FROM seats WHERE id = 14 FOR UPDATE;   -- 🔒 khoa ngay
+SELECT * FROM seats WHERE id = 14 FOR UPDATE;   -- 🔒 khoá ngay
 -- ... kiem tra nghiep vu ...
 UPDATE seats SET is_booked = true WHERE id = 14;
-COMMIT;                                          -- 🔓 mo khoa
+COMMIT;                                          -- 🔓 mở khoá
 ```
 
 Biến thể hữu ích:
 
 ```sql
-SELECT ... FOR UPDATE NOWAIT;        -- that bai NGAY neu dang bi khoa
-SELECT ... FOR UPDATE SKIP LOCKED;   -- BO QUA dong dang bi khoa, lay dong khac
-SELECT ... FOR SHARE;                -- khoa doc: nguoi khac doc duoc, khong ghi duoc
+SELECT ... FOR UPDATE NOWAIT;        -- thất bại NGAY nếu đang bị khoá
+SELECT ... FOR UPDATE SKIP LOCKED;   -- BỎ QUA dòng đang bị khoá, lấy dòng khác
+SELECT ... FOR SHARE;                -- khoá đọc: người khác đọc được, không ghi được
 ```
 
 ### Lạc quan
@@ -45,27 +45,27 @@ ALTER TABLE seats ADD COLUMN version INT NOT NULL DEFAULT 0;
 ```
 
 ```python
-# Doc — KHONG khoa gi
+# Đọc — KHÔNG khoá gì
 cur.execute("SELECT is_booked, version FROM seats WHERE id = %s", (seat_id,))
 da_dat, phien_ban = cur.fetchone()
 if da_dat:
     raise GheDaCoNguoi()
 
-# ... logic nghiep vu co the DAI, khong giu khoa nao ...
+# ... logic nghiệp vụ có thể DÀI, không giữ khoá nào ...
 
-# Ghi — chi thanh cong neu KHONG AI sua trong luc do
+# Ghi — chỉ thành công nếu KHÔNG AI sửa trong lúc đó
 cur.execute("""UPDATE seats SET is_booked=true, version=version+1
                WHERE id=%s AND version=%s""", (seat_id, phien_ban))
 if cur.rowcount == 0:
-    raise XungDotPhienBan()      # → thu lai tu dau
+    raise XungDotPhienBan()      # → thử lại từ đầu
 ```
 
 Biến thể không cần cột thêm — dùng chính giá trị cũ:
 
 ```sql
 UPDATE inventory SET so_luong = so_luong - 1
- WHERE id = 7 AND so_luong = 10;      -- gia tri toi vua doc
--- rowcount = 0 → co nguoi da sua → thu lai
+ WHERE id = 7 AND so_luong = 10;      -- giá trị tôi vừa đọc
+-- rowcount = 0 → có người đã sửa → thử lại
 ```
 
 Cách này gọn hơn nhưng chỉ đúng khi giá trị không quay về đúng số cũ (bài toán ABA).
@@ -73,29 +73,29 @@ Cách này gọn hơn nhưng chỉ đúng khi giá trị không quay về đúng
 ## Chọn cái nào
 
 ```text
-   TI LE XUNG DOT = so lan xung dot / tong so thao tac
+   TỈ LỆ XUNG ĐỘT = số lần xung đột / tổng số thao tác
 
    < 5%   →  LAC QUAN
-             (khong ai phai cho, va hiem khi phai lam lai)
+             (không ai phải chờ, và hiếm khi phải làm lại)
 
    > 20%  →  BI QUAN
-             (lam lai qua nhieu con te hon la cho)
+             (làm lại quá nhiều còn tệ hơn là chờ)
 
-   5-20%  →  DO CA HAI, chon theo so lieu
+   5-20%  →  ĐO CẢ HAI, chọn theo số liệu
 ```
 
 Đo tỉ lệ xung đột thực tế:
 
 ```sql
--- PostgreSQL: dem so lan huy do xung dot serializable
+-- PostgreSQL: đếm số lần huỷ do xung đột serializable
 SELECT datname, conflicts, deadlocks FROM pg_stat_database;
 ```
 
 ```python
-# Hoac dem trong ung dung
+# Hoặc đếm trong ứng dụng
 so_thanh_cong = 0
 so_xung_dot   = 0
-# ... tang trong ham thu lai ...
+# ... tăng trong hàm thử lại ...
 print(f"Ti le xung dot: {so_xung_dot/(so_thanh_cong+so_xung_dot)*100:.1f}%")
 ```
 
@@ -126,7 +126,7 @@ def chay_co_thu_lai(ham, so_lan_toi_da=3):
         except XungDotPhienBan:
             if lan == so_lan_toi_da - 1:
                 raise
-            # backoff luy thua + nhieu ngau nhien
+            # backoff luỹ thừa + nhiễu ngẫu nhiên
             time.sleep((2 ** lan) * 0.05 * (1 + random.random()))
 ```
 
@@ -148,20 +148,20 @@ Bốn quy tắc (giống với thử lại sau deadlock ở [phase-8 bài 1](../
 ## Ba kiểu khoá dòng
 
 ```text
-   BANG `orders` co index tren `id`, cac gia tri: 10, 20, 30, 40
+   BẢNG `orders` có index trên `id`, các giá trị: 10, 20, 30, 40
 
    ┌────┬────────┬────┬────────┬────┬────────┬────┬────────┬────┐
    │ 10 │ khe    │ 20 │ khe    │ 30 │ khe    │ 40 │ khe    │ ∞  │
    └────┴────────┴────┴────────┴────┴────────┴────┴────────┴────┘
      ▲      ▲
-     │      └ KHOANG TRONG giua cac gia tri
-     └ ban ghi
+     │      └ KHOẢNG TRỐNG giữa các giá trị
+     └ bản ghi
 
-   1. RECORD LOCK   →  khoa DUNG mot ban ghi (vi du: 20)
-   2. GAP LOCK      →  khoa KHOANG TRONG (vi du: giua 20 va 30)
-                       → chan CHEN gia tri moi vao khoang do
-   3. NEXT-KEY LOCK →  RECORD + GAP LIEN TRUOC no
-                       = (10, 20]  — khoa ban ghi 20 VA khoang truoc no
+   1. RECORD LOCK   →  khoá ĐÚNG một bản ghi (ví dụ: 20)
+   2. GAP LOCK      →  khoá KHOẢNG TRỐNG (ví dụ: giữa 20 và 30)
+                       → chặn CHÈN giá trị mới vào khoảng đó
+   3. NEXT-KEY LOCK →  RECORD + GAP LIỀN TRƯỚC nó
+                       = (10, 20]  — khoá bản ghi 20 VÀ khoảng trước nó
 ```
 
 **Next-key lock là mặc định** ở mức `REPEATABLE READ` — và đó là lý do MySQL chặn được phantom read.
@@ -174,15 +174,15 @@ Bốn quy tắc (giống với thử lại sau deadlock ở [phase-8 bài 1](../
      Transaction B: INSERT INTO orders (id) VALUES (22);
      Transaction A: SELECT count(*) FROM orders WHERE id BETWEEN 15 AND 25;  → 2
 
-   PostgreSQL chan bang SNAPSHOT (loc bo dong sinh sau).
-   MySQL chan bang GAP LOCK (chan luon viec CHEN).
+   PostgreSQL chặn bằng SNAPSHOT (lọc bỏ dòng sinh sau).
+   MySQL chặn bằng GAP LOCK (chặn luôn việc CHÈN).
 ```
 
 ```sql
 -- Transaction A
 BEGIN;
 SELECT * FROM orders WHERE id BETWEEN 15 AND 25 FOR UPDATE;
--- → khoa cac khe: (10,20], (20,30]
+-- → khoá các khe: (10,20], (20,30]
 
 -- Transaction B
 INSERT INTO orders (id) VALUES (22);   -- ← BI CHAN
@@ -191,17 +191,17 @@ INSERT INTO orders (id) VALUES (22);   -- ← BI CHAN
 ## Cái bẫy: gap lock chặn nhiều hơn bạn nghĩ
 
 ```sql
--- Bang chi co id = 10, 20, 30, 40
+-- Bảng chỉ có id = 10, 20, 30, 40
 BEGIN;
-SELECT * FROM orders WHERE id = 25 FOR UPDATE;   -- KHONG CO dong nao khop!
+SELECT * FROM orders WHERE id = 25 FOR UPDATE;   -- KHÔNG CÓ dòng nào khớp!
 ```
 
 ```text
-   Ban tuong khong khoa gi ca vi khong co dong nao id = 25.
-   THUC TE: InnoDB khoa KHOANG TRONG (20, 30).
+   Bạn tưởng không khoá gì cả vì không có dòng nào id = 25.
+   THỰC TẾ: InnoDB khoá KHOẢNG TRỐNG (20, 30).
 
-   → MOI lenh INSERT voi id trong khoang (20, 30) DEU BI CHAN
-   → 21, 22, ..., 29 deu khong chen duoc
+   → MỌI lệnh INSERT với id trong khoảng (20, 30) ĐỀU BỊ CHẶN
+   → 21, 22, ..., 29 đều không chèn được
 ```
 
 Đây là nguồn của rất nhiều deadlock khó hiểu trên MySQL mà người quen PostgreSQL không lường trước.
@@ -209,12 +209,12 @@ SELECT * FROM orders WHERE id = 25 FOR UPDATE;   -- KHONG CO dong nao khop!
 ### Deadlock do gap lock
 
 ```text
-   Transaction A: SELECT * FROM t WHERE id = 25 FOR UPDATE;  → khoa khe (20,30)
-   Transaction B: SELECT * FROM t WHERE id = 27 FOR UPDATE;  → khoa khe (20,30)
-                  → GAP LOCK KHONG XUNG KHAC voi nhau, ca hai deu duoc
+   Transaction A: SELECT * FROM t WHERE id = 25 FOR UPDATE;  → khoá khe (20,30)
+   Transaction B: SELECT * FROM t WHERE id = 27 FOR UPDATE;  → khoá khe (20,30)
+                  → GAP LOCK KHÔNG XUNG KHẮC với nhau, cả hai đều được
 
-   Transaction A: INSERT INTO t VALUES (25);   → cho GAP LOCK cua B
-   Transaction B: INSERT INTO t VALUES (27);   → cho GAP LOCK cua A
+   Transaction A: INSERT INTO t VALUES (25);   → chờ GAP LOCK của B
+   Transaction B: INSERT INTO t VALUES (27);   → chờ GAP LOCK của A
    → DEADLOCK
 ```
 
@@ -227,11 +227,11 @@ SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ```
 
 ```text
-   O muc READ COMMITTED, InnoDB KHONG dung gap lock
-   (tru truong hop kiem tra khoa ngoai va khoa trung lap)
+   Ở mức READ COMMITTED, InnoDB KHÔNG dùng gap lock
+   (trừ trường hợp kiểm tra khoá ngoại và khoá trùng lặp)
 
-   ✔ It deadlock hon nhieu
-   ✔ Song song cao hon
+   ✔ Ít deadlock hơn nhiều
+   ✔ Song song cao hơn
    ✘ CO PHANTOM READ
 ```
 
@@ -240,12 +240,12 @@ SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ## Insert Intention Lock
 
 ```text
-   Mot dang gap lock dac biet, dat khi INSERT.
+   Một dạng gap lock đặc biệt, đặt khi INSERT.
 
-   Hai INSERT vao CUNG mot khe nhung KHAC gia tri
+   Hai INSERT vào CÙNG một khe nhưng KHÁC giá trị
    → KHONG chan nhau
 
-   INSERT 22 va INSERT 25, ca hai vao khe (20,30) → ca hai chay duoc  ✔
+   INSERT 22 và INSERT 25, cả hai vào khe (20,30) → cả hai chạy được  ✔
 ```
 
 Không có cơ chế này, mọi `INSERT` vào cùng một khoảng sẽ xếp hàng — và thông lượng chèn sẽ sụp.
@@ -263,10 +263,10 @@ SHOW VARIABLES LIKE 'innodb_autoinc_lock_mode';
 | **`2`** | **Xen kẽ** (mặc định từ 8.0) | Không khoá; **nhưng ID có thể không liên tiếp** |
 
 ```text
-   Che do 2 nhanh nhat, nhung:
-     ✘ ID sinh ra co the KHONG LIEN TIEP giua cac transaction
-     ✘ Voi nhan ban dang STATEMENT → co the KHONG NHAT QUAN
-       (voi ROW-based thi khong sao — va do la mac dinh tu MySQL 5.7)
+   Chế độ 2 nhanh nhất, nhưng:
+     ✘ ID sinh ra có thể KHÔNG LIÊN TIẾP giữa các transaction
+     ✘ Với nhân bản dạng STATEMENT → có thể KHÔNG NHẤT QUÁN
+       (với ROW-based thì không sao — và đó là mặc định từ MySQL 5.7)
 ```
 
 Nhắc lại từ [phase-3 bài 3](../phase-3/03-primary-key-vs-secondary-key.md): **khoảng trống trong ID là bình thường và không nên coi là lỗi**.
@@ -291,7 +291,7 @@ Dòng "nơi lưu thông tin khoá" giải thích vì sao PostgreSQL **không c�
 ## Chẩn đoán khoá trên InnoDB
 
 ```sql
--- Ai dang cho ai (MySQL 8.0+)
+-- Ai đang chờ ai (MySQL 8.0+)
 SELECT r.trx_id AS cho_id, r.trx_mysql_thread_id AS cho_thread,
        LEFT(r.trx_query, 50) AS cho_query,
        b.trx_id AS chan_id, b.trx_mysql_thread_id AS chan_thread,
@@ -302,7 +302,7 @@ JOIN information_schema.innodb_trx b ON b.trx_id = w.blocking_engine_transaction
 ```
 
 ```sql
--- Chi tiet tung khoa dang giu
+-- Chi tiết từng khoá đang giữ
 SELECT ENGINE_TRANSACTION_ID, OBJECT_NAME, INDEX_NAME,
        LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA
 FROM performance_schema.data_locks;
@@ -318,16 +318,16 @@ FROM performance_schema.data_locks;
 Đọc cột `LOCK_MODE`:
 
 ```text
-   X               →  khoa doc quyen, NEXT-KEY (ban ghi + khe truoc)
-   X,GAP           →  chi khoa KHE, khong khoa ban ghi
-   X,REC_NOT_GAP   →  chi khoa BAN GHI, khong khoa khe
-   S,...           →  tuong tu nhung la khoa chia se
+   X               →  khoá độc quyền, NEXT-KEY (bản ghi + khe trước)
+   X,GAP           →  chỉ khoá KHE, không khoá bản ghi
+   X,REC_NOT_GAP   →  chỉ khoá BẢN GHI, không khoá khe
+   S,...           →  tương tự nhưng là khoá chia sẻ
 ```
 
 ```sql
 -- Deadlock gan nhat
 SHOW ENGINE INNODB STATUS\G
--- → tim phan "LATEST DETECTED DEADLOCK"
+-- → tìm phần "LATEST DETECTED DEADLOCK"
 ```
 
 ## Chọn chiến lược theo bài toán

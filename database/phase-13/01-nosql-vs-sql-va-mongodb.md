@@ -5,12 +5,12 @@
 ```text
    NoSQL bao gom:
      • Kho tai lieu    (MongoDB, CouchDB)
-     • Kho khoa-gia tri (Redis, DynamoDB, Memcached)
+     • Kho khoá-giá trị (Redis, DynamoDB, Memcached)
      • Kho cot rong     (Cassandra, HBase)
-     • Co so du lieu do thi (Neo4j, Neptune)
-     • Chuoi thoi gian  (InfluxDB, TimescaleDB)
+     • Cơ sở dữ liệu đồ thị (Neo4j, Neptune)
+     • Chuỗi thời gian  (InfluxDB, TimescaleDB)
 
-   → Bon nhom dau khac nhau nhieu hon so voi khac PostgreSQL.
+   → Bốn nhóm đầu khác nhau nhiều hơn so với khác PostgreSQL.
 ```
 
 Bài này gạt bỏ khẩu hiệu tiếp thị và đi vào những khác biệt **thật sự** về mặt kỹ thuật.
@@ -21,16 +21,16 @@ Câu "NoSQL nhanh hơn SQL" gần như luôn là một trong hai điều dưới
 
 ```text
    1. NO LAM IT VIEC HON
-      Khong kiem tra khoa ngoai
-      Khong dam bao ACID xuyen nhieu ban ghi
-      Khong toi uu truy van phuc tap
-      → Nhanh hon vi HUA IT HON, khong phai vi tai hon
+      Không kiểm tra khoá ngoại
+      Không đảm bảo ACID xuyên nhiều bản ghi
+      Không tối ưu truy vấn phức tạp
+      → Nhanh hơn vì HỨA ÍT HƠN, không phải vì tài hơn
 
    2. MO HINH DU LIEU KHOP VOI MAU TRUY CAP
-      Doc mot ho so nguoi dung day du:
-        SQL   : JOIN 5 bang → 5 lan tra index
-        MongoDB: doc MOT tai lieu → 1 lan tra index
-      → Nhanh hon vi LUU DU LIEU THEO CACH BAN DOC NO
+      Đọc một hồ sơ người dùng đầy đủ:
+        SQL   : JOIN 5 bảng → 5 lần tra index
+        MongoDB: đọc MỘT tài liệu → 1 lần tra index
+      → Nhanh hơn vì LƯU DỮ LIỆU THEO CÁCH BẠN ĐỌC NÓ
 ```
 
 Điều thứ hai mới là lý do chính đáng để chọn NoSQL. Và nó **cũng làm được trong SQL** — bằng cách phi chuẩn hoá hoặc dùng `jsonb`.
@@ -49,7 +49,7 @@ Câu "NoSQL nhanh hơn SQL" gần như luôn là một trong hai điều dưới
    orders       (id, user_id, total)
    order_items  (id, order_id, product_id, qty)
 
-   Lay ho so day du → JOIN 4 bang
+   Lấy hồ sơ đầy đủ → JOIN 4 bảng
 
 
    MONGODB — NHUNG
@@ -64,7 +64,7 @@ Câu "NoSQL nhanh hơn SQL" gần như luôn là một trong hai điều dưới
      ]
    }
 
-   Lay ho so day du → doc MOT tai lieu
+   Lấy hồ sơ đầy đủ → đọc MỘT tài liệu
 ```
 
 Đánh đổi hiện ra ngay:
@@ -81,36 +81,36 @@ Câu "NoSQL nhanh hơn SQL" gần như luôn là một trong hai điều dưới
 Dòng "cập nhật dữ liệu lặp" là chỗ mô hình nhúng đau nhất:
 
 ```text
-   Nhung ten san pham vao moi don hang.
-   San pham doi ten → phai cap nhat TRIEU tai lieu don hang.
+   Nhúng tên sản phẩm vào mọi đơn hàng.
+   Sản phẩm đổi tên → phải cập nhật TRIỆU tài liệu đơn hàng.
 
-   Va neu job cap nhat chet giua chung → mot nua co ten cu,
-   mot nua co ten moi, KHONG CO CACH NAO BIET.
+   Và nếu job cập nhật chết giữa chừng → một nửa có tên cũ,
+   một nửa có tên mới, KHÔNG CÓ CÁCH NÀO BIẾT.
 ```
 
 ### Khi nào nhúng, khi nào tham chiếu
 
 ```text
-   NHUNG khi:
-     ✔ Du lieu con LUON duoc doc cung du lieu cha
-     ✔ Quan he 1-1 hoac 1-N voi N NHO va CO GIOI HAN
-     ✔ Du lieu con it thay doi
-     ✔ Du lieu con khong duoc truy van doc lap
+   NHÚNG khi:
+     ✔ Dữ liệu con LUÔN được đọc cùng dữ liệu cha
+     ✔ Quan hệ 1-1 hoặc 1-N với N NHỎ và CÓ GIỚI HẠN
+     ✔ Dữ liệu con ít thay đổi
+     ✔ Dữ liệu con không được truy vấn độc lập
 
-   THAM CHIEU khi:
-     ✔ N lon hoac khong gioi han (binh luan cua mot bai viet)
-     ✔ Du lieu con thay doi thuong xuyen
-     ✔ Du lieu con duoc nhieu cha dung chung
-     ✔ Du lieu con duoc truy van doc lap
+   THAM CHIẾU khi:
+     ✔ N lớn hoặc không giới hạn (bình luận của một bài viết)
+     ✔ Dữ liệu con thay đổi thường xuyên
+     ✔ Dữ liệu con được nhiều cha dùng chung
+     ✔ Dữ liệu con được truy vấn độc lập
 ```
 
 Ví dụ áp dụng:
 
 ```text
-   Dia chi cua nguoi dung        →  NHUNG (it, luon doc cung, it doi)
-   Binh luan cua bai viet        →  THAM CHIEU (khong gioi han)
-   Danh muc san pham             →  THAM CHIEU (nhieu don hang dung chung)
-   Anh chup gia luc dat hang     →  NHUNG (co CHU DICH giu gia LUC DO)
+   Địa chỉ của người dùng        →  NHÚNG (ít, luôn đọc cùng, ít đổi)
+   Bình luận của bài viết        →  THAM CHIẾU (không giới hạn)
+   Danh mục sản phẩm             →  THAM CHIẾU (nhiều đơn hàng dùng chung)
+   Ảnh chụp giá lúc đặt hàng     →  NHÚNG (có CHỦ ĐÍCH giữ giá LÚC ĐÓ)
 ```
 
 Dòng cuối là một mẫu quan trọng: đôi khi bạn **cố ý** nhúng một bản sao vì bạn muốn giữ **giá trị tại thời điểm đó**, không phải giá trị hiện tại. Đơn hàng phải giữ giá lúc mua, kể cả khi sản phẩm đổi giá sau này.
@@ -124,12 +124,12 @@ Dòng cuối là một mẫu quan trọng: đôi khi bạn **cố ý** nhúng m�
 Từ MongoDB 3.2, engine mặc định là **WiredTiger**:
 
 ```text
-   • B+Tree (co the cau hinh LSM, nhung hiem dung)
-   • MVCC — nguoi doc khong chan nguoi ghi
+   • B+Tree (có thể cấu hình LSM, nhưng hiếm dùng)
+   • MVCC — người đọc không chặn người ghi
    • Nen: Snappy (mac dinh), zlib, zstd
-   • Nen tien to cho index
-   • Checkpoint moi 60 giay
-   • Journal (WAL) fsync moi 100 ms
+   • Nén tiền tố cho index
+   • Checkpoint mỗi 60 giây
+   • Journal (WAL) fsync mỗi 100 ms
 ```
 
 Dòng cuối đáng chú ý: mặc định MongoDB `fsync` journal **mỗi 100 mili-giây**, nghĩa là có thể mất tới 100 ms giao dịch cuối khi máy chết đột ngột — trừ khi bạn yêu cầu `j: true` cho từng lệnh ghi.
@@ -137,9 +137,9 @@ Dòng cuối đáng chú ý: mặc định MongoDB `fsync` journal **mỗi 100 m
 ### Khoá và đồng thời
 
 ```text
-   MongoDB 3.0+  →  khoa muc TAI LIEU (tuong duong khoa dong)
-   Truoc do      →  khoa muc COLLECTION, roi muc DATABASE
-                    → day la nguon goc cua danh tieng xau ve hieu nang
+   MongoDB 3.0+  →  khoá mức TÀI LIỆU (tương đương khoá dòng)
+   Trước đó      →  khoá mức COLLECTION, rồi mức DATABASE
+                    → đây là nguồn gốc của danh tiếng xấu về hiệu năng
 ```
 
 ### `writeConcern` — nút vặn độ bền
@@ -148,13 +148,13 @@ Dòng cuối đáng chú ý: mặc định MongoDB `fsync` journal **mỗi 100 m
 
 ```javascript
 db.orders.insertOne(doc, { writeConcern: { w: 1 } })
-// → chi cho PRIMARY xac nhan.  Primary chet → CO THE MAT
+// → chỉ chờ PRIMARY xác nhận.  Primary chết → CÓ THỂ MẤT
 
 db.orders.insertOne(doc, { writeConcern: { w: "majority" } })
-// → cho DA SO nut xac nhan.  An toan truoc failover
+// → chờ ĐA SỐ nút xác nhận.  An toàn trước failover
 
 db.orders.insertOne(doc, { writeConcern: { w: "majority", j: true } })
-// → cho da so nut GHI JOURNAL XUONG DIA.  Ben nhat
+// → chờ đa số nút GHI JOURNAL XUỐNG ĐĨA.  Bền nhất
 ```
 
 | `writeConcern` | Mất dữ liệu khi | Tốc độ |
@@ -170,14 +170,14 @@ Từ MongoDB 5.0, `w: "majority"` là **mặc định** — trước đó là `w
 
 ```javascript
 // Doc tu dau
-db.orders.find().readPref("primary")            // luon moi nhat
-db.orders.find().readPref("secondary")          // co the CU
-db.orders.find().readPref("nearest")            // do tre thap nhat
+db.orders.find().readPref("primary")            // luôn mới nhất
+db.orders.find().readPref("secondary")          // có thể CŨ
+db.orders.find().readPref("nearest")            // độ trễ thấp nhất
 
 // Doc muc dam bao nao
-db.orders.find().readConcern("local")           // co the doc du lieu SE BI ROLLBACK
-db.orders.find().readConcern("majority")        // chi doc du lieu da duoc da so xac nhan
-db.orders.find().readConcern("linearizable")    // manh nhat, cham nhat
+db.orders.find().readConcern("local")           // có thể đọc dữ liệu SẼ BỊ ROLLBACK
+db.orders.find().readConcern("majority")        // chỉ đọc dữ liệu đã được đa số xác nhận
+db.orders.find().readConcern("linearizable")    // mạnh nhất, chậm nhất
 ```
 
 Dòng `readConcern("local")` chứa một cái bẫy tinh vi: nó có thể trả về dữ liệu mà **sau này bị rollback** khi có chuyển đổi primary. Với dữ liệu quan trọng, phải dùng `majority`.
@@ -202,9 +202,9 @@ try {
 Nhưng cần biết:
 
 ```text
-   • CHAM hon dang ke so voi thao tac mot tai lieu
-   • Gioi han thoi gian mac dinh: 60 GIAY
-   • Yeu cau replica set (khong chay tren mot nut don le)
+   • CHẬM hơn đáng kể so với thao tác một tài liệu
+   • Giới hạn thời gian mặc định: 60 GIÂY
+   • Yêu cầu replica set (không chạy trên một nút đơn lẻ)
    • Tai liệu MongoDB KHUYEN NGHI thiet ke de KHONG CAN transaction
 ```
 
@@ -225,7 +225,7 @@ db.createCollection("events", {
 ```text
    COLLECTION THUONG                  CLUSTERED COLLECTION
    ════════════════                   ════════════════════
-   Index _id  →  RecordId  →  Tai lieu   Tai lieu nam LUON o la cua
+   Index _id  →  RecordId  →  Tài liệu   Tài liệu nằm LUÔN ở lá của
      hai buoc                             index _id
                                           → MOT buoc
 ```
@@ -233,10 +233,10 @@ db.createCollection("events", {
 Chính xác là ý tưởng clustered index của InnoDB ([phase-3 bài 3](../phase-3/03-primary-key-vs-secondary-key.md)), và nó mang theo **đúng những đánh đổi cũ**:
 
 ```text
-   ✔ Tra theo _id nhanh hon (mot buoc)
+   ✔ Tra theo _id nhanh hơn (một bước)
    ✔ Quet theo thu tu _id tuan tu
-   ✔ It ton dia hon (khong luu index _id rieng)
-   ✘ Index PHU tro nen dat hon (phai qua _id)
+   ✔ Ít tốn đĩa hơn (không lưu index _id riêng)
+   ✘ Index PHỤ trở nên đắt hơn (phải qua _id)
    ✘ _id ngau nhien → tach page lien tuc
 ```
 
@@ -274,18 +274,18 @@ CREATE TABLE products (
 CREATE INDEX idx_products_data ON products USING GIN (data);
 
 INSERT INTO products (data) VALUES
-  ('{"name":"Ao thun","price":150000,"tags":["thoi trang","nam"]}');
+  ('{"name":"Áo thun","price":150000,"tags":["thời trang","nam"]}');
 
--- Truy van theo truong ben trong
+-- Truy vấn theo trường bên trong
 SELECT data->>'name' FROM products WHERE data @> '{"tags":["nam"]}';
 
--- Index cho mot truong cu the
+-- Index cho một trường cụ thể
 CREATE INDEX idx_price ON products (((data->>'price')::INT));
 ```
 
 ```text
-   → Duoc cau truc linh hoat cua tai lieu
-   → VA giu duoc JOIN, transaction, khoa ngoai, SQL
+   → Được cấu trúc linh hoạt của tài liệu
+   → VÀ giữ được JOIN, transaction, khoá ngoại, SQL
 ```
 
 Đây là lý do câu hỏi "SQL hay NoSQL" thường là câu hỏi sai. Câu hỏi đúng: *"mẫu truy cập của tôi là gì?"*
@@ -317,19 +317,19 @@ Lời khuyên thực dụng nhất:
 Đây là điều [phase-2 bài 4](../phase-2/04-consistency-va-eventual-consistency.md) đã cảnh báo, nhắc lại vì rất quan trọng:
 
 ```javascript
-// MongoDB: khong co khoa ngoai
-db.orders.insertOne({ user_id: ObjectId("...") })   // user nay co ton tai khong?
-db.users.deleteOne({ _id: ObjectId("...") })        // don hang tro vao hu vo
+// MongoDB: không có khoá ngoại
+db.orders.insertOne({ user_id: ObjectId("...") })   // user này có tồn tại không?
+db.users.deleteOne({ _id: ObjectId("...") })        // đơn hàng trỏ vào hư vô
 ```
 
 ```text
-   Bai toan KHONG BIEN MAT khi bo khoa ngoai.
-   No chi CHUYEN CHO: tu database sang UNG DUNG.
+   Bài toán KHÔNG BIẾN MẤT khi bỏ khoá ngoại.
+   Nó chỉ CHUYỂN CHỖ: từ database sang ỨNG DỤNG.
 
-   Va ung dung thi:
-     • quen kiem tra o mot duong code nao do
-     • chet giua chung khi dang xoa
-     • co nhieu dich vu cung ghi, moi dich vu kiem tra khac nhau
+   Và ứng dụng thì:
+     • quên kiểm tra ở một đường code nào đó
+     • chết giữa chừng khi đang xoá
+     • có nhiều dịch vụ cùng ghi, mỗi dịch vụ kiểm tra khác nhau
 ```
 
 Nếu dùng MongoDB, phải có **job đối soát** tìm dữ liệu mồ côi:
@@ -338,7 +338,7 @@ Nếu dùng MongoDB, phải có **job đối soát** tìm dữ liệu mồ côi:
 db.orders.aggregate([
   { $lookup: { from: "users", localField: "user_id",
                foreignField: "_id", as: "u" } },
-  { $match: { u: { $size: 0 } } },        // don hang tro toi user KHONG TON TAI
+  { $match: { u: { $size: 0 } } },        // đơn hàng trỏ tới user KHÔNG TỒN TẠI
   { $count: "so_don_mo_coi" }
 ])
 ```
