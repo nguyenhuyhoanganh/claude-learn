@@ -221,7 +221,7 @@ WHERE NOT i.indisvalid;
 ```
 
 ```text
-     ten_index      |  bang  | kich_thuoc
+     ten_index      |  bảng  | kich_thuoc
 --------------------+--------+------------
  idx_users_email    | users  | 1284 MB
 ```

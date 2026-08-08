@@ -34,7 +34,7 @@ SELECT name, setting FROM pg_settings WHERE name LIKE '%_cost';
  cpu_operator_cost    | 0.0025
  cpu_tuple_cost       | 0.01
  random_page_cost     | 4
- seq_page_cost        | 1        ← MOC CHUAN = 1,0
+ seq_page_cost        | 1        ← MỐC CHUẨN = 1,0
 ```
 
 Mọi thứ được quy về "đọc tuần tự một page = 1,0". Kiểm chứng bằng tay:
@@ -87,7 +87,7 @@ Seq Scan on grades  (cost=0.00..17709.00 rows=899471 width=19)
 
 ```text
    Lấy 90% số dòng bằng index nghĩa là:
-     • tra index 900.000 lan
+     • tra index 900.000 lần
      • nhảy vào heap 900.000 lần (I/O NGẪU NHIÊN)
    → đắt hơn nhiều so với đọc thẳng 8.334 page tuần tự
 
@@ -121,7 +121,7 @@ Chữa: index trên biểu thức, hoặc viết lại điều kiện:
 
 ```sql
 CREATE INDEX ON users (UPPER(name));
--- hoac
+-- hoặc
 WHERE created_at >= '2026-08-01' AND created_at < '2026-08-02'   -- thay vi ::DATE
 ```
 
@@ -198,7 +198,7 @@ Trong B+Tree, các khoá trùng nhau **nằm liền nhau ở tầng lá**:
 ```text
    LÁ CỦA INDEX:
    ['cancelled' → ctid1] ['cancelled' → ctid2] ... ['paid' → ctid1] ...
-    └──────── 2 trieu muc ────────┘             └── 7 trieu muc ──┘
+    └──────── 2 triệu mục ────────┘             └── 7 triệu mục ──┘
 ```
 
 ```text
@@ -299,7 +299,7 @@ Mẹo ở bước 1 rất hữu dụng: nó cho phép **quay lại tức thì** 
 ### Cái giá của index không dùng
 
 ```text
-   • Ton dia
+   • Tốn đĩa
    • Làm chậm MỌI lệnh INSERT/UPDATE/DELETE
    • Tranh chỗ với index hữu ích trong buffer pool
    • Làm chậm VACUUM và REINDEX
@@ -361,7 +361,7 @@ Chú ý dòng `lossy` trong kế hoạch:
 
 ```sql
 EXPLAIN ANALYZE DELETE FROM users WHERE id > 100;   -- XOÁ THẬT!
-EXPLAIN ANALYZE UPDATE orders SET status = 'x';     -- SUA THAT!
+EXPLAIN ANALYZE UPDATE orders SET status = 'x';     -- SỬA THẬT!
 ```
 
 Cách an toàn:
@@ -454,7 +454,7 @@ Ba lý do, xếp theo mức độ căn bản:
       Đọc 1 byte và đọc 8.192 byte tốn GẦN NHƯ BẰNG NHAU.
       → đọc lẻ là lãng phí thuần tuý
 
-   2. TINH CUC BO
+   2. TÍNH CỤC BỘ
       Dữ liệu được đọc cùng nhau thường nằm cạnh nhau.
       Đọc cả page = "khuyến mãi" các dòng kế bên, thường dùng tiếp ngay.
 

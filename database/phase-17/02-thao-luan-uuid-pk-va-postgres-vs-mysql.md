@@ -11,7 +11,7 @@ Hai câu chuyện thật trong bài này, và cả hai đều dạy cùng một 
 ```text
    ✔ Sinh được ở CLIENT, không cần hỏi database
    ✔ Sinh được ở NHIỀU MÁY mà không đụng nhau
-   ✔ Khong lo quy mo kinh doanh
+   ✔ Không lộ quy mô kinh doanh
      (id=1.245.883 cho đối thủ biết bạn đã xử lý bao nhiêu đơn)
    ✔ Ghép dữ liệu từ nhiều hệ thống không sợ trùng
    ✔ Đoán không được → không duyệt được dữ liệu người khác
@@ -24,7 +24,7 @@ Toàn là lý do chính đáng. Vấn đề nằm ở **UUID v4** — biến th�
 Nhắc lại cơ chế từ [phase-4 bài 4](../phase-4/04-bloom-filter-va-uuid-performance.md), nhìn từ góc khác:
 
 ```text
-   KHOA TANG DAN                        UUID v4
+   KHOÁ TĂNG DẦN                        UUID v4
    ══════════════                       ═══════
    Chen 1001, 1002, 1003...             Chen f47ac1..., 550e84..., 6ba7b8...
    → tất cả vào PAGE CUỐI               → mỗi cái vào MỘT PAGE NGẪU NHIÊN
@@ -46,9 +46,9 @@ Và trên InnoDB, hậu quả nhân đôi vì **bảng cũng được sắp theo
    Bảng: nhét vào chỗ trống   Bảng: PHẢI chèn đúng vị trí thứ tự
          → không tách page          → TÁCH PAGE
    Index PK: tách page        Clustered index CHÍNH LÀ bảng
-                                    → tach page keo theo CA DU LIEU
-                              Index phu: chua CA UUID (16-36 byte)
-                                    → phinh theo
+                                    → tách page kéo theo CẢ DỮ LIỆU
+                              Index phụ: chứa CẢ UUID (16-36 byte)
+                                    → phình theo
 ```
 
 ## Con số đo được
@@ -91,7 +91,7 @@ Cách đọc bài học này cho đúng:
    ✔  "KHOÁ NGẪU NHIÊN trong CẤU TRÚC SẮP XẾP thì đắt"
 
    → Vẫn dùng được định danh phân tán.
-   → Chi can chon loai TANG DAN THEO THOI GIAN.
+   → Chỉ cần chọn loại TĂNG DẦN THEO THỜI GIAN.
 ```
 
 ## UUID v7 — lựa chọn mặc định hiện nay
@@ -153,8 +153,8 @@ Khi cần cả hiệu năng lẫn định danh không đoán được:
 
 ```sql
 CREATE TABLE orders (
-    id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- ky thuat
-    public_id UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE     -- doi ngoai
+    id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- kỹ thuật
+    public_id UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE     -- đối ngoại
 );
 ```
 
@@ -178,7 +178,7 @@ Năm 2016 Uber công bố bài viết gây tranh cãi lớn về việc họ chu
 ```text
    POSTGRESQL:  mọi index trỏ tới `ctid` (vị trí vật lý).
                 UPDATE tạo phiên bản mới → ctid đổi
-                → PHAI cap nhat MOI INDEX
+                → PHẢI cập nhật MỌI INDEX
                 → kể cả index trên cột KHÔNG THAY ĐỔI
 
    MYSQL INNODB: index phụ trỏ tới PRIMARY KEY (không đổi).

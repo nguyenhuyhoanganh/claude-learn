@@ -216,16 +216,16 @@ Vì vậy không phải hệ nào cũng giữ nó:
 | **WiredTiger** (MongoDB) | **Không** | Truy vấn chủ yếu theo khoá; quét khoảng hiếm |
 
 ```text
-   QUYET DINH CUA WIREDTIGER:
-     "Ung dung MongoDB chu yeu tra theo _id hoac theo mot truong cu the.
-      Quet khoang lien tuc rat hiem.
-      → BO con tro la di, doi lay ghi nhanh hon va page gon hon."
+   QUYẾT ĐỊNH CỦA WIREDTIGER:
+     "Ứng dụng MongoDB chủ yếu tra theo _id hoặc theo một trường cụ thể.
+      Quét khoảng liên tục rất hiếm.
+      → BỎ con trỏ lá đi, đổi lấy ghi nhanh hơn và page gọn hơn."
 
    HE QUA:
-     ✔ Tach page re hon (chi sua 1 page thay vi 3)
-     ✔ Moi la chua duoc nhieu khoa hon
-     ✘ Quet khoang phai LEO LAI CAY cho moi buoc
-       → dung nhu han che cua B-Tree goc o [bai 1](01-btree-co-ban.md)
+     ✔ Tách page rẻ hơn (chỉ sửa 1 page thay vì 3)
+     ✔ Mỗi lá chứa được nhiều khoá hơn
+     ✘ Quét khoảng phải LEO LẠI CÂY cho mỗi bước
+       → đúng như hạn chế của B-Tree gốc ở [bài 1](01-btree-co-ban.md)
 ```
 
 Bài học vượt ra ngoài chuyện B+Tree:

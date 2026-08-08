@@ -22,14 +22,14 @@ Bảng băm là cấu trúc dữ liệu cơ bản nhất trong khoa học máy t
 Hai khoá khác nhau cho cùng một ô. Điều này **không tránh được** (nguyên lý chuồng bồ câu), chỉ có cách xử lý:
 
 ```text
-   PHUONG PHAP 1 — NOI CHUOI (chaining)
+   PHƯƠNG PHÁP 1 — NỐI CHUỖI (chaining)
    ┌───┬───┬─────────────────────────┐
    │ 0 │ 1 │ user:42 → user:99 → ... │  ← danh sách liên kết trong một ô
    └───┴───┴─────────────────────────┘
    ✔ Đơn giản, xoá dễ
    ✘ Con trỏ tản mát → kém thân thiện với CPU cache
 
-   PHUONG PHAP 2 — DIA CHI MO (open addressing)
+   PHƯƠNG PHÁP 2 — ĐỊA CHỈ MỞ (open addressing)
    ô đầy rồi → thử ô kế tiếp
    ┌───┬─────────┬─────────┬───┐
    │ 0 │ user:42 │ user:99 │ 3 │  ← user:99 lẽ ra ở ô 1, bị đẩy sang ô 2
@@ -75,7 +75,7 @@ Hash Join  (cost=3854.00..28471.11 rows=1000000 width=48)
 ```
 
 ```text
-   CACH LAM:
+   CÁCH LÀM:
      1. Quét bảng NHỎ HƠN (users) → dựng BẢNG BĂM trong RAM
      2. Quét bảng LỚN HƠN (orders) → mỗi dòng, tra bảng băm
    → O(n + m) thay vi O(n × m)
@@ -158,8 +158,8 @@ HashAggregate  (cost=22709.00..22709.03 rows=3 width=16)
 
    THÊM MỘT MÁY → hash(khoa) % 4
 
-   key='a' → 100 % 4 = 0  →  MAY 0   DOI CHO ✘
-   key='b' → 101 % 4 = 1  →  MAY 1   DOI CHO ✘
+   key='a' → 100 % 4 = 0  →  MÁY 0   ĐỔI CHỖ ✘
+   key='b' → 101 % 4 = 1  →  MÁY 1   ĐỔI CHỖ ✘
 
    → Đi từ N lên N+1 máy: khoảng N/(N+1) dữ liệu PHẢI DI CHUYỂN
       3 →  4 máy:  75%
@@ -184,7 +184,7 @@ Với 2 TB dữ liệu, chuyển 90% nghĩa là **1,8 TB đi qua mạng** trong 
            └─────┐             ┌────────┘
                  └─────────────┘
 
-   DINH TUYEN:
+   ĐỊNH TUYẾN:
      băm khoá → được một điểm trên vòng
      → đi THEO CHIỀU KIM ĐỒNG HỒ tới máy ĐẦU TIÊN gặp được
 ```
@@ -233,7 +233,7 @@ class VongBam:
     def __init__(self, so_nut_ao=150):
         self.so_nut_ao = so_nut_ao
         self.vong = {}          # vi_tri_bam -> ten_may
-        self.vi_tri = []        # danh sach vi tri DA SAP XEP
+        self.vi_tri = []        # danh sách vị trí ĐÃ SẮP XẾP
 
     def _bam(self, s):
         return int(hashlib.md5(s.encode()).hexdigest()[:8], 16)
@@ -254,7 +254,7 @@ class VongBam:
         if not self.vi_tri:
             return None
         h = self._bam(khoa)
-        idx = bisect.bisect_right(self.vi_tri, h)    # TIM NHI PHAN — O(log n)
+        idx = bisect.bisect_right(self.vi_tri, h)    # TÌM NHỊ PHÂN — O(log n)
         if idx == len(self.vi_tri):
             idx = 0                                  # vòng lại đầu
         return self.vong[self.vi_tri[idx]]
@@ -282,8 +282,8 @@ print("Sau  :", Counter(vong.tim_may(k) for k in khoa))
 ```
 
 ```text
-Truoc: Counter({'may2': 34118, 'may1': 33442, 'may3': 32440})
-Phai di chuyen: 24.8%
+Trước: Counter({'may2': 34118, 'may1': 33442, 'may3': 32440})
+Phải di chuyển: 24.8%
 Sau  : Counter({'may2': 25883, 'may4': 24812, 'may1': 24771, 'may3': 24534})
 ```
 
