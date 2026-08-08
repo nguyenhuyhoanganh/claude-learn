@@ -45,8 +45,8 @@ Trước khi mã hoá, cần biết chính xác cái gì đang truyền:
 ```text
    CLIENT                                   SERVER
      │                                         │
-     │──── StartupMessage ────────────────────▶│  ten nguoi dung, ten database
-     │◀─── AuthenticationRequest ──────────────│  yeu cau xac thuc
+     │──── StartupMessage ────────────────────▶│  tên người dùng, tên database
+     │◀─── AuthenticationRequest ──────────────│  yêu cầu xác thực
      │──── PasswordMessage ───────────────────▶│  chung minh
      │◀─── AuthenticationOk, ParameterStatus ──│
      │◀─── ReadyForQuery ──────────────────────│
@@ -79,7 +79,7 @@ sudo tcpdump -i any -A 'port 5432' | grep -A2 SELECT
 Một thí nghiệm đáng làm, vì kết quả của nó giải thích một lỗi hiệu năng rất hay gặp: gửi câu `SELECT ... WHERE id IN (...)` với danh sách hàng nghìn giá trị.
 
 ```javascript
-// Sinh cau SQL dai dan roi gui, xem Wireshark dem duoc bao nhieu goi TCP
+// Sinh câu SQL dài dần rồi gửi, xem Wireshark đếm được bao nhiêu gói TCP
 let sql = 'SELECT * FROM t WHERE id = 1';
 for (let i = 0; i < N; i++) sql += ` OR id = ${i}`;
 await client.query(sql);
@@ -91,8 +91,8 @@ await client.query(sql);
    1               ~60 B                 1         xong ngay
    100          ~1,0 KB                  1         xong ngay
    1.000         ~12 KB                  9         xong
-   10.000       ~125 KB                 90         xong, bat dau cham
-   100.000      ~1,3 MB                960         xong, RAT nhieu goi gui lai
+   10.000       ~125 KB                 90         xong, bắt đầu chậm
+   100.000      ~1,3 MB                960         xong, RẤT nhiều gói gửi lại
    1.000.000     ~14 MB                  —         SAP SERVER
 ```
 
@@ -106,33 +106,33 @@ Ba điều rút ra:
 
 ```text
    1. KHONG CO GIOI HAN CUNG ro rang.
-      PostgreSQL nhan duoc cau 1,3 MB. Nhung "nhan duoc" ≠ "nen lam".
+      PostgreSQL nhận được câu 1,3 MB. Nhưng "nhận được" ≠ "nên làm".
 
    2. MOI GOI TCP PHAI DUOC XAC NHAN.
-      960 goi = 960 lan cho xac nhan, va neu mot goi mat thi
-      PHAI GUI LAI va cho GHEP LAI dung thu tu.
-      → do tre tang PHI TUYEN theo kich thuoc cau lenh.
+      960 gói = 960 lần chờ xác nhận, và nếu một gói mất thì
+      PHẢI GỬI LẠI và chờ GHÉP LẠI đúng thứ tự.
+      → độ trễ tăng PHI TUYẾN theo kích thước câu lệnh.
 
-   3. Cau lenh khong long duoc trong MOT goi thi khong con "gui mot phat".
-      Day la ly do that su khien `IN (10.000 gia tri)` cham,
-      chu khong phai vi database xu ly cham.
+   3. Câu lệnh không lọt được trong MỘT gói thì không còn "gửi một phát".
+      Đây là lý do thật sự khiến `IN (10.000 giá trị)` chậm,
+      chứ không phải vì database xử lý chậm.
 ```
 
 Cách viết đúng thay cho danh sách `IN` khổng lồ:
 
 ```sql
--- SAI: 10.000 gia tri noi thanh chuoi → ~125 KB, 90 goi TCP
+-- SAI: 10.000 giá trị nối thành chuỗi → ~125 KB, 90 gói TCP
 SELECT * FROM t WHERE id IN (1, 2, 3, ..., 10000);
 
--- DUNG 1: truyen mot MANG lam THAM SO (mot gia tri nhi phan gon)
+-- ĐÚNG 1: truyền một MẢNG làm THAM SỐ (một giá trị nhị phân gọn)
 SELECT * FROM t WHERE id = ANY($1);          -- $1 = mang int[]
 
--- DUNG 2: dua danh sach vao BANG TAM roi JOIN
+-- ĐÚNG 2: đưa danh sách vào BẢNG TẠM rồi JOIN
 CREATE TEMP TABLE ids (id BIGINT PRIMARY KEY);
-COPY ids FROM STDIN;                          -- COPY, khong phai INSERT
+COPY ids FROM STDIN;                          -- COPY, không phải INSERT
 SELECT t.* FROM t JOIN ids USING (id);
 
--- DUNG 3: neu danh sach den TU CHINH database, dung subquery
+-- ĐÚNG 3: nếu danh sách đến TỪ CHÍNH database, dùng subquery
 SELECT * FROM t WHERE id IN (SELECT user_id FROM active_users);
 ```
 
@@ -145,22 +145,22 @@ Cách 1 là cách gọn nhất và nên là mặc định — mảng được tr
 MongoDB **luôn** mã hoá theo mặc định, nên `tcpdump` không đọc được gì. Muốn xem vẫn có cách — bằng cách để client tự nhả khoá phiên:
 
 ```bash
-# NodeJS: xuat khoa phien TLS ra file
+# NodeJS: xuất khoá phiên TLS ra file
 SSLKEYLOGFILE=/tmp/keys.log node app.js
 ```
 
 ```text
 Wireshark → Preferences → Protocols → TLS
           → (Pre)-Master-Secret log filename: /tmp/keys.log
-→ Wireshark giai ma va HIEN THI duoc giao thuc MongoDB ben trong
+→ Wireshark giải mã và HIỂN THỊ được giao thức MongoDB bên trong
 ```
 
 ```text
    ⚠ KY THUAT NAY LA CON DAO HAI LUOI
-     • Rat huu ich khi GO LOI o may phat trien
-     • Nhung file khoa do giai ma duoc TOAN BO phien
-     → TUYET DOI khong bat SSLKEYLOGFILE tren san pham that
-     → va khong commit file khoa vao git
+     • Rất hữu ích khi GỠ LỖI ở máy phát triển
+     • Nhưng file khoá đó giải mã được TOÀN BỘ phiên
+     → TUYỆT ĐỐI không bật SSLKEYLOGFILE trên sản phẩm thật
+     → và không commit file khoá vào git
 ```
 
 Điểm đáng nhớ chung: **mọi database đều có giao thức dây riêng**, và tất cả đều truyền câu lệnh cùng dữ liệu. Khác biệt duy nhất là hệ nào bật mã hoá theo mặc định:
@@ -179,15 +179,15 @@ Wireshark → Preferences → Protocols → TLS
 ### Tạo chứng chỉ
 
 ```bash
-# CA tu ky (san pham that nen dung CA noi bo hoac Let's Encrypt)
+# CA tự ký (sản phẩm thật nên dùng CA nội bộ hoặc Let's Encrypt)
 openssl req -new -x509 -days 3650 -nodes -out ca.crt -keyout ca.key \
   -subj "/CN=my-internal-ca"
 
-# Khoa va yeu cau ky cho server
+# Khoá và yêu cầu ký cho server
 openssl req -new -nodes -out server.csr -keyout server.key \
   -subj "/CN=db.example.com"
 
-# CA ky chung chi cho server
+# CA ký chứng chỉ cho server
 openssl x509 -req -in server.csr -days 825 -CA ca.crt -CAkey ca.key \
   -CAcreateserial -out server.crt
 
@@ -204,20 +204,20 @@ Trường `CN` phải khớp với **tên máy chủ mà client dùng để kế
 ssl = on
 ssl_cert_file = '/etc/postgresql/certs/server.crt'
 ssl_key_file  = '/etc/postgresql/certs/server.key'
-ssl_ca_file   = '/etc/postgresql/certs/ca.crt'      # can neu xac thuc client
+ssl_ca_file   = '/etc/postgresql/certs/ca.crt'      # cần nếu xác thực client
 
-ssl_min_protocol_version = 'TLSv1.2'                # KHONG cho TLS 1.0/1.1
+ssl_min_protocol_version = 'TLSv1.2'                # KHÔNG cho TLS 1.0/1.1
 ssl_prefer_server_ciphers = on
 ssl_ciphers = 'HIGH:!aNULL:!MD5:!3DES'
 ```
 
 ```ini
 # pg_hba.conf — BUOC QUAN TRONG NHAT
-# hostssl = CHI chap nhan ket noi da ma hoa
+# hostssl = CHỈ chấp nhận kết nối đã mã hoá
 hostssl  all  all  0.0.0.0/0   scram-sha-256
 
-# TUYET DOI KHONG de dong nay ton tai cho mang ngoai:
-# host   all  all  0.0.0.0/0   scram-sha-256      ← cho ket noi KHONG ma hoa
+# TUYỆT ĐỐI KHÔNG để dòng này tồn tại cho mạng ngoài:
+# host   all  all  0.0.0.0/0   scram-sha-256      ← cho kết nối KHÔNG mã hoá
 ```
 
 Điểm mấu chốt: **bật `ssl = on` chưa đủ**. Nó chỉ *cho phép* TLS. Phải dùng `hostssl` để **bắt buộc**.
@@ -275,39 +275,39 @@ Không còn đọc được gì.
 ### Vì sao `prefer` (mặc định!) không bảo vệ gì
 
 ```text
-   `prefer` co nghia: "thu TLS truoc, khong duoc thi dung ket noi thuong"
+   `prefer` có nghĩa: "thử TLS trước, không được thì dùng kết nối thường"
 
-   KE TAN CONG O GIUA chi can:
+   KẺ TẤN CÔNG Ở GIỮA chỉ cần:
      1. Chan goi thuong luong TLS
-     2. Tra loi "server nay khong ho tro TLS"
-     3. Client NGOAN NGOAN chuyen sang ket noi VAN BAN THUAN
-     4. Doc toan bo luu luong
+     2. Trả lời "server này không hỗ trợ TLS"
+     3. Client NGOAN NGOÃN chuyển sang kết nối VĂN BẢN THUẦN
+     4. Đọc toàn bộ lưu lượng
 
-   → Goi la tan cong HA CAP (downgrade attack)
-   → Va day la MAC DINH cua libpq, psycopg2, va nhieu driver khac
+   → Gọi là tấn công HẠ CẤP (downgrade attack)
+   → Và đây là MẶC ĐỊNH của libpq, psycopg2, và nhiều driver khác
 ```
 
 ### Vì sao `require` vẫn không đủ
 
 ```text
-   `require` co nghia: "bat buoc phai ma hoa"
-   NHUNG KHONG kiem tra chung chi cua ai.
+   `require` có nghĩa: "bắt buộc phải mã hoá"
+   NHƯNG KHÔNG kiểm tra chứng chỉ của ai.
 
    KE TAN CONG O GIUA:
-     1. Tu tao mot chung chi bat ky
-     2. Gia lam server
-     3. Client thay "co TLS" → CHAP NHAN
-     4. Ke tan cong giai ma, doc, roi chuyen tiep den server that
+     1. Tự tạo một chứng chỉ bất kỳ
+     2. Giả làm server
+     3. Client thấy "có TLS" → CHẤP NHẬN
+     4. Kẻ tấn công giải mã, đọc, rồi chuyển tiếp đến server thật
 
-   → Van bi nghe len toan bo, chi la co them mot lop ma hoa VO NGHIA.
+   → Vẫn bị nghe lén toàn bộ, chỉ là có thêm một lớp mã hoá VÔ NGHĨA.
 ```
 
 ```text
    ┌──────────┐        ┌──────────────┐        ┌──────────┐
    │  CLIENT  │──TLS──▶│ KE TAN CONG  │──TLS──▶│  SERVER  │
-   └──────────┘        │ doc HET      │        └──────────┘
+   └──────────┘        │ đọc HẾT      │        └──────────┘
                        └──────────────┘
-   Ca hai chang deu ma hoa. Client van bi lo sach.
+   Cả hai chặng đều mã hoá. Client vẫn bị lộ sạch.
 ```
 
 ### Cấu hình đúng
@@ -346,7 +346,7 @@ MySQL có khái niệm tương đương:
    --ssl-mode=PREFERRED    ~  prefer     (mac dinh)
    --ssl-mode=REQUIRED     ~  require
    --ssl-mode=VERIFY_CA    ~  verify-ca
-   --ssl-mode=VERIFY_IDENTITY ~ verify-full   ← dung cai nay
+   --ssl-mode=VERIFY_IDENTITY ~ verify-full   ← dùng cái này
 ```
 
 ---
@@ -356,19 +356,19 @@ MySQL có khái niệm tương đương:
 Lo ngại thường gặp: "TLS làm chậm database". Đo thử:
 
 ```text
-   BAT TAY TLS (mot lan moi ket noi)
-     TLS 1.2: 2 vong mang  → ~2-4 ms trong LAN
+   BẮT TAY TLS (một lần mỗi kết nối)
+     TLS 1.2: 2 vòng mạng  → ~2-4 ms trong LAN
      TLS 1.3: 1 vong mang  → ~1-2 ms
-     Noi lai phien (session resumption): 0 vong  → ~0 ms
+     Nối lại phiên (session resumption): 0 vòng  → ~0 ms
 
-   MA HOA DU LIEU (moi goi tin)
-     AES-NI (moi CPU tu 2010 deu co): ~1-3% CPU
-     Khong co AES-NI: ~10-15% CPU
+   MÃ HOÁ DỮ LIỆU (mỗi gói tin)
+     AES-NI (mọi CPU từ 2010 đều có): ~1-3% CPU
+     Không có AES-NI: ~10-15% CPU
 ```
 
 ```text
-   → Voi CONNECTION POOL, chi phi bat tay duoc CHIA CHO hang nghin truy van
-   → Chi phi thuc te: gan nhu KHONG DO DUOC
+   → Với CONNECTION POOL, chi phí bắt tay được CHIA CHO hàng nghìn truy vấn
+   → Chi phí thực tế: gần như KHÔNG ĐO ĐƯỢC
 ```
 
 Kiểm tra CPU có AES-NI:
@@ -391,7 +391,7 @@ Mạnh hơn mật khẩu: client cũng phải trình chứng chỉ hợp lệ.
 
 ```bash
 openssl req -new -nodes -out client.csr -keyout client.key \
-  -subj "/CN=app_user"                  # ← CN PHAI khop TEN VAI TRO trong Postgres
+  -subj "/CN=app_user"                  # ← CN PHẢI khớp TÊN VAI TRÒ trong Postgres
 
 openssl x509 -req -in client.csr -days 365 -CA ca.crt -CAkey ca.key \
   -CAcreateserial -out client.crt
@@ -411,11 +411,11 @@ psql "host=db.example.com dbname=mydb user=app_user \
 ```
 
 ```text
-   ƯU:  khong con mat khau de bi lo hay bi doan
-        chung chi CO HAN → tu het hieu luc
-        thu hoi duoc bang CRL
-   NHUOC: phai van hanh mot ha tang chung chi (PKI)
-          chung chi het han → SU CO MAT DIEN
+   ƯU:  không còn mật khẩu để bị lộ hay bị đoán
+        chứng chỉ CÓ HẠN → tự hết hiệu lực
+        thu hồi được bằng CRL
+   NHƯỢC: phải vận hành một hạ tầng chứng chỉ (PKI)
+          chứng chỉ hết hạn → SỰ CỐ MẤT ĐIỆN
 ```
 
 Nhược điểm thứ hai là vấn đề thật: rất nhiều sự cố sản xuất bắt nguồn từ chứng chỉ hết hạn mà không ai để ý. Bắt buộc phải có cảnh báo trước 30 ngày.
@@ -430,21 +430,21 @@ TLS bảo vệ dữ liệu **khi truyền**. Còn khi nó nằm trên đĩa?
 
 ```text
    1. MA HOA CA DIA (LUKS, dm-crypt, EBS encryption)
-      Bao ve: ai do LAY duoc o dia vat ly
-      KHONG bao ve: ai do vao duoc may dang chay (dia da giai ma roi)
+      Bảo vệ: ai đó LẤY được ổ đĩa vật lý
+      KHÔNG bảo vệ: ai đó vào được máy đang chạy (đĩa đã giải mã rồi)
       Chi phi: ~2-5% CPU
-      → NEN BAT MAC DINH, gan nhu khong ton gi
+      → NÊN BẬT MẶC ĐỊNH, gần như không tốn gì
 
    2. MA HOA TRONG SUOT CAP DATABASE (TDE)
-      Oracle, SQL Server, MySQL Enterprise co san
-      PostgreSQL: KHONG co san trong ban cong dong
-      Bao ve: gan giong ma hoa dia
-      → It them gia tri neu da ma hoa dia
+      Oracle, SQL Server, MySQL Enterprise có sẵn
+      PostgreSQL: KHÔNG có sẵn trong bản cộng đồng
+      Bảo vệ: gần giống mã hoá đĩa
+      → Ít thêm giá trị nếu đã mã hoá đĩa
 
    3. MA HOA TUNG COT
-      Ung dung tu ma hoa TRUOC KHI gui vao database
-      Bao ve: KE CA khi database bi chiem hoan toan
-      → Manh nhat, nhung MAT kha nang truy van
+      Ứng dụng tự mã hoá TRƯỚC KHI gửi vào database
+      Bảo vệ: KỂ CẢ khi database bị chiếm hoàn toàn
+      → Mạnh nhất, nhưng MẤT khả năng truy vấn
 ```
 
 ### Mã hoá cột — và cái giá thật
@@ -460,10 +460,10 @@ SELECT pgp_sym_decrypt(ssn_encrypted, :khoa) FROM users WHERE id = 1;
 
 ```text
    CAI GIA:
-     ✘ KHONG truy van duoc:  WHERE ssn = '123-45-6789'  → khong the
-     ✘ KHONG danh index duoc theo gia tri
-     ✘ KHONG sap xep, khong so sanh khoang
-     ✘ Quan ly khoa tro thanh bai toan moi (khoa luu o dau?)
+     ✘ KHÔNG truy vấn được:  WHERE ssn = '123-45-6789'  → không thể
+     ✘ KHÔNG đánh index được theo giá trị
+     ✘ KHÔNG sắp xếp, không so sánh khoảng
+     ✘ Quản lý khoá trở thành bài toán mới (khoá lưu ở đâu?)
 ```
 
 Dòng cuối quan trọng nhất: **nếu khoá nằm trong cùng database thì mã hoá gần như vô nghĩa**. Khoá phải nằm ở nơi khác — biến môi trường, dịch vụ quản lý khoá (KMS, Vault, HSM).
@@ -471,10 +471,10 @@ Dòng cuối quan trọng nhất: **nếu khoá nằm trong cùng database thì 
 Mẫu thực dụng: **mã hoá xác định** cho cột cần tra cứu chính xác:
 
 ```sql
--- Bam co "muoi" bi mat de tra cuu, cong voi ban ma hoa de lay lai gia tri
+-- Băm có "muối" bí mật để tra cứu, cộng với bản mã hoá để lấy lại giá trị
 ALTER TABLE users
-  ADD COLUMN ssn_hash TEXT,          -- HMAC(ssn, muoi) → tra cuu duoc, danh index duoc
-  ADD COLUMN ssn_enc  BYTEA;         -- ma hoa that → lay lai gia tri duoc
+  ADD COLUMN ssn_hash TEXT,          -- HMAC(ssn, muối) → tra cứu được, đánh index được
+  ADD COLUMN ssn_enc  BYTEA;         -- mã hoá thật → lấy lại giá trị được
 
 CREATE INDEX idx_users_ssn_hash ON users (ssn_hash);
 ```
@@ -482,7 +482,7 @@ CREATE INDEX idx_users_ssn_hash ON users (ssn_hash);
 ```python
 ssn_hash = hmac.new(MUOI_BI_MAT, ssn.encode(), 'sha256').hexdigest()
 # Tra cuu:  WHERE ssn_hash = %s
-# Lay gia tri: pgp_sym_decrypt(ssn_enc, khoa)
+# Lấy giá trị: pgp_sym_decrypt(ssn_enc, khoa)
 ```
 
 Đánh đổi: tra cứu chính xác vẫn được, nhưng khoảng và sắp xếp thì không — và nếu "muối" bị lộ thì tấn công từ điển trở nên khả thi.
@@ -493,26 +493,26 @@ ssn_hash = hmac.new(MUOI_BI_MAT, ssn.encode(), 'sha256').hexdigest()
 
 ```text
    ┌─ MẠNG ────────────────────────────────────────────────────┐
-   │ □ Database KHONG mo ra Internet cong khai                 │
-   │ □ Nhom bao mat / tuong lua chi cho phep IP cua ung dung   │
-   │ □ Database o mang rieng, khong co IP cong khai            │
+   │ □ Database KHÔNG mở ra Internet công khai                 │
+   │ □ Nhóm bảo mật / tường lửa chỉ cho phép IP của ứng dụng   │
+   │ □ Database ở mạng riêng, không có IP công khai            │
    └───────────────────────────────────────────────────────────┘
    ┌─ TLS ─────────────────────────────────────────────────────┐
    │ □ ssl = on                                                │
-   │ □ pg_hba.conf dung `hostssl`, KHONG dung `host` cho ngoai │
-   │ □ ssl_min_protocol_version = TLSv1.2 tro len              │
-   │ □ MOI client dung sslmode = verify-full                   │
-   │ □ Chung chi co canh bao truoc khi het han 30 ngay         │
+   │ □ pg_hba.conf dùng `hostssl`, KHÔNG dùng `host` cho ngoài │
+   │ □ ssl_min_protocol_version = TLSv1.2 trở lên              │
+   │ □ MỌI client dùng sslmode = verify-full                   │
+   │ □ Chứng chỉ có cảnh báo trước khi hết hạn 30 ngày         │
    └───────────────────────────────────────────────────────────┘
    ┌─ XÁC THỰC ────────────────────────────────────────────────┐
-   │ □ scram-sha-256, KHONG dung md5 (da yeu)                  │
-   │ □ Khong co mat khau trong ma nguon                        │
-   │ □ Mat khau doi dinh ky, hoac dung xac thuc IAM/chung chi  │
+   │ □ scram-sha-256, KHÔNG dùng md5 (đã yếu)                  │
+   │ □ Không có mật khẩu trong mã nguồn                        │
+   │ □ Mật khẩu đổi định kỳ, hoặc dùng xác thực IAM/chứng chỉ  │
    └───────────────────────────────────────────────────────────┘
    ┌─ Ổ ĐĨA ───────────────────────────────────────────────────┐
-   │ □ Ma hoa ca dia bat                                       │
-   │ □ BAN SAO LUU CUNG DUOC MA HOA        ← rat hay bi quen   │
-   │ □ Khoa ma hoa KHONG nam trong database                    │
+   │ □ Mã hoá cả đĩa bật                                       │
+   │ □ BẢN SAO LƯU CŨNG ĐƯỢC MÃ HOÁ       ← rất hay bị quên   │
+   │ □ Khoá mã hoá KHÔNG nằm trong database                    │
    └───────────────────────────────────────────────────────────┘
 ```
 
@@ -527,14 +527,14 @@ grep -E '^(host|hostnossl)\s' /etc/postgresql/16/main/pg_hba.conf | grep -v '127
 Bất kỳ dòng nào hiện ra đều cho phép kết nối **không mã hoá** từ mạng ngoài.
 
 ```bash
-# Kiem tra xac thuc yeu
+# Kiểm tra xác thực yếu
 grep -E '\s(trust|password|md5)\s*$' /etc/postgresql/16/main/pg_hba.conf
 ```
 
 ```text
-   trust    → KHONG hoi mat khau — tham hoa neu o mang ngoai
-   password → gui mat khau VAN BAN THUAN
-   md5      → thuat toan da yeu, nen chuyen sang scram-sha-256
+   trust    → KHÔNG hỏi mật khẩu — thảm hoạ nếu ở mạng ngoài
+   password → gửi mật khẩu VĂN BẢN THUẦN
+   md5      → thuật toán đã yếu, nên chuyển sang scram-sha-256
 ```
 
 ## Bẫy thường gặp

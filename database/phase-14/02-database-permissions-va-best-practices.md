@@ -7,12 +7,12 @@ Một lỗ hổng SQL injection nhỏ trong một endpoint tìm kiếm ít ngư�
 ```
 
 ```text
-   NEU ung dung ket noi bang tai khoan `postgres` (sieu nguoi dung):
-     → bang users BIEN MAT
-     → va ke tan cong con doc duoc MOI bang, doi duoc MOI thu
+   NẾU ứng dụng kết nối bằng tài khoản `postgres` (siêu người dùng):
+     → bảng users BIẾN MẤT
+     → và kẻ tấn công còn đọc được MỌI bảng, đổi được MỌI thứ
 
-   NEU ung dung ket noi bang tai khoan CHI CO SELECT/INSERT/UPDATE
-   tren dung 6 bang can thiet:
+   NẾU ứng dụng kết nối bằng tài khoản CHỈ CÓ SELECT/INSERT/UPDATE
+   trên đúng 6 bảng cần thiết:
      → ERROR: permission denied for table users
      → thiet hai: KHONG
 ```
@@ -24,8 +24,8 @@ Bài này về cách dựng lớp đó.
 ## Nguyên tắc đặc quyền tối thiểu
 
 ```text
-   Moi tai khoan chi duoc cap DUNG nhung quyen no CAN,
-   khong hon MOT quyen nao.
+   Mỗi tài khoản chỉ được cấp ĐÚNG những quyền nó CẦN,
+   không hơn MỘT quyền nào.
 ```
 
 Nghe hiển nhiên, nhưng thực tế phổ biến là ngược lại:
@@ -33,13 +33,13 @@ Nghe hiển nhiên, nhưng thực tế phổ biến là ngược lại:
 ```text
    ĐIỀU HAY GẶP                       ĐIỀU NÊN CÓ
    ════════════                       ═══════════
-   Mot tai khoan `postgres`           app_read      → chi SELECT
-   dung cho MOI THU:                  app_write     → SELECT/INSERT/UPDATE
-     • ung dung web                   app_migrate   → DDL, chi khi trien khai
-     • cong cu di tru                 analytics     → SELECT tren replica
-     • bao cao                        backup        → chi doc, cho pg_dump
-     • sao luu
-     • ky su vao xem
+   Một tài khoản `postgres`           app_read      → chỉ SELECT
+   dùng cho MỌI THỨ:                  app_write     → SELECT/INSERT/UPDATE
+     • ứng dụng web                   app_migrate   → DDL, chỉ khi triển khai
+     • công cụ di trú                 analytics     → SELECT trên replica
+     • báo cáo                        backup        → chỉ đọc, cho pg_dump
+     • sao lưu
+     • kỹ sư vào xem
 ```
 
 ---
@@ -49,14 +49,14 @@ Nghe hiển nhiên, nhưng thực tế phổ biến là ngược lại:
 ### Vai trò, không phải người dùng
 
 ```text
-   Trong PostgreSQL, USER va GROUP deu la ROLE (vai tro).
-     • ROLE co LOGIN  → dung nhu tai khoan dang nhap
-     • ROLE khong LOGIN → dung nhu nhom quyen
-     • ROLE ke thua duoc tu ROLE khac
+   Trong PostgreSQL, USER và GROUP đều là ROLE (vai trò).
+     • ROLE có LOGIN  → dùng như tài khoản đăng nhập
+     • ROLE không LOGIN → dùng như nhóm quyền
+     • ROLE kế thừa được từ ROLE khác
 ```
 
 ```sql
--- Vai tro NHOM (khong dang nhap duoc)
+-- Vai trò NHÓM (không đăng nhập được)
 CREATE ROLE app_read;
 CREATE ROLE app_write;
 
@@ -70,17 +70,17 @@ Lợi ích của cách này: cấp quyền **một lần cho nhóm**, và mọi 
 ### Cấp quyền theo lớp
 
 ```sql
--- 1. Ket noi vao database
+-- 1. Kết nối vào database
 GRANT CONNECT ON DATABASE mydb TO app_read, app_write;
 
 -- 2. Nhin thay schema
 GRANT USAGE ON SCHEMA public TO app_read, app_write;
 
--- 3. Quyen tren bang
+-- 3. Quyền trên bảng
 GRANT SELECT                        ON ALL TABLES IN SCHEMA public TO app_read;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_write;
 
--- 4. Quyen tren sequence (CAN cho INSERT vao bang co SERIAL)
+-- 4. Quyền trên sequence (CẦN cho INSERT vào bảng có SERIAL)
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_write;
 ```
 
@@ -95,7 +95,7 @@ Người ta cấp `INSERT` rồi ngạc nhiên vì vẫn không chèn được �
 ### Bảng tạo sau thì sao — quyền mặc định
 
 ```sql
--- Bang TUONG LAI cung tu dong duoc cap quyen
+-- Bảng TƯƠNG LAI cũng tự động được cấp quyền
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT ON TABLES TO app_read;
 
@@ -115,13 +115,13 @@ Không có phần này, mọi bảng tạo bởi migration mới sẽ **không c
 Đây là lỗ hổng có sẵn mà ít người biết:
 
 ```sql
--- PostgreSQL cap quyen CONNECT tren MOI database cho PUBLIC theo mac dinh
+-- PostgreSQL cấp quyền CONNECT trên MỌI database cho PUBLIC theo mặc định
 REVOKE CONNECT ON DATABASE mydb FROM PUBLIC;
 
--- Truoc PG15, PUBLIC con co quyen CREATE tren schema public
+-- Trước PG15, PUBLIC còn có quyền CREATE trên schema public
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
--- Va quyen EXECUTE tren moi ham
+-- Và quyền EXECUTE trên mọi hàm
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC;
 ```
 
@@ -134,26 +134,26 @@ PostgreSQL 15 đã bỏ quyền `CREATE` mặc định của `PUBLIC` — một 
 ## Bốn vai trò nên có
 
 ```sql
--- ═══ 1. UNG DUNG — quyen doc/ghi thuong ngay ═══
+-- ═══ 1. ỨNG DỤNG — quyền đọc/ghi thường ngày ═══
 CREATE ROLE app_rw;
 GRANT CONNECT ON DATABASE mydb TO app_rw;
 GRANT USAGE ON SCHEMA public TO app_rw;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_rw;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_rw;
--- KHONG co: CREATE, DROP, ALTER, TRUNCATE
+-- KHÔNG có: CREATE, DROP, ALTER, TRUNCATE
 
--- ═══ 2. DI TRU — chi dung khi trien khai ═══
+-- ═══ 2. DI TRÚ — chỉ dùng khi triển khai ═══
 CREATE ROLE app_migrate;
 GRANT ALL ON SCHEMA public TO app_migrate;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO app_migrate;
--- Mat khau nay KHONG nam trong cau hinh ung dung
+-- Mật khẩu này KHÔNG nằm trong cấu hình ứng dụng
 
--- ═══ 3. PHAN TICH — chi doc, tren replica ═══
+-- ═══ 3. PHÂN TÍCH — chỉ đọc, trên replica ═══
 CREATE ROLE analytics;
 GRANT CONNECT ON DATABASE mydb TO analytics;
 GRANT USAGE ON SCHEMA public TO analytics;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO analytics;
-ALTER ROLE analytics SET statement_timeout = '5min';       -- ← chan truy van chay mai
+ALTER ROLE analytics SET statement_timeout = '5min';       -- ← chặn truy vấn chạy mãi
 ALTER ROLE analytics SET default_transaction_read_only = on;
 
 -- ═══ 4. SAO LUU ═══
@@ -161,7 +161,7 @@ CREATE ROLE backup_svc;
 GRANT CONNECT ON DATABASE mydb TO backup_svc;
 GRANT USAGE ON SCHEMA public TO backup_svc;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_svc;
-GRANT pg_read_all_data TO backup_svc;      -- PG14+, gon hon nhieu
+GRANT pg_read_all_data TO backup_svc;      -- PG14+, gọn hơn nhiều
 ```
 
 Hai dòng `ALTER ROLE analytics SET ...` rất đáng giá: chúng đảm bảo một truy vấn phân tích viết ẩu không thể chạy mãi hay vô tình ghi dữ liệu.
@@ -183,13 +183,13 @@ Ba dòng này chặn được ba loại sự cố phổ biến nhất: truy vấ
 ### Theo cột
 
 ```sql
--- Vai tro ho tro khach hang KHONG duoc xem so the
+-- Vai trò hỗ trợ khách hàng KHÔNG được xem số thẻ
 GRANT SELECT (id, email, name, created_at) ON users TO support_role;
 -- KHONG cap cot card_number, ssn
 ```
 
 ```sql
--- Thu voi vai tro do
+-- Thử với vai trò đó
 SELECT * FROM users;
 ```
 
@@ -213,7 +213,7 @@ CREATE TABLE documents (
 
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
--- Chinh sach: chi thay dong cua tenant hien tai
+-- Chính sách: chỉ thấy dòng của tenant hiện tại
 CREATE POLICY tenant_isolation ON documents
     USING (tenant_id = current_setting('app.tenant_id')::BIGINT);
 
@@ -221,15 +221,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON documents TO app_rw;
 ```
 
 ```python
-# Ung dung dat tenant cho MOI request
+# Ứng dụng đặt tenant cho MỖI request
 cur.execute("SET LOCAL app.tenant_id = %s", (tenant_id,))
-cur.execute("SELECT * FROM documents")     # TU DONG chi thay tenant do
+cur.execute("SELECT * FROM documents")     # TỰ ĐỘNG chỉ thấy tenant đó
 ```
 
 ```text
-   → Ngay ca khi mot doan code QUEN them `WHERE tenant_id = ?`,
-     database VAN khong tra ve du lieu cua tenant khac.
-   → Day la lop phong thu ma khong the quen duoc.
+   → Ngay cả khi một đoạn code QUÊN thêm `WHERE tenant_id = ?`,
+     database VẪN không trả về dữ liệu của tenant khác.
+   → Đây là lớp phòng thủ mà không thể quên được.
 ```
 
 Bốn điều phải biết khi dùng RLS:
@@ -245,7 +245,7 @@ Chính sách đầy đủ cho cả đọc lẫn ghi:
 
 ```sql
 CREATE POLICY tenant_isolation ON documents
-    USING      (tenant_id = current_setting('app.tenant_id')::BIGINT)   -- doc
+    USING      (tenant_id = current_setting('app.tenant_id')::BIGINT)   -- đọc
     WITH CHECK (tenant_id = current_setting('app.tenant_id')::BIGINT);  -- ghi
 ```
 
@@ -261,12 +261,12 @@ Không có `WITH CHECK`, một tenant vẫn có thể **chèn** dòng mang `tena
 
 ```text
    ❌ TRINH DUYET ──────────────▶ DATABASE
-      → chuoi ket noi nam trong ma JavaScript → ai cung doc duoc
-      → khong kiem soat duoc truy van
-      → khong gioi han tan suat
+      → chuỗi kết nối nằm trong mã JavaScript → ai cũng đọc được
+      → không kiểm soát được truy vấn
+      → không giới hạn tần suất
 
    ✔  TRINH DUYET ──HTTP──▶ API ──▶ DATABASE
-      → bi mat nam o server
+      → bí mật nằm ở server
       → kiem tra quyen, gioi han tan suat, ghi nhat ky
 ```
 
@@ -289,14 +289,14 @@ Với tên bảng/cột động (không tham số hoá được), phải dùng d
 ```python
 COT_CHO_PHEP = {'created_at', 'name', 'total'}
 if sap_xep_theo not in COT_CHO_PHEP:
-    raise ValueError("Cot khong hop le")
+    raise ValueError("Cột không hợp lệ")
 cur.execute(f"SELECT * FROM orders ORDER BY {sap_xep_theo} LIMIT %s", (limit,))
 ```
 
 **Quy tắc 2 — Luôn giới hạn kết quả**
 
 ```python
-# SAI — nguoi dung gui limit=999999999
+# SAI — người dùng gửi limit=999999999
 cur.execute("SELECT * FROM events LIMIT %s", (request.args['limit'],))
 
 # DUNG — ap tran
@@ -328,12 +328,12 @@ except Exception as e:
 **Quy tắc 4 — Kiểm tra quyền ở tầng ứng dụng, KHÔNG chỉ dựa vào tham số**
 
 ```python
-# SAI — nguoi dung doi order_id thanh cua nguoi khac
+# SAI — người dùng đổi order_id thành của người khác
 @app.route('/orders/<int:order_id>')
 def get_order(order_id):
     return db.query("SELECT * FROM orders WHERE id = %s", (order_id,))
 
-# DUNG — rang buoc theo nguoi dung dang dang nhap
+# ĐÚNG — ràng buộc theo người dùng đang đăng nhập
 @app.route('/orders/<int:order_id>')
 def get_order(order_id):
     return db.query("SELECT * FROM orders WHERE id = %s AND user_id = %s",
@@ -390,10 +390,10 @@ Xử lý ba vấn đề sau:
 -- Loai cot nhay cam
 to_jsonb(NEW) - 'password_hash' - 'card_number'
 
--- Phan manh theo thang
+-- Phân mảnh theo tháng
 CREATE TABLE audit_log (...) PARTITION BY RANGE (thoi_diem);
 
--- Ung dung KHONG duoc xoa audit
+-- Ứng dụng KHÔNG được xoá audit
 REVOKE DELETE, UPDATE, TRUNCATE ON audit_log FROM app_rw;
 GRANT INSERT ON audit_log TO app_rw;
 ```
@@ -405,7 +405,7 @@ Ngoài trigger, PostgreSQL còn có extension **`pgaudit`** ghi ở tầng câu 
 ## Rà soát quyền
 
 ```sql
--- Ai co quyen gi tren bang nao
+-- Ai có quyền gì trên bảng nào
 SELECT grantee, table_name, string_agg(privilege_type, ', ' ORDER BY privilege_type)
 FROM information_schema.role_table_grants
 WHERE table_schema = 'public' AND grantee <> 'postgres'
@@ -414,7 +414,7 @@ ORDER BY grantee, table_name;
 ```
 
 ```sql
--- Vai tro nao la SIEU NGUOI DUNG  ← kiem tra dinh ky
+-- Vai trò nào là SIÊU NGƯỜI DÙNG  ← kiểm tra định kỳ
 SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolcanlogin
 FROM pg_roles
 WHERE rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls
@@ -422,14 +422,14 @@ ORDER BY rolname;
 ```
 
 ```sql
--- Bang nao CHUA bat RLS trong he nhieu khach hang
+-- Bảng nào CHƯA bật RLS trong hệ nhiều khách hàng
 SELECT c.relname
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity;
 ```
 
 ```sql
--- Tai khoan lau ngay khong dung
+-- Tài khoản lâu ngày không dùng
 SELECT usename, valuntil FROM pg_user
 WHERE usename NOT IN (SELECT DISTINCT usename FROM pg_stat_activity WHERE usename IS NOT NULL);
 ```
