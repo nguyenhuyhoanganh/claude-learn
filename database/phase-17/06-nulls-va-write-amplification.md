@@ -60,7 +60,7 @@ SELECT * FROM users WHERE status <> 'active';
 ```sql
 -- Cách đúng
 WHERE status IS DISTINCT FROM 'active';
--- hoac
+-- hoặc
 WHERE status <> 'active' OR status IS NULL;
 ```
 
@@ -85,7 +85,7 @@ SELECT * FROM orders WHERE user_id NOT IN (SELECT id FROM banned_users);
 ```
 
 ```sql
--- AN TOAN
+-- AN TOÀN
 SELECT * FROM orders o
 WHERE NOT EXISTS (SELECT 1 FROM banned_users b WHERE b.id = o.user_id);
 ```
@@ -96,7 +96,7 @@ WHERE NOT EXISTS (SELECT 1 FROM banned_users b WHERE b.id = o.user_id);
 
 ```sql
 CREATE TABLE users (email TEXT UNIQUE);
-INSERT INTO users VALUES (NULL), (NULL), (NULL);   -- CHAP NHAN CA BA
+INSERT INTO users VALUES (NULL), (NULL), (NULL);   -- CHẤP NHẬN CẢ BA
 ```
 
 ```text
@@ -139,7 +139,7 @@ Trái với trực giác, `NULL` **tiết kiệm** chỗ:
    POSTGRESQL lưu một BITMAP NULL ở đầu mỗi tuple: 1 bit mỗi cột.
    → cột NULL KHÔNG chiếm byte dữ liệu nào
 
-   Bang 20 cot, trung binh 15 cot NULL:
+   Bảng 20 cột, trung bình 15 cột NULL:
      Dùng NULL      : 23 byte header + 3 byte bitmap + 5 cột dữ liệu
      Dùng chuỗi rỗng: 23 byte header + 20 cột dữ liệu
    → NULL GỌN HƠN đáng kể
@@ -193,29 +193,29 @@ Quy tắc gọn:
 ## Sáu tầng khuếch đại
 
 ```text
-   ┌─ TANG 1: UNG DUNG ─────────────────────────────────────────┐
+   ┌─ TẦNG 1: ỨNG DỤNG ─────────────────────────────────────────┐
    │  UPDATE users SET last_login = now() WHERE id = 42;        │
-   │  Du lieu logic: 8 byte                                     │
-   ├─ TANG 2: MVCC ─────────────────────────────────────────────┤
+   │  Dữ liệu logic: 8 byte                                     │
+   ├─ TẦNG 2: MVCC ─────────────────────────────────────────────┤
    │  PostgreSQL tạo PHIÊN BẢN MỚI của CẢ DÒNG                  │
    │  → ~200 byte (cả dòng, không chỉ cột đổi)                  │
-   ├─ TANG 3: INDEX ────────────────────────────────────────────┤
-   │  ctid doi → cap nhat 5 index × ~40 byte                    │
+   ├─ TẦNG 3: INDEX ────────────────────────────────────────────┤
+   │  ctid đổi → cập nhật 5 index × ~40 byte                    │
    │  → ~200 byte                                               │
-   ├─ TANG 4: WAL ──────────────────────────────────────────────┤
+   ├─ TẦNG 4: WAL ──────────────────────────────────────────────┤
    │  Ghi bản ghi WAL cho dòng + cho mọi index                  │
    │  → ~400 byte                                               │
    │  VÀ nếu là lần đầu page bị sửa sau checkpoint:              │
    │  → GHI CA PAGE 8 KB × (1 heap + 5 index) = 48 KB   ⚠       │
-   ├─ TANG 5: HE DIEU HANH ─────────────────────────────────────┤
-   │  Ghi theo don vi 4 KB                                      │
-   ├─ TANG 6: SSD ──────────────────────────────────────────────┤
+   ├─ TẦNG 5: HỆ ĐIỀU HÀNH ─────────────────────────────────────┤
+   │  Ghi theo đơn vị 4 KB                                      │
+   ├─ TẦNG 6: SSD ──────────────────────────────────────────────┤
    │  Ghi theo đơn vị 16 KB, và GOM RÁC bên trong               │
-   │  → khuech dai them 1,5-4 lan                               │
+   │  → khuếch đại thêm 1,5-4 lần                               │
    └────────────────────────────────────────────────────────────┘
 
    TỔNG: 8 byte logic  →  có thể thành 50-200 KB ghi thật
-                          KHUECH DAI 6.000 - 25.000 LAN
+                          KHUẾCH ĐẠI 6.000 - 25.000 LẦN
 ```
 
 Con số này nghe khó tin, nhưng đo được.
@@ -266,16 +266,16 @@ FROM pg_stat_wal;
       Khuếch đại 50 lần → SSD mòn nhanh hơn 50 lần.
       → 5 năm thành 1 năm
 
-   2. BANG THONG DIA
-      SSD 500 MB/s ghi, khuech dai 50 lan
+   2. BĂNG THÔNG ĐĨA
+      SSD 500 MB/s ghi, khuếch đại 50 lần
       → chỉ ghi được 10 MB/s DỮ LIỆU LOGIC
 
-   3. BANG THONG NHAN BAN
+   3. BĂNG THÔNG NHÂN BẢN
       WAL được gửi NGUYÊN VẸN cho replica.
       Khuếch đại cao → lưu lượng nhân bản cao
       → đắt khi xuyên trung tâm dữ liệu
 
-   4. DUNG LUONG SAO LUU
+   4. DUNG LƯỢNG SAO LƯU
       Sao lưu tăng dần dựa trên WAL → càng lớn
 ```
 
@@ -315,14 +315,14 @@ ALTER TABLE users SET (fillfactor = 80);
 ### 4. Giãn checkpoint
 
 ```sql
-ALTER SYSTEM SET checkpoint_timeout = '15min';   -- mac dinh 5min
-ALTER SYSTEM SET max_wal_size = '8GB';           -- mac dinh 1GB
+ALTER SYSTEM SET checkpoint_timeout = '15min';   -- mặc định 5min
+ALTER SYSTEM SET max_wal_size = '8GB';           -- mặc định 1GB
 ```
 
 ```text
    Checkpoint THƯA → mỗi page chỉ phải ghi cả page MỘT LẦN
    trong khoảng thời gian dài hơn
-   → giam manh `wal_fpi`
+   → giảm mạnh `wal_fpi`
 ```
 
 ### 5. Bật nén WAL
@@ -333,14 +333,14 @@ ALTER SYSTEM SET wal_compression = 'zstd';   -- PG15+
 
 ```text
    Nén riêng các bản ghi GHI CẢ PAGE
-   → thuong giam 40-70% luong WAL
+   → thường giảm 40-70% lượng WAL
    → chi phí CPU nhỏ
 ```
 
 ### 6. Gộp lô lệnh ghi
 
 ```python
-# CHAM: 10.000 transaction → 10.000 lan fsync
+# CHẬM: 10.000 transaction → 10.000 lần fsync
 for row in rows:
     cur.execute("INSERT INTO logs VALUES (%s)", (row,))
     conn.commit()
@@ -367,7 +367,7 @@ conn.commit()
 ```text
    MyRocks ở Facebook: khuếch đại ghi GIẢM ~10 LẦN so với InnoDB
    → đổi lại đọc chậm hơn một chút
-   → xem [phase-11 bai 3]
+   → xem [phase-11 bài 3]
 ```
 
 ## Khuếch đại ghi ở tầng SSD

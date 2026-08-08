@@ -16,7 +16,7 @@ Một hệ có thể có cả ba, hoặc gộp chúng lại. Bài này tách b�
    Bạn muốn sửa 4 dòng nằm ở 4 page khác nhau, rồi COMMIT.
 
    CÁCH NGÂY THƠ: ghi cả 4 page xuống đĩa trước khi trả về "đã commit"
-     → 4 lan ghi NGAU NHIEN + 4 lan fsync
+     → 4 lần ghi NGẪU NHIÊN + 4 lần fsync
      → trên SSD: ~4 × 100 µs = 400 µs, chưa kể tìm kiếm
      → và nếu mất điện giữa chừng: 2 page mới, 2 page cũ → DỮ LIỆU NỬA VỜI
 ```
@@ -26,7 +26,7 @@ Hai vấn đề: **chậm**, và **không nguyên tử**.
 ## Lời giải: ghi nhật ký trước
 
 ```text
-   QUY TAC WAL (bat di bat dich):
+   QUY TẮC WAL (bất di bất dịch):
      Bản ghi nhật ký mô tả một thay đổi phải NẰM YÊN TRÊN ĐĨA
      TRƯỚC KHI page chứa thay đổi đó được phép xuống đĩa.
 ```
@@ -37,7 +37,7 @@ Hai vấn đề: **chậm**, và **không nguyên tử**.
    │       [LSN 0/15A3B] page 4201: byte 128, 'new' → 'paid'     │
    │       [LSN 0/15A5C] page  887: thêm khoá index              │
    │       [LSN 0/15A6D] COMMIT XID 12345                        │
-   │  2. fsync MOT LAN                                           │
+   │  2. fsync MỘT LẦN                                           │
    │  3. Trả về "đã commit"       ← XONG, RẤT NHANH              │
    │                                                             │
    │  Các page dữ liệu thật? Cứ nằm BẨN trong RAM.               │
@@ -78,18 +78,18 @@ Hai tính chất làm mẹo này hoạt động:
 ### Quá trình phục hồi sau sự cố
 
 ```text
-   MAT DIEN. KHOI DONG LAI.
+   MẤT ĐIỆN. KHỞI ĐỘNG LẠI.
 
-   GIAI DOAN 1 — PHAN TICH
-     Doc WAL tu CHECKPOINT gan nhat
-     Xac dinh: transaction nao DA commit, transaction nao DANG DO
+   GIAI ĐOẠN 1 — PHÂN TÍCH
+     Đọc WAL từ CHECKPOINT gần nhất
+     Xác định: transaction nào ĐÃ commit, transaction nào ĐANG DỞ
 
-   GIAI DOAN 2 — REDO
+   GIAI ĐOẠN 2 — REDO
      Làm lại MỌI thay đổi từ checkpoint trở đi
      (kể cả của transaction chưa commit — sẽ hoàn tác ở giai đoạn 3)
      → đưa database về đúng trạng thái lúc mất điện
 
-   GIAI DOAN 3 — UNDO
+   GIAI ĐOẠN 3 — UNDO
      Hoàn tác các transaction DANG DỞ
      → đưa về trạng thái NHẤT QUÁN
 ```
@@ -117,7 +117,7 @@ LOG:  database system is ready to accept connections
 Đây là điểm khác biệt kiến trúc lớn nhất so với MySQL:
 
 ```text
-   POSTGRESQL KHONG CO UNDO LOG.
+   POSTGRESQL KHÔNG CÓ UNDO LOG.
 
    Vì sao không cần?  Vì nó KHÔNG SỬA TẠI CHỖ:
      UPDATE = tạo một PHIÊN BẢN MỚI của dòng, ngay trong bảng
@@ -130,7 +130,7 @@ LOG:  database system is ready to accept connections
 ```
 
 ```text
-   BANG SAU MOT UPDATE:
+   BẢNG SAU MỘT UPDATE:
    ┌────┬─────────┬─────────┬─────────┐
    │ id │ balance │  xmin   │  xmax   │
    ├────┼─────────┼─────────┼─────────┤
@@ -148,7 +148,7 @@ Cái giá của thiết kế này:
    ✔ ROLLBACK gần như tức thì
    ✔ Đọc dữ liệu cũ RẺ (nằm ngay trong bảng)
    ✘ Bảng PHÌNH ra chứa cả phiên bản chết
-   ✘ Can VACUUM don dep
+   ✘ Cần VACUUM dọn dẹp
    ✘ MỌI index phải cập nhật khi UPDATE (vì ctid đổi)
 ```
 
@@ -231,8 +231,8 @@ Hệ quả quan sát được:
 Cách giảm:
 
 ```sql
-ALTER SYSTEM SET checkpoint_timeout = '15min';      -- mac dinh 5min
-ALTER SYSTEM SET max_wal_size = '8GB';              -- mac dinh 1GB
+ALTER SYSTEM SET checkpoint_timeout = '15min';      -- mặc định 5min
+ALTER SYSTEM SET max_wal_size = '8GB';              -- mặc định 1GB
 ALTER SYSTEM SET checkpoint_completion_target = 0.9;
 ALTER SYSTEM SET wal_compression = 'zstd';          -- nén cả page (PG15+)
 ```
@@ -246,7 +246,7 @@ ALTER SYSTEM SET wal_compression = 'zstd';          -- nén cả page (PG15+)
 ```text
    REDO LOG  (ib_logfile0, ib_logfile1)
      • Vòng tròn, kích thước cố định
-     • Ghi thay doi vat ly muc page
+     • Ghi thay đổi vật lý mức page
      • Dùng để phục hồi sau sự cố
 
    UNDO LOG  (undo tablespace)
@@ -256,9 +256,9 @@ ALTER SYSTEM SET wal_compression = 'zstd';          -- nén cả page (PG15+)
 ```
 
 ```text
-   INNODB SUA TAI CHO:
+   INNODB SỬA TẠI CHỖ:
 
-   BANG:                      UNDO LOG:
+   BẢNG:                      UNDO LOG:
    ┌────┬─────────┐           ┌──────────────────────────┐
    │  1 │  900000 │  ← MỚI    │ XID 77: id=1 cũ là 1000000│
    └────┴─────────┘           └──────────────────────────┘
@@ -294,7 +294,7 @@ WHERE name LIKE '%undo%' AND status = 'enabled';
    POSTGRESQL WAL: file MỚI liên tục, file cũ được XOÁ hoặc LƯU TRỮ
    INNODB REDO   : kích thước CỐ ĐỊNH, ghi vòng lại từ đầu
 
-   → Neu redo log QUA NHO:
+   → Nếu redo log QUÁ NHỎ:
        ghi vòng quanh nhanh → phải FLUSH page bẩn gấp gáp
        → hiện tượng "async flush", thông lượng ghi SỤP
 ```
@@ -328,7 +328,7 @@ ALTER SYSTEM SET archive_command = 'cp %p /backup/wal/%f';
 
 ```text
    Bản sao lưu đầy đủ (Chủ nhật)  +  mọi file WAL sau đó
-   → phuc hoi ve BAT KY THOI DIEM NAO
+   → phục hồi về BẤT KỲ THỜI ĐIỂM NÀO
    → ví dụ: ngay TRƯỚC khi ai đó chạy DELETE nhầm lúc 14:32
 ```
 
@@ -353,7 +353,7 @@ SELECT pg_create_logical_replication_slot('cdc_slot', 'pgoutput');
 
    → Debezium, Kafka Connect dùng đúng cơ chế này
    → Đồng bộ dữ liệu sang Elasticsearch, kho phân tích, cache
-   → KHONG can them cot `updated_at` hay them trigger
+   → KHÔNG cần thêm cột `updated_at` hay thêm trigger
 ```
 
 Đây là ứng dụng hiện đại nhất của WAL, và nó thay thế được rất nhiều kiến trúc "polling bảng để tìm thay đổi".
@@ -370,7 +370,7 @@ FROM pg_stat_wal;
 ```
 
 ```text
- wal_records | wal_bytes  | wal_fpi |  tong
+ wal_records | wal_bytes  | wal_fpi |  tổng
 -------------+------------+---------+---------
     88412993 | 4.2884e+11 | 1284993 | 399 GB
                              ▲
@@ -378,7 +378,7 @@ FROM pg_stat_wal;
 ```
 
 ```sql
--- Dung luong thu muc WAL
+-- Dung lượng thư mục WAL
 SELECT pg_size_pretty(sum(size)) FROM pg_ls_waldir();
 
 -- Khe nhân bản đang giữ bao nhiêu WAL  ← NGUY HIỂM NHẤT
@@ -388,7 +388,7 @@ FROM pg_replication_slots;
 ```
 
 ```sql
--- Tan suat checkpoint
+-- Tần suất checkpoint
 SELECT checkpoints_timed, checkpoints_req,
        round(100.0*checkpoints_req/NULLIF(checkpoints_timed+checkpoints_req,0),1) AS pct_ep_buoc
 FROM pg_stat_bgwriter;

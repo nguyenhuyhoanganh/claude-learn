@@ -14,7 +14,7 @@ pip install phe psycopg2-binary
 CREATE TABLE luong_ma_hoa (
     id       BIGSERIAL PRIMARY KEY,
     ten      TEXT   NOT NULL,          -- rõ (không nhạy cảm)
-    phong    TEXT   NOT NULL,          -- ro (can loc theo)
+    phong    TEXT   NOT NULL,          -- rõ (cần lọc theo)
     luong_ma TEXT   NOT NULL           -- MA HOA
 );
 ```
@@ -70,14 +70,14 @@ def tai_ban_ma(chuoi):
 cur.execute("SELECT luong_ma FROM luong_ma_hoa WHERE phong = 'ky_thuat'")
 cac_ban_ma = [tai_ban_ma(r[0]) for r in cur.fetchall()]
 
-tong_ma_hoa = sum(cac_ban_ma)          # ← CONG TREN BAN MA
+tong_ma_hoa = sum(cac_ban_ma)          # ← CỘNG TRÊN BẢN MÃ
 
 # CHỈ CLIENT giải mã
 print(f"Tong luong ky thuat: {khoa_bi_mat.decrypt(tong_ma_hoa):,}")
 ```
 
 ```text
-Tong luong ky thuat: 97,000,000
+Tổng lương kỹ thuật: 97,000,000
 ```
 
 25 + 32 + 40 = 97 triệu. Đúng, và máy chủ chưa từng biết bất kỳ con số nào trong đó.
@@ -117,7 +117,7 @@ except Exception as e:
 ```
 
 ```text
-Loi: unsupported operand type(s)
+Lỗi: unsupported operand type(s)
 ```
 
 ```text
@@ -149,25 +149,25 @@ cac_ban_ma = [khoa_cong.encrypt(i) for i in range(N)]
 t_ma = time.time() - t
 print(f"Mã hoá {N} số       : {t_ma:.2f}s  ({t_ma/N*1000:.2f} ms/số)")
 
-# ─── CONG TREN BAN MA ───
+# ─── CỘNG TRÊN BẢN MÃ ───
 t = time.time()
 tong = sum(cac_ban_ma)
 t_cong = time.time() - t
 print(f"Cộng {N} bản mã     : {t_cong:.3f}s ({t_cong/N*1000:.3f} ms/phép)")
 
-# ─── GIAI MA ───
+# ─── GIẢI MÃ ───
 t = time.time()
 khoa_bi_mat.decrypt(tong)
 print(f"Giải mã 1 kết quả   : {(time.time()-t)*1000:.2f} ms")
 
-# ─── SO SANH: CONG TREN DU LIEU RO ───
+# ─── SO SÁNH: CỘNG TRÊN DỮ LIỆU RÕ ───
 t = time.time()
 sum(range(N))
 t_ro = time.time() - t
 print(f"Cộng {N} số RÕ      : {t_ro*1000:.4f} ms")
 print(f"→ HE chậm hơn       : {t_cong/max(t_ro,1e-9):,.0f} lần")
 
-# ─── KICH THUOC ───
+# ─── KÍCH THƯỚC ───
 print(f"So nguyen RO        : 8 byte")
 print(f"Bản mã Paillier     : {len(str(cac_ban_ma[0].ciphertext()))} byte")
 ```
@@ -194,7 +194,7 @@ Bản mã Paillier     : 617 byte
      → vẫn chậm hơn 4.607 lần so với cộng số rõ,
        nhưng ở quy mô nhỏ thì chấp nhận được
 
-   BAN MA PHINH 77 LAN: 8 byte → 617 byte
+   BẢN MÃ PHÌNH 77 LẦN: 8 byte → 617 byte
      → bảng 1 triệu dòng: 8 MB → 617 MB
 ```
 
@@ -227,9 +227,9 @@ print(f"Kích thước   : {len(tong.serialize()):,} byte cho 4 số thực")
 ```
 
 ```text
-Cong  : 0.31 ms
-Nhan  : 12.44 ms
-Tich vo huong: 18.72 ms
+Cộng  : 0.31 ms
+Nhân  : 12.44 ms
+Tích vô hướng: 18.72 ms
 Kết quả cộng : [6.0, 8.0, 10.0, 12.0]
 Kết quả nhân : [5.0, 12.0, 21.0, 32.0]
 Kích thước   : 262,242 byte cho 4 số thực
@@ -241,9 +241,9 @@ Hai con số đáng chú ý:
    NHÂN chậm hơn CỘNG 40 LẦN (0,31 ms → 12,44 ms)
      → mỗi phép nhân thêm nhiễu, và giảm "ngân sách" phép toán còn lại
 
-   262 KB CHO 4 SO THUC
+   262 KB CHO 4 SỐ THỰC
      → 4 số × 8 byte = 32 byte ở dạng rõ
-     → PHINH 8.195 LAN
+     → PHÌNH 8.195 LẦN
 ```
 
 Nhưng chú ý điểm mạnh của CKKS: nó thao tác trên **vector**, không phải từng số. Với `poly_modulus_degree = 8192`, một bản mã chứa được tới **4.096 số**:
@@ -257,7 +257,7 @@ print(f"Kích thước  : {len(r.serialize()):,} byte")
 
 ```text
 Cộng 4096 số: 0.42 ms
-Kich thuoc  : 262,242 byte
+Kích thước  : 262,242 byte
 ```
 
 ```text
@@ -369,7 +369,7 @@ Bảng này là câu trả lời đầy đủ cho câu hỏi "có nên dùng HE 
      → TLS + mã hoá đĩa + phân quyền là ĐỦ
      → HE chỉ thêm chi phí không đem lại gì
 
-   Neu CO bao gom:
+   Nếu CÓ bao gồm:
      → TEE là lựa chọn thực dụng nhất hôm nay
      → HE cho các bài toán HẸP: tổng hợp nhiều bên, học máy
 ```
@@ -379,16 +379,16 @@ Bảng này là câu trả lời đầy đủ cho câu hỏi "có nên dùng HE 
 ## Ba xu hướng đáng theo dõi
 
 ```text
-   1. TANG TOC BANG PHAN CUNG
+   1. TĂNG TỐC BẰNG PHẦN CỨNG
       Intel, Samsung, DARPA đang làm chip chuyên dụng cho FHE.
       Mục tiêu: rút khoảng cách từ ~10.000 lần xuống ~100 lần.
       Nếu đạt được → đổi cuộc chơi hoàn toàn.
 
-   2. LUOC DO MOI VA TOI UU
+   2. LƯỢC ĐỒ MỚI VÀ TỐI ƯU
       TFHE-rs, CKKS bootstrapping nhanh hơn, kỹ thuật "đóng gói"
       tốt hơn → mỗi năm nhanh lên vài lần.
 
-   3. CHUAN HOA
+   3. CHUẨN HOÁ
       ISO/IEC và NIST đang chuẩn hoá FHE.
       Chuẩn hoá thường là dấu hiệu công nghệ sắp ra khỏi phòng thí nghiệm.
    ```

@@ -23,9 +23,9 @@ Năm 2008 Sun mua MySQL; năm 2010 Oracle mua Sun. Cộng đồng lo ngại Orac
 | **Điều chỉnh** | Nhiều tham số hơn để tinh chỉnh |
 
 ```sql
--- Tuong thich hoan toan: cu the nay van chay
+-- Tương thích hoàn toàn: cú pháp này vẫn chạy
 CREATE TABLE t (id INT PRIMARY KEY) ENGINE = InnoDB;
--- Tren Percona Server, MySQL tu dung XtraDB
+-- Trên Percona Server, MySQL tự dùng XtraDB
 ```
 
 Cú pháp không đổi, ứng dụng không cần biết. Đó là toàn bộ ý đồ thiết kế.
@@ -33,12 +33,12 @@ Cú pháp không đổi, ứng dụng không cần biết. Đó là toàn bộ �
 ## Tình trạng hiện nay
 
 ```text
-   MariaDB 10.1-10.3:  XtraDB la engine mac dinh
+   MariaDB 10.1-10.3:  XtraDB là engine mặc định
    MariaDB 10.4+    :  QUAY VE InnoDB
-   Percona Server 8.0: Bo XtraDB, dung InnoDB cua MySQL 8
+   Percona Server 8.0: Bỏ XtraDB, dùng InnoDB của MySQL 8
 
-   Ly do: MySQL 8 da tiep thu phan lon cai tien cua XtraDB.
-          Duy tri mot nhanh rieng khong con dang cong nua.
+   Lý do: MySQL 8 đã tiếp thu phần lớn cải tiến của XtraDB.
+          Duy trì một nhánh riêng không còn đáng công nữa.
 ```
 
 Bài học rút ra vượt ra ngoài chuyện engine:
@@ -135,11 +135,11 @@ addr  opcode         p1    p2    p3    p4
 ## Cấu hình nên dùng cho sản phẩm thật
 
 ```sql
-PRAGMA journal_mode = WAL;        -- doc va ghi khong chan nhau
-PRAGMA synchronous  = NORMAL;     -- can bang ben vung/toc do o che do WAL
-PRAGMA foreign_keys = ON;         -- MAC DINH LA TAT!  ← rat hay bi quen
-PRAGMA busy_timeout = 5000;       -- cho 5 giay thay vi bao loi ngay
-PRAGMA cache_size   = -64000;     -- 64 MB bo nho dem (so am = KB)
+PRAGMA journal_mode = WAL;        -- đọc và ghi không chặn nhau
+PRAGMA synchronous  = NORMAL;     -- cân bằng bền vững/tốc độ ở chế độ WAL
+PRAGMA foreign_keys = ON;         -- MẶC ĐỊNH LÀ TẮT!  ← rất hay bị quên
+PRAGMA busy_timeout = 5000;       -- chờ 5 giây thay vì báo lỗi ngay
+PRAGMA cache_size   = -64000;     -- 64 MB bộ nhớ đệm (số âm = KB)
 PRAGMA temp_store   = MEMORY;
 ```
 
@@ -225,7 +225,7 @@ Aria giải quyết đúng chuyện đó, giữ nguyên mọi thứ khác.
 ```sql
 CREATE TABLE t (id INT PRIMARY KEY, val TEXT)
   ENGINE = Aria
-  TRANSACTIONAL = 1;              -- bat ghi nhat ky phuc hoi
+  TRANSACTIONAL = 1;              -- bật ghi nhật ký phục hồi
 ```
 
 ## Vai trò thật của Aria trong MariaDB
@@ -233,12 +233,12 @@ CREATE TABLE t (id INT PRIMARY KEY, val TEXT)
 Điều ít người biết: **MariaDB dùng Aria cho các bảng hệ thống và bảng tạm bên trong**.
 
 ```text
-   Truoc: bang tam noi bo dung MyISAM
-          → truy van co GROUP BY/ORDER BY lon tao bang tam
-          → mat dien giua chung → bang tam hong
+   Trước: bảng tạm nội bộ dùng MyISAM
+          → truy vấn có GROUP BY/ORDER BY lớn tạo bảng tạm
+          → mất điện giữa chừng → bảng tạm hỏng
 
-   Sau  : dung Aria
-          → an toan hon, va nhanh hon nho co bo nho dem du lieu
+   Sau  : dùng Aria
+          → an toàn hơn, và nhanh hơn nhờ có bộ nhớ đệm dữ liệu
 ```
 
 Nghĩa là ngay cả khi bạn không bao giờ khai `ENGINE = Aria`, nó vẫn đang chạy trong mọi truy vấn phức tạp của bạn trên MariaDB.
@@ -246,12 +246,12 @@ Nghĩa là ngay cả khi bạn không bao giờ khai `ENGINE = Aria`, nó vẫn 
 ## Khi nào dùng
 
 ```text
-   ✔ Bang tra cuu chi doc, can COUNT(*) tuc thi
-   ✔ Dang dung MyISAM tren MariaDB → doi sang Aria, gan nhu khong mat gi
-   ✔ Bang tam, bang trung gian trong quy trinh ETL
+   ✔ Bảng tra cứu chỉ đọc, cần COUNT(*) tức thì
+   ✔ Đang dùng MyISAM trên MariaDB → đổi sang Aria, gần như không mất gì
+   ✔ Bảng tạm, bảng trung gian trong quy trình ETL
 
-   ✘ Can transaction → InnoDB
-   ✘ Nhieu nguoi ghi dong thoi → InnoDB (Aria van khoa muc bang)
+   ✘ Cần transaction → InnoDB
+   ✘ Nhiều người ghi đồng thời → InnoDB (Aria vẫn khoá mức bảng)
 ```
 
 Quy tắc gọn: **trên MariaDB, không bao giờ có lý do để chọn MyISAM thay vì Aria.**
