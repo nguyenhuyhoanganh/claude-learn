@@ -16,6 +16,22 @@ Một hệ thống ghi **500.000 bản ghi đo lường mỗi giây**. B+Tree kh
 
 Bài này mổ xẻ LSM Tree qua hai engine dùng nó nhiều nhất — LevelDB (Google) và RocksDB (Facebook) — và giải thích chính xác nó đánh đổi cái gì lấy cái gì.
 
+Ý tưởng này không sinh ra ở LevelDB. Nó đến từ **Google BigTable** — hệ lưu trữ phân tán Google dùng cho Search, Maps, Gmail, mô tả trong bài báo năm 2006. BigTable giới thiệu bộ ba **memtable → SSTable → compaction** mà toàn bộ họ LSM ngày nay vẫn dùng nguyên vẹn.
+
+```text
+   DÒNG HỌ LSM
+   ═══════════
+   2006  Google BigTable (bài báo)
+           → memtable, SSTable, compaction, bloom filter
+   2011  LevelDB — Jeff Dean & Sanjay Ghemawat (chính hai tác giả BigTable)
+           → rút gọn BigTable thành một thư viện nhúng một máy
+   2012  RocksDB — Facebook fork LevelDB
+           → thêm đa luồng, transaction, nhiều chiến lược compaction
+   2015+ MyRocks, CockroachDB, TiKV, Kafka Streams... đều nhúng RocksDB
+
+   → Học LSM một lần là hiểu được cả họ này.
+```
+
 ## Ý tưởng cốt lõi
 
 ```text

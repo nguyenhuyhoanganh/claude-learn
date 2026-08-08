@@ -124,6 +124,40 @@ Nó đang chạy trong OpenLDAP, Monero, và nhiều hệ thống cần đọc c
 | **WiredTiger** | B+Tree + LSM | ACID | Tài liệu | Không | MongoDB (mặc định) |
 | **PostgreSQL** | Heap + B+Tree | ACID | Dòng | Không | PostgreSQL (không đổi được) |
 
+## Bản đồ toàn cảnh — hệ nào đứng ở phe nào
+
+Bảng trên liệt kê engine của MySQL/MariaDB. Nhưng nếu lùi ra xa hơn và nhìn **toàn bộ ngành**, mọi hệ lưu trữ đều rơi vào một trong hai phe, và biết một hệ ở phe nào là đoán được ngay đặc tính của nó:
+
+```text
+   ┌─ PHE B-TREE / B+TREE ──────────────────────────────────────────┐
+   │  Oracle · SQL Server · IBM DB2 · PostgreSQL · MySQL (InnoDB)   │
+   │  MariaDB · Percona · MongoDB (WiredTiger) · CouchDB · SQLite   │
+   │                                                                │
+   │  → Đọc điểm nhanh và ỔN ĐỊNH, quét khoảng tốt                  │
+   │  → Ghi đắt hơn (I/O ngẫu nhiên, tách page)                     │
+   │  → Phần lớn hệ nghiệp vụ nằm ở đây                             │
+   ├─ PHE LSM TREE ────────────────────────────────────────────────┤
+   │  Cassandra · Apache HBase · Google Cloud Bigtable · InfluxDB   │
+   │  RocksDB · LevelDB · MyRocks · ScyllaDB · CockroachDB · TiKV   │
+   │  YugabyteDB · Elasticsearch (Lucene, cùng tư tưởng nối thêm)   │
+   │                                                                │
+   │  → Ghi cực nhanh (I/O tuần tự), nén tốt                        │
+   │  → Đọc phải tra nhiều tầng; thỉnh thoảng khựng vì compaction   │
+   │  → Chuỗi thời gian, log, đo lường, ghi phân tán                │
+   └────────────────────────────────────────────────────────────────┘
+```
+
+Cách dùng bản đồ này khi gặp một hệ lạ: hỏi **"nó dùng B-Tree hay LSM?"**, và bạn đã đoán được ngay ba điều — ghi nhanh hay đọc nhanh, có khựng theo chu kỳ không, và xoá dữ liệu thì đĩa có giảm ngay không.
+
+Hai cái tên đáng chú ý riêng:
+
+| Hệ | Điểm đặc biệt |
+|---|---|
+| **Google Bigtable** | Ông tổ của cả phe LSM. Bài báo 2006 định nghĩa memtable/SSTable/compaction; LevelDB rồi RocksDB là hậu duệ trực tiếp — xem [bài 3](03-leveldb-rocksdb-va-demo.md). |
+| **CouchDB / Couchbase** | Database **nói HTTP/REST ngay ở tầng giao thức** — không cần dựng một tầng API riêng phía trước để trình duyệt gọi được. Ý tưởng hiếm và đáng biết, dù ít dùng cho nghiệp vụ nặng. |
+
+CouchDB đáng dừng lại một nhịp vì nó phá một giả định mặc định của cả khoá này: rằng database luôn nói một **giao thức nhị phân riêng** ([phase-14 bài 1](../phase-14/01-bao-mat-ket-noi-database-tls.md)) và luôn cần một tầng ứng dụng đứng giữa. CouchDB cho thấy giả định đó là **lựa chọn thiết kế**, không phải quy luật. Đánh đổi: HTTP nói nhiều hơn và tốn hơn giao thức nhị phân, nên nó không hợp cho tải OLTP cao.
+
 ## Chọn engine theo bài toán
 
 | Bài toán | Engine |
