@@ -187,4 +187,6 @@ Khoá về **nội tại database engine**: page và I/O, B-Tree và B+Tree, ind
 
 ---
 
+> **Đối chiếu nguồn:** bảng ánh xạ đầy đủ **153 file transcript → 56 bài học** nằm ở [DOI-CHIEU-TRANSCRIPT.md](DOI-CHIEU-TRANSCRIPT.md), kèm danh sách phần cố ý bỏ và phần bổ sung ngoài transcript.
+
 *Nội dung tham chiếu transcript `transcripts/database-engines-crash-course`, được kiểm chứng lại và bổ sung chiều sâu, con số đo được, và các trường hợp thực tế.*
