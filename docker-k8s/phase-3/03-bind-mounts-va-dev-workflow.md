@@ -46,6 +46,56 @@ docker run -v ${PWD}:/app myapp
 docker run -v %cd%:/app myapp
 ```
 
+### Ba quy tắc cú pháp hay làm người mới vấp
+
+**Một — đường dẫn máy thật phải là đường dẫn tuyệt đối.**
+
+```bash
+docker run -v ./src:/app myapp        # ✗ Docker HIỂU NHẦM "./src" là TÊN VOLUME
+docker run -v $(pwd)/src:/app myapp   # ✓
+```
+
+Đây là bẫy khó chịu vì Docker **không báo lỗi**. Nó lặng lẽ tạo một named volume tên `./src` (hoặc từ chối vì tên không hợp lệ, tuỳ phiên bản), và bạn ngồi thắc mắc sao thư mục trong container rỗng.
+
+> Riêng trong `docker-compose.yml` thì **đường dẫn tương đối lại hợp lệ** — Compose tự đổi thành tuyệt đối dựa trên vị trí file YAML. Chính sự khác nhau này làm nhiều người nhầm khi chuyển từ Compose sang `docker run`.
+
+**Hai — cú pháp `--mount` rõ ràng hơn `-v`.**
+
+```bash
+# -v: ngắn, nhưng ba thứ khác nhau viết gần giống nhau
+-v /host/path:/app      # bind mount
+-v myvolume:/app        # named volume
+-v /app                 # anonymous volume
+
+# --mount: dài hơn nhưng KHÔNG THỂ nhầm
+--mount type=bind,source="$(pwd)",target=/app
+--mount type=volume,source=myvolume,target=/app
+```
+
+Khác biệt quan trọng về hành vi: nếu đường dẫn máy thật **không tồn tại**, `-v` sẽ **tự tạo một thư mục rỗng**, còn `--mount` **báo lỗi ngay**. Với dev thì `-v` tiện; với script tự động thì `--mount` an toàn hơn nhiều vì lỗi lộ ra sớm.
+
+**Ba — trên Linux có vấn đề quyền sở hữu file.**
+
+```bash
+docker run -v $(pwd):/app node:18 sh -c "touch /app/file-moi.txt"
+ls -la file-moi.txt
+```
+
+```text
+-rw-r--r-- 1 root root 0 Aug  9 10:23 file-moi.txt
+              ▲▲▲▲
+     File do container tạo thuộc về ROOT
+     → user thường trên máy bạn KHÔNG sửa/xoá được
+```
+
+Cách chữa: chạy container bằng đúng user của bạn.
+
+```bash
+docker run -u $(id -u):$(id -g) -v $(pwd):/app node:18 sh -c "touch /app/file-moi.txt"
+```
+
+Vấn đề này **không xảy ra trên macOS/Windows** vì lớp chia sẻ file của Docker Desktop tự ánh xạ quyền. Đó là lý do một dự án chạy êm trên máy Mac của bạn lại sinh ra hàng loạt file thuộc root trên máy Linux của đồng nghiệp.
+
 ---
 
 ## Ví dụ thực tế: Node.js Development Setup
@@ -251,6 +301,56 @@ docker run \
   -v /app/node_modules \        # protect node_modules
   -v feedback:/app/feedback \   # persist user data
   myapp
+```
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Triệu chứng | Cách xử lý |
+|---|---|---|
+| Dùng đường dẫn **tương đối** với `docker run -v` | Thư mục trong container rỗng, không báo lỗi | Dùng `$(pwd)/...`. (Trong Compose thì tương đối lại hợp lệ) |
+| Quên anonymous volume cho `node_modules` | `Cannot find module 'express'` dù đã `npm install` lúc build | Thêm `-v /app/node_modules` |
+| **Hot reload không chạy trên máy Windows/WSL** | Sửa file mà nodemon im lặng | Cơ chế theo dõi file không lan qua ranh giới hệ thống file. Thêm `--legacy-watching` (nodemon) hoặc `CHOKIDAR_USEPOLLING=true` |
+| File do container tạo thuộc về `root` (trên Linux) | Không sửa/xoá được file trên máy mình | `docker run -u $(id -u):$(id -g)` |
+| Bind mount **rất chậm trên macOS** | `npm install` mất vài phút thay vì vài giây | Bản chất của lớp chia sẻ file trong máy ảo. Dùng anonymous volume cho `node_modules`, hoặc thêm `:delegated` |
+| Dùng bind mount ở **production** | Server phải có sẵn đúng thư mục code — mất hết ý nghĩa của image | `COPY` code vào image |
+| Bind mount đè lên thư mục có sẵn của image | Thư mục đó **biến mất hoàn toàn** trong container | Đây là hành vi cố ý — dùng anonymous volume để che ngược lại |
+| Quên `:ro` cho thư mục chỉ cần đọc | Container ghi bậy vào code trên máy bạn | Thêm `:ro` |
+| Trên RHEL/CentOS có SELinux, bind mount báo `Permission denied` | Container không đọc được file dù quyền đúng | Thêm hậu tố `:z` (chia sẻ) hoặc `:Z` (riêng) |
+
+Hai dòng đáng nói kỹ.
+
+**Hot reload không chạy** là câu hỏi hay gặp nhất khi dev trên Windows. Nguyên nhân: nodemon dựa vào việc hệ điều hành **báo có file thay đổi**, nhưng thông báo đó không đi qua được ranh giới giữa Windows và máy ảo Linux. Cách chữa là bảo nó **tự hỏi lại theo chu kỳ** thay vì chờ được báo:
+
+```json
+{
+  "scripts": {
+    "dev": "nodemon --legacy-watch server.js"
+  }
+}
+```
+
+**Vì sao bind mount đè lên thư mục của image** — hiểu điều này thì hết thắc mắc về `node_modules`:
+
+```text
+   Image có:  /app/server.js, /app/package.json, /app/node_modules/  (đầy đủ)
+
+   docker run -v $(pwd):/app
+        │
+        ▼
+   Thư mục /app trong container giờ CHÍNH LÀ thư mục trên máy bạn.
+   Máy bạn KHÔNG có node_modules (vì bị .gitignore, hoặc chưa cài).
+        │
+        ▼
+   → /app/node_modules TRONG CONTAINER cũng KHÔNG CÓ
+   → Cannot find module 'express'
+
+   Thêm -v /app/node_modules (anonymous volume)
+        │
+        ▼
+   Đường dẫn DÀI HƠN thắng → node_modules của image được giữ lại,
+   không bị bind mount che.
 ```
 
 ---

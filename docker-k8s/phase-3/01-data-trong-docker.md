@@ -85,6 +85,63 @@ docker run myapp
 # /app/feedback/ → TRỐNG
 ```
 
+### Tự tay chứng kiến dữ liệu biến mất
+
+Ba mươi giây, và bạn sẽ không bao giờ quên bài học này.
+
+```bash
+# BƯỚC 1 — tạo container, ghi một file vào đó
+docker run -d --name thu-mat-du-lieu alpine sleep 600
+docker exec thu-mat-du-lieu sh -c "echo 'du lieu quan trong' > /data.txt"
+docker exec thu-mat-du-lieu cat /data.txt
+```
+
+```text
+du lieu quan trong
+```
+
+```bash
+# BƯỚC 2 — DỪNG container. Dữ liệu có mất không?
+docker stop thu-mat-du-lieu
+docker start thu-mat-du-lieu
+docker exec thu-mat-du-lieu cat /data.txt
+```
+
+```text
+du lieu quan trong          ← VẪN CÒN
+```
+
+Đây là điểm mà nhiều người hiểu sai: **dừng container KHÔNG mất dữ liệu**. Lớp ghi vẫn nằm trên đĩa.
+
+```bash
+# BƯỚC 3 — XOÁ container rồi tạo lại từ CÙNG image
+docker rm -f thu-mat-du-lieu
+docker run -d --name thu-mat-du-lieu alpine sleep 600
+docker exec thu-mat-du-lieu cat /data.txt
+```
+
+```text
+cat: can't open '/data.txt': No such file or directory
+                 ▲
+        MẤT VĨNH VIỄN — không có cách nào lấy lại
+```
+
+```bash
+docker rm -f thu-mat-du-lieu
+```
+
+Ranh giới chính xác cần nhớ:
+
+```text
+   docker stop / start / restart   →  DỮ LIỆU CÒN
+                                       (lớp ghi của container vẫn tồn tại)
+
+   docker rm                       →  DỮ LIỆU MẤT
+                                       (lớp ghi bị xoá cùng container)
+```
+
+Và đây là lý do câu chuyện nghiêm trọng hơn bạn tưởng: ở production, **container bị xoá và tạo lại là chuyện hằng ngày** — mỗi lần deploy, mỗi lần scale, mỗi lần máy chủ khởi động lại, mỗi lần Kubernetes chuyển Pod sang node khác. Không phải "nếu", mà là "bao lâu một lần".
+
 ---
 
 ## Sơ đồ tổng quan giải pháp
@@ -126,6 +183,20 @@ docker run myapp
 - Ba loại data: Application (image), Temporary (container layer), Permanent (cần giải pháp)
 - Docker cung cấp **Volumes** (Docker quản lý) và **Bind Mounts** (bạn quản lý) để persist data
 - Việc hiểu loại data nào cần gì là bước đầu tiên để thiết kế storage đúng
+- Ranh giới chính xác: **`docker stop` KHÔNG mất dữ liệu, `docker rm` thì MẤT**. Ở production, việc xoá và tạo lại container là chuyện hằng ngày — mỗi lần deploy, mỗi lần scale.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách đúng |
+|---|---|---|
+| Tưởng dừng container là mất dữ liệu | Lo lắng không cần thiết | `stop` giữ nguyên, `rm` mới mất |
+| Tưởng dữ liệu tự an toàn vì container "vẫn chạy" | Deploy lần sau là mất sạch | Bất cứ thứ gì cần giữ đều phải nằm ngoài lớp container |
+| Chạy database production **không có volume** | Mất toàn bộ dữ liệu khi container tạo lại | Named volume, hoặc database quản lý sẵn |
+| Ghi log vào file bên trong container | Mất log đúng lúc cần điều tra nhất | Ghi ra stdout — xem [Phase 20 bài 1](../phase-20/01-log-va-event.md) |
+| Dùng `docker commit` để "lưu" dữ liệu | Tạo image khổng lồ và không ai tái lập được | Dùng volume |
+| Nhầm "dữ liệu ứng dụng" với "dữ liệu người dùng" | Đóng gói nhầm chỗ | Code vào **image**, dữ liệu người dùng vào **volume** |
 
 ---
 

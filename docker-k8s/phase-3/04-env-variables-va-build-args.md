@@ -294,4 +294,83 @@ ARG (Build-time Variables):
 
 ---
 
+## `ARG` không giữ được bí mật — xem tận mắt
+
+Nhiều người tưởng `ARG` an toàn hơn `ENV` vì nó "chỉ tồn tại lúc build". Sự thật là **cả hai đều lộ**, chỉ khác chỗ lộ.
+
+```dockerfile
+FROM alpine
+ARG NPM_TOKEN
+RUN echo "dang dung token: $NPM_TOKEN" > /tmp/log.txt
+```
+
+```bash
+docker build --build-arg NPM_TOKEN=npm_sieubimat123 -t thu-nghiem .
+docker history --no-trunc thu-nghiem | grep -i token
+```
+
+```text
+|1 NPM_TOKEN=npm_sieubimat123 /bin/sh -c echo "dang dung token: ..."
+              ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+     TOKEN NẰM NGUYÊN VĂN trong lịch sử image
+     Ai pull được image này đều đọc được
+```
+
+Với `ENV` thì còn tệ hơn — giá trị nằm luôn trong siêu dữ liệu image và **mọi tiến trình trong container đều thấy**:
+
+```bash
+docker inspect thu-nghiem --format '{{json .Config.Env}}'
+```
+
+Ba cách làm đúng, theo thứ tự ưu tiên:
+
+| Cách | Khi nào | Bí mật có vào image không |
+|---|---|---|
+| **BuildKit secret mount** | Cần bí mật **lúc build** (token tải thư viện riêng) | **Không** |
+| Truyền lúc **chạy** (`-e`, `--env-file`) | Cần bí mật **lúc chạy** (mật khẩu database) | Không |
+| Kubernetes Secret / kho bí mật ngoài | Production | Không |
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM node:18-alpine
+# Token chỉ tồn tại trong đúng lệnh RUN này, KHÔNG vào layer nào
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc \
+    npm ci --omit=dev
+```
+
+```bash
+DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t myapp .
+docker history --no-trunc myapp | grep -i token    # → không có gì
+```
+
+> **Quy tắc gọn**: `ARG` dùng cho **cấu hình build** (chọn phiên bản, bật/tắt tính năng). `ENV` dùng cho **cấu hình chạy không nhạy cảm** (`NODE_ENV`, `PORT`, `LOG_LEVEL`). **Bí mật thì không dùng cái nào trong hai cái đó.**
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách đúng |
+|---|---|---|
+| Đưa mật khẩu vào `ENV` trong Dockerfile | Nằm vĩnh viễn trong image, ai pull cũng đọc được | Truyền lúc chạy |
+| Tưởng `ARG` an toàn hơn `ENV` | `docker history` đọc được | BuildKit secret mount |
+| Quên `.env` trong `.dockerignore` | `COPY . .` đưa cả file bí mật vào image | Luôn có trong `.dockerignore` |
+| Commit `.env` lên Git | Lộ vĩnh viễn — **xoá commit không đủ** | `.gitignore`, và coi như đã lộ thì phải đổi mật khẩu |
+| Dùng `ARG` rồi thắc mắc sao container không thấy biến | `ARG` **không tồn tại lúc chạy** | `ARG X` + `ENV X=$X` nếu thật sự cần |
+| Đặt `ARG`/`ENV` hay đổi lên **đầu** Dockerfile | Đổi giá trị là **mất cache toàn bộ** phía sau | Đặt xuống thấp nhất có thể |
+| `--env-file` với file có dấu nháy | Docker giữ nguyên cả dấu nháy thành một phần giá trị | Viết `KEY=giatri`, **không** `KEY="giatri"` |
+| Tưởng `-e` ghi đè được `ENV` trong Dockerfile | Đúng là ghi đè được — nhưng **chỉ với `-e`, không phải sửa Dockerfile rồi quên build lại** | Nhớ thứ tự ưu tiên: `-e` > `--env-file` > `ENV` |
+
+---
+
+## Tóm tắt bài 4
+
+- **`ENV`** tạo biến tồn tại **lúc chạy**, nằm trong image, ghi đè được bằng `-e` hoặc `--env-file`.
+- **`ARG`** chỉ tồn tại **lúc build**, không có trong container. Truyền bằng `--build-arg`.
+- Thứ tự ưu tiên lúc chạy: **`-e`** > **`--env-file`** > **`ENV` trong Dockerfile**.
+- **Cả `ARG` lẫn `ENV` đều không giữ được bí mật.** `docker history` đọc được `ARG`; `docker inspect` đọc được `ENV`. Dùng **BuildKit secret mount** cho bí mật lúc build, và truyền lúc chạy cho bí mật lúc chạy.
+- **`.env` phải nằm trong cả `.dockerignore` lẫn `.gitignore`.**
+- Đặt `ARG`/`ENV` hay đổi **xuống cuối** Dockerfile để không phá bộ nhớ đệm build.
+
+---
+
 **Bài kế tiếp** → [Bài 5: Tổng kết Volumes & Storage Patterns](05-volumes-tong-ket-va-patterns.md)

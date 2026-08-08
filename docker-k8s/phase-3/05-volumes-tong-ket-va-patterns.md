@@ -215,4 +215,71 @@ Bạn đã học:
 
 ---
 
+## Cây quyết định: dữ liệu này để ở đâu
+
+```text
+   Dữ liệu này là gì?
+        │
+        ├─ Code, thư viện, tài nguyên tĩnh
+        │     → COPY vào IMAGE
+        │       (bất biến, đi cùng phiên bản)
+        │
+        ├─ File tạm, cache trong một phiên chạy
+        │     → LỚP CONTAINER, không cần làm gì
+        │       (mất cũng không sao)
+        │
+        ├─ Dữ liệu người dùng, database, file tải lên
+        │     → NAMED VOLUME
+        │       (sống sót qua docker rm)
+        │
+        ├─ Code đang sửa, muốn thấy đổi ngay khi dev
+        │     → BIND MOUNT
+        │       (chỉ dùng ở dev, KHÔNG ở production)
+        │
+        ├─ Thư mục cần CHE khỏi bind mount (node_modules)
+        │     → ANONYMOUS VOLUME
+        │
+        └─ Cấu hình, mật khẩu
+              → BIẾN MÔI TRƯỜNG lúc chạy, hoặc kho bí mật
+                (KHÔNG bao giờ nhét vào image)
+```
+
+Ba câu hỏi để tự kiểm tra một thiết kế lưu trữ:
+
+| Câu hỏi | Nếu trả lời sai |
+|---|---|
+| Xoá container rồi tạo lại, còn dữ liệu không? | Thiếu volume cho dữ liệu quan trọng |
+| Chuyển sang máy chủ khác, chạy được ngay không? | Đang phụ thuộc bind mount hoặc trạng thái cục bộ |
+| Có bí mật nào nằm trong image không? | `docker history` và `docker inspect` sẽ cho câu trả lời |
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả |
+|---|---|
+| Dùng bind mount ở production | Máy chủ phải có sẵn đúng thư mục code — image mất hết ý nghĩa |
+| Chạy database production trong container mà không có volume | Mất toàn bộ dữ liệu ở lần deploy tiếp theo |
+| `docker system prune --volumes` để dọn đĩa | **Xoá sạch dữ liệu** trong volume không có container gắn |
+| Gắn volume đè lên thư mục chứa code của image | Docker chỉ chép dữ liệu image vào volume ở **lần đầu** — sau đó file mới thêm vào image không bao giờ xuất hiện |
+| Không sao lưu volume | Máy hỏng là mất hết; volume không tự sao lưu |
+| Để bí mật trong `ENV` hoặc `ARG` | Nằm vĩnh viễn trong image |
+| Quên `.dockerignore` | `.env`, `.git`, `node_modules` vào thẳng image |
+| Nhiều container cùng ghi vào một volume | Hỏng dữ liệu, đặc biệt với database |
+
+---
+
+## Tóm tắt Phase 3
+
+- **Container không giữ dữ liệu.** `docker stop` thì còn, **`docker rm` thì mất** — và ở production, xoá rồi tạo lại container là chuyện hằng ngày.
+- Ba nơi chứa dữ liệu, ba mục đích khác nhau: **image** (code, bất biến), **lớp container** (tạm, mất cũng được), **volume/bind mount** (cần giữ).
+- **Named volume** cho dữ liệu production. **Bind mount** cho dev. **Anonymous volume** chủ yếu để **che thư mục** khỏi bị bind mount đè (`node_modules`).
+- Quy tắc đè: **đường dẫn dài hơn thắng**. Đó là toàn bộ cơ chế của mẹo `node_modules`.
+- Bind mount trên `docker run` **bắt buộc đường dẫn tuyệt đối** (Compose thì không). Trên Linux còn sinh file thuộc `root` — chữa bằng `-u $(id -u):$(id -g)`.
+- **Volume không có lệnh sao lưu.** Cách chuẩn: gắn vào container tạm rồi `tar`.
+- **`docker volume prune` và `docker system prune --volumes` xoá dữ liệu thật, không hoàn tác được.**
+- **`ARG` và `ENV` đều không giữ được bí mật** — dùng BuildKit secret mount lúc build, biến môi trường lúc chạy, và kho bí mật ở production.
+
+---
+
 **Phase kế tiếp** → [Bài 1: Ba loại giao tiếp trong Dockerized App](../phase-4/01-ba-loai-giao-tiep-trong-docker.md)

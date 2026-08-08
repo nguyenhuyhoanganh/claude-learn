@@ -168,6 +168,79 @@ docker volume rm feedback
 docker volume prune
 ```
 
+### Named volume thật sự nằm ở đâu
+
+Câu hỏi hay bị bỏ qua: "Docker quản lý" nghĩa là để ở đâu?
+
+```bash
+docker volume inspect feedback --format '{{.Mountpoint}}'
+```
+
+```text
+/var/lib/docker/volumes/feedback/_data
+```
+
+Trên **Linux**, đó là đường dẫn thật, xem được ngay:
+
+```bash
+sudo ls -la /var/lib/docker/volumes/feedback/_data
+```
+
+Trên **macOS/Windows** thì đường dẫn này nằm **bên trong máy ảo Docker Desktop** ([Phase 1 bài 2](../phase-1/02-containers-vs-virtual-machines.md)), nên `ls` ở máy thật sẽ không thấy gì. Muốn xem thì phải đi qua một container:
+
+```bash
+docker run --rm -v feedback:/data alpine ls -la /data
+```
+
+Mẹo này cũng là cách **sao lưu và khôi phục** volume — thao tác mà không có lệnh Docker riêng:
+
+```bash
+# SAO LƯU volume ra file tar trên máy thật
+docker run --rm \
+  -v feedback:/data:ro \
+  -v "$(pwd)":/backup \
+  alpine tar czf /backup/feedback-$(date +%F).tar.gz -C /data .
+
+# KHÔI PHỤC vào một volume mới
+docker volume create feedback-restored
+docker run --rm \
+  -v feedback-restored:/data \
+  -v "$(pwd)":/backup \
+  alpine sh -c "tar xzf /backup/feedback-2026-08-09.tar.gz -C /data"
+```
+
+Ý tưởng chung: **gắn volume vào một container tạm, rồi thao tác từ bên trong**. Không có volume nào Docker không cho bạn chạm tới — chỉ là phải đi vòng.
+
+### `docker volume prune` — lệnh xoá dữ liệu thật
+
+```bash
+docker volume prune
+```
+
+```text
+WARNING! This will remove anonymous local volumes not used by at least one container.
+Are you sure you want to continue? [y/N]
+```
+
+Đây là lệnh nguy hiểm nhất trong bài, vì hai lý do:
+
+**Một — "không dùng" nghĩa là "không có container nào đang gắn"**, chứ không phải "không có dữ liệu". Database local của bạn nằm trong một volume mà container vừa bị xoá → volume đó bị coi là không dùng → **prune xoá sạch dữ liệu**.
+
+**Hai — không có thùng rác.** Không có lệnh hoàn tác, không khôi phục được.
+
+```bash
+# LUÔN xem trước rồi mới xoá
+docker volume ls -f dangling=true
+```
+
+```text
+DRIVER    VOLUME NAME
+local     8f3a2b1c9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a
+local     postgres-du-lieu-that          ← ĐÂY LÀ DỮ LIỆU BẠN CẦN
+```
+
+Và lưu ý: từ Docker 23, `docker volume prune` mặc định **chỉ xoá volume vô danh**. Nhưng `docker volume prune -a` và `docker system prune --volumes` thì **xoá cả named volume** — hai lệnh đó mới là thứ thật sự nguy hiểm.
+
 ---
 
 ## Tóm tắt — Khi nào dùng gì?
@@ -185,6 +258,51 @@ Data cần persist giữa container restart/remove?
 └── Anonymous Volume: -v /container/path
     (thường dùng cho node_modules)
 ```
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách đúng |
+|---|---|---|
+| `docker system prune --volumes` để "dọn cho gọn" | **Xoá sạch dữ liệu** database local | Xem trước bằng `docker volume ls`, dùng `docker container prune` cho an toàn |
+| Tưởng volume vô danh cũng persist được | Mỗi lần `docker run` sinh volume **mới**, volume cũ thành rác | Dùng **named volume** cho dữ liệu cần giữ |
+| Volume vô danh tích tụ hàng trăm cái | Đầy đĩa mà không biết vì sao | `docker volume ls -f dangling=true` để rà |
+| Gắn volume vào thư mục **đã có dữ liệu trong image** | Lần đầu Docker chép dữ liệu image vào volume; **những lần sau thì không** → tưởng image cập nhật mà thực ra đang đọc dữ liệu cũ | Đừng gắn volume đè lên thư mục chứa code |
+| Dùng cùng một named volume cho nhiều container ghi đồng thời | Hỏng dữ liệu (đặc biệt với database) | Mỗi database một volume riêng |
+| Tìm volume ở `/var/lib/docker` trên macOS | Không thấy gì, tưởng volume hỏng | Đường dẫn đó nằm trong **máy ảo**; truy cập qua container tạm |
+| Không sao lưu volume | Máy hỏng là mất hết | Sao lưu bằng container tạm + `tar` |
+| Xoá container bằng `docker rm -v` theo thói quen | Cờ `-v` **xoá luôn volume vô danh** gắn với nó | Bỏ `-v` nếu không chắc |
+
+Bẫy thứ tư đáng xem tận mắt vì nó rất khó chẩn đoán:
+
+```text
+   Image có sẵn /app/config với file mac-dinh.json
+
+   LẦN ĐẦU gắn volume rỗng vào /app/config
+   → Docker CHÉP nội dung có sẵn từ image vào volume
+   → volume giờ có mac-dinh.json  ✓
+
+   Bạn sửa Dockerfile, thêm file moi.json, build lại image
+
+   LẦN SAU chạy với CÙNG volume đó
+   → Volume KHÔNG rỗng nữa → Docker KHÔNG chép gì cả
+   → moi.json KHÔNG BAO GIỜ xuất hiện
+   → Bạn build lại mười lần cũng không hiểu vì sao
+```
+
+Cách chữa: xoá volume rồi tạo lại (`docker volume rm`), hoặc **đừng gắn volume lên thư mục chứa file của image**.
+
+---
+
+## Tóm tắt bài 2
+
+- **Volume là cơ chế lưu dữ liệu do Docker quản lý**, nằm ngoài lớp ghi của container nên sống sót qua `docker rm`.
+- **Named volume** (`-v ten:/duong/dan`) cho dữ liệu cần giữ. **Anonymous volume** (`-v /duong/dan`) chủ yếu để **che một thư mục con** khỏi bị bind mount đè — điển hình là `node_modules`.
+- Volume nằm ở `/var/lib/docker/volumes/<tên>/_data` trên Linux; trên macOS/Windows thì nằm **trong máy ảo**, phải truy cập qua container tạm.
+- **Không có lệnh sao lưu volume.** Cách chuẩn: gắn volume vào container tạm rồi `tar` ra ngoài — và đó cũng là cách khôi phục.
+- **`docker volume prune` xoá dữ liệu thật, không có thùng rác.** "Không dùng" chỉ nghĩa là "không container nào đang gắn". Nguy hiểm nhất là `docker system prune --volumes`.
+- Bẫy khó chẩn đoán nhất: Docker **chỉ chép dữ liệu từ image vào volume ở lần đầu**. Sau đó volume đè lên image mãi mãi, nên file mới thêm vào image sẽ không bao giờ xuất hiện.
 
 ---
 
