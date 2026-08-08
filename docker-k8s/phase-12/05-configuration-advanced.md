@@ -197,4 +197,54 @@ metadata:
 
 ---
 
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách xử lý |
+|---|---|---|
+| **`livenessProbe` kiểm tra database** | Database chậm → **mọi Pod bị giết** dù chúng hoàn toàn khoẻ | Liveness chỉ kiểm tra **chính tiến trình đó**. Phụ thuộc bên ngoài để `readinessProbe` lo — xem [Phase 18 bài 2](../phase-18/02-probes-va-bay-liveness.md) |
+| Chỉ có `livenessProbe`, không có `readinessProbe` | Traffic vào Pod chưa sẵn sàng → **502 mỗi lần deploy** | Luôn có readiness |
+| `initialDelaySeconds` quá ngắn cho ứng dụng Java | **Vòng lặp chết** — Pod bị giết trước khi kịp khởi động | Dùng **`startupProbe`** thay vì kéo dài `initialDelaySeconds` |
+| `timeoutSeconds: 1` (mặc định) | Pod bị giết oan khi tải cao → **sập dây chuyền** | Đặt 3–5 giây |
+| `imagePullPolicy: Always` với tag cụ thể | Tải image mỗi lần tạo Pod, chậm và tốn băng thông | `IfNotPresent` khi đã ghim tag |
+| Dùng tag `latest` trong Kubernetes | Kubernetes ngầm đặt `imagePullPolicy: Always`; và **hai Pod có thể chạy hai image khác nhau** | Luôn ghim tag cụ thể |
+| Quên `namespace` trong lệnh `kubectl` | Thao tác nhầm vào `default` | `kubectl config set-context --current --namespace=<tên>` |
+| Xoá namespace để "dọn dẹp" | **Xoá sạch mọi thứ bên trong**, kể cả PVC và dữ liệu | Kiểm tra `kubectl get all -n <tên>` trước |
+
+Dòng đầu tiên đáng nhấn mạnh vì nó là cách một cụm **tự giết chính mình**:
+
+```text
+   Tải tăng đột biến → /health (có gọi database) chậm từ 50ms lên 4 giây
+        │
+        ▼
+   livenessProbe timeout 1 giây → THẤT BẠI 3 lần → Kubernetes GIẾT Pod
+        │
+        ▼
+   Pod còn lại gánh nhiều hơn → CHẬM HƠN → cũng bị giết
+        │
+        ▼
+   TOÀN BỘ dịch vụ sập — trong khi nếu KHÔNG có livenessProbe
+   thì hệ thống chỉ chậm rồi tự hồi phục khi tải giảm
+```
+
+Quy tắc gọn:
+
+```text
+   livenessProbe   → "TIẾN TRÌNH này còn chạy không?"    (không hỏi gì bên ngoài)
+   readinessProbe  → "tôi PHỤC VỤ ĐƯỢC lúc này không?"   (được phép hỏi database)
+   startupProbe    → "đã khởi động xong chưa?"           (tạm dừng hai cái trên)
+```
+
+---
+
+## Tóm tắt bài 5
+
+- **Ba loại probe, ba hậu quả khác nhau**: `readinessProbe` **gỡ Pod khỏi Service** (an toàn), `livenessProbe` **giết Pod** (nguy hiểm), `startupProbe` tạm dừng hai cái kia trong lúc khởi động.
+- **`livenessProbe` không được kiểm tra phụ thuộc bên ngoài.** Nếu có, database chậm sẽ làm **mọi Pod bị giết** và gây sập dây chuyền.
+- Ứng dụng khởi động lâu (Java, .NET) thì dùng **`startupProbe`**, không kéo dài `initialDelaySeconds`.
+- `timeoutSeconds` mặc định là **1 giây** — quá chặt cho hầu hết ứng dụng thật.
+- **`imagePullPolicy`**: `IfNotPresent` khi đã ghim tag cụ thể; `Always` chỉ khi buộc phải dùng tag hay thay đổi. Dùng tag `latest` khiến Kubernetes ngầm đặt `Always`, và **hai Pod có thể chạy hai image khác nhau**.
+- **Namespace tách môi trường và phân quyền.** Xoá namespace là **xoá sạch mọi thứ bên trong** — kiểm tra `kubectl get all -n <tên>` trước.
+
+---
+
 **Bài kế tiếp** → [Tổng Kết Phase 12 — Kubernetes Core Concepts](06-tong-ket.md)
