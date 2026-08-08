@@ -17,7 +17,7 @@
 
 ```python
 cur.execute("SELECT * FROM events")
-rows = cur.fetchall()                      # 200 GB vao RAM
+rows = cur.fetchall()                      # 200 GB vào RAM
 with open('out.csv', 'w') as f:
     for r in rows:
         f.write(','.join(map(str, r)) + '\n')
@@ -34,8 +34,8 @@ with open('/data/events.csv', 'w') as f:
 ```
 
 ```text
-   500 trieu dong:
-     Cursor + ghi tung dong :  ~94 phut
+   500 triệu dòng:
+     Cursor + ghi từng dòng :  ~94 phút
      COPY TO STDOUT         :  ~11 phut      → NHANH HON 8,5 LAN
 ```
 
@@ -44,12 +44,12 @@ Vì sao nhanh hơn nhiều đến vậy:
 ```text
    CURSOR                              COPY
    ══════                              ════
-   Moi dong di qua:                    Server tu dinh dang CSV
-     • dong goi giao thuc dong-theo-dong  va day mot LUONG BYTE
-     • giai ma o client
-     • dinh dang lai thanh CSV          → khong co buoc dong goi/giai ma
-     • ghi ra file                      → khong tao doi tuong o client
-   → hang tram trieu doi tuong Python
+   Mỗi dòng đi qua:                    Server tự định dạng CSV
+     • đóng gói giao thức dòng-theo-dòng  và đẩy một LUỒNG BYTE
+     • giải mã ở client
+     • định dạng lại thành CSV          → không có bước đóng gói/giải mã
+     • ghi ra file                      → không tạo đối tượng ở client
+   → hàng trăm triệu đối tượng Python
 ```
 
 ## Nén ngay trong lúc xuất
@@ -62,8 +62,8 @@ with gzip.open('/data/events.csv.gz', 'wt') as f:
 
 ```text
    CSV thuong  : 187 GB
-   CSV nen gzip:  22 GB     → NHO HON 8,5 LAN
-   Thoi gian   : cham hon ~15% (CPU nen), nhung tiet kiem I/O nhieu hon the
+   CSV nén gzip:  22 GB     → NHỎ HƠN 8,5 LẦN
+   Thời gian   : chậm hơn ~15% (CPU nén), nhưng tiết kiệm I/O nhiều hơn thế
 ```
 
 ## Xuất song song bằng cách chia khoảng
@@ -87,13 +87,13 @@ with ThreadPoolExecutor(max_workers=8) as pool:
 
 ```text
    1 luong  : 11 phut
-   8 luong  :  2 phut      → NHANH HON 5,5 LAN (khong phai 8, do nghen I/O)
+   8 luồng  :  2 phút      → NHANH HƠN 5,5 LẦN (không phải 8, do nghẽn I/O)
 ```
 
 Chú ý: `id % 8 = p` khiến mỗi worker **quét toàn bảng** nhưng chỉ giữ 1/8. Nếu bảng có index trên `id`, chia theo **khoảng liên tục** sẽ tốt hơn nhiều:
 
 ```python
-# Tot hon: moi worker quet mot KHOANG lien tuc, tan dung index
+# Tốt hơn: mỗi worker quét một KHOẢNG liên tục, tận dụng index
 "COPY (SELECT * FROM events WHERE id >= {lo} AND id < {hi}) TO STDOUT WITH CSV"
 ```
 
@@ -108,11 +108,11 @@ Yêu cầu: xử lý 200 triệu dòng, mỗi dòng gọi một API bên ngoài 
 ## Vì sao cursor là lựa chọn SAI ở đây
 
 ```text
-   Cursor giu transaction mo SUOT NHIEU NGAY:
-     ✘ Chan VACUUM tren TOAN BO database → bang phinh khong ngung
-     ✘ Ket noi dut → MAT SACH tien do, lam lai tu dau
-     ✘ Khong dung lai va chay tiep duoc
-     ✘ idle_in_transaction_session_timeout se giet no
+   Cursor giữ transaction mở SUỐT NHIỀU NGÀY:
+     ✘ Chặn VACUUM trên TOÀN BỘ database → bảng phình không ngừng
+     ✘ Kết nối đứt → MẤT SẠCH tiến độ, làm lại từ đầu
+     ✘ Không dừng lại và chạy tiếp được
+     ✘ idle_in_transaction_session_timeout sẽ giết nó
 ```
 
 ## Mẫu đúng — điểm dừng bền vững
@@ -153,12 +153,12 @@ def chay():
             break
 
         for r in rows:
-            goi_api_ben_ngoai(r)          # ← 50 ms moi dong
+            goi_api_ben_ngoai(r)          # ← 50 ms mỗi dòng
 
         moc = rows[-1][0]
         luu_moc(conn, moc)
-        conn.commit()                     # ← TRANSACTION NGAN, dong lai ngay
-        print(f"Da xu ly toi id = {moc}")
+        conn.commit()                     # ← TRANSACTION NGẮN, đóng lại ngay
+        print(f"Đã xử lý tới id = {moc}")
 ```
 
 Bảng theo dõi tiến độ:
@@ -174,11 +174,11 @@ CREATE TABLE etl_progress (
 Năm lợi ích so với cursor:
 
 ```text
-   ✔ Transaction chi mo vai mili-giay moi lo → khong chan VACUUM
-   ✔ Dut ket noi → chay lai, tiep tu `moc` da luu
-   ✔ Trien khai phien ban moi giua chung → van tiep tuc duoc
-   ✔ Theo doi tien do bang mot cau SELECT
-   ✔ Chay song song duoc bang cach chia khoang id
+   ✔ Transaction chỉ mở vài mili-giây mỗi lô → không chặn VACUUM
+   ✔ Đứt kết nối → chạy lại, tiếp từ `moc` đã lưu
+   ✔ Triển khai phiên bản mới giữa chừng → vẫn tiếp tục được
+   ✔ Theo dõi tiến độ bằng một câu SELECT
+   ✔ Chạy song song được bằng cách chia khoảng id
 ```
 
 ## Chạy song song nhiều worker
@@ -207,14 +207,14 @@ CREATE TABLE etl_tasks (
 );
 CREATE INDEX idx_tasks_pending ON etl_tasks (id) WHERE status = 'pending';
 
--- Chia bang thanh cac lo 100.000 dong
+-- Chia bảng thành các lô 100.000 dòng
 INSERT INTO etl_tasks (id_tu, id_den)
 SELECT i, i + 100000
 FROM generate_series(0, (SELECT max(id) FROM events), 100000) AS i;
 ```
 
 ```sql
--- Moi worker nhan mot lo — khong ai cho ai, khong ai lay trung
+-- Mỗi worker nhận một lô — không ai chờ ai, không ai lấy trùng
 WITH da_chon AS (
     SELECT id FROM etl_tasks
      WHERE status = 'pending'
@@ -241,11 +241,11 @@ UPDATE users SET email = lower(email);
 ```
 
 ```text
-   • Mot transaction cap nhat 80 trieu dong
-   • Giu khoa tren 80 trieu dong → moi truy van khac cho
-   • Sinh hang chuc GB WAL → replica tut lai, day dia
-   • Chay 3 gio; dut giua chung → ROLLBACK 3 gio nua
-   • Sinh 80 trieu tuple chet → autovacuum vat lon nhieu gio
+   • Một transaction cập nhật 80 triệu dòng
+   • Giữ khoá trên 80 triệu dòng → mọi truy vấn khác chờ
+   • Sinh hàng chục GB WAL → replica tụt lại, đầy đĩa
+   • Chạy 3 giờ; đứt giữa chừng → ROLLBACK 3 giờ nữa
+   • Sinh 80 triệu tuple chết → autovacuum vật lộn nhiều giờ
 ```
 
 ## Cách đúng — cập nhật theo lô
@@ -272,8 +272,8 @@ while True:
 
     if so_dong == 0:
         break
-    print(f"Da cap nhat {so_dong} dong")
-    time.sleep(0.1)          # ← nhuong I/O cho tai that
+    print(f"Đã cập nhật {so_dong} dòng")
+    time.sleep(0.1)          # ← nhường I/O cho tải thật
 ```
 
 Bốn chi tiết trong đoạn code này đều quan trọng:
@@ -299,13 +299,13 @@ Index bộ phận này chỉ chứa các dòng **còn cần xử lý**, và nó 
 ## Theo dõi trong lúc chạy
 
 ```sql
--- Con bao nhieu dong chua xu ly
+-- Còn bao nhiêu dòng chưa xử lý
 SELECT count(*) FROM users WHERE email <> lower(email);
 
--- Do tre nhan ban co tang khong
+-- Độ trễ nhân bản có tăng không
 SELECT application_name, replay_lag FROM pg_stat_replication;
 
--- Tuple chet co tich tu khong
+-- Tuple chết có tích tụ không
 SELECT relname, n_dead_tup, last_autovacuum
 FROM pg_stat_user_tables WHERE relname = 'users';
 ```
@@ -323,15 +323,15 @@ Yêu cầu: API xuất báo cáo 10 triệu dòng ra CSV cho người dùng tả
 ```python
 @app.route('/export')
 def export():
-    rows = db.query("SELECT * FROM events")     # 4 GB vao RAM
+    rows = db.query("SELECT * FROM events")     # 4 GB vào RAM
     return Response(to_csv(rows), mimetype='text/csv')
 ```
 
 ```text
-   • Nguoi dung cho 3 phut khong thay gi
-   • 4 GB RAM cho MOI nguoi dung goi API
-   • 3 nguoi goi cung luc → server chet
-   • Trinh duyet timeout truoc khi nhan duoc byte dau tien
+   • Người dùng chờ 3 phút không thấy gì
+   • 4 GB RAM cho MỖI người dùng gọi API
+   • 3 người gọi cùng lúc → server chết
+   • Trình duyệt timeout trước khi nhận được byte đầu tiên
 ```
 
 ## Cách đúng — luồng từ database thẳng ra HTTP
@@ -347,7 +347,7 @@ def export():
         cur.itersize = 5000
         cur.execute("SELECT id, user_id, created_at FROM events")
 
-        yield 'id,user_id,created_at\n'           # dong tieu de
+        yield 'id,user_id,created_at\n'           # dòng tiêu đề
         for row in cur:
             yield f'{row[0]},{row[1]},{row[2]}\n'
 
@@ -362,8 +362,8 @@ def export():
 ```
 
 ```text
-   Byte dau tien toi trinh duyet : ~50 ms   (thay vi 3 phut)
-   RAM moi request               : ~20 MB   (thay vi 4 GB)
+   Byte đầu tiên tới trình duyệt : ~50 ms   (thay vì 3 phút)
+   RAM mỗi request               : ~20 MB   (thay vì 4 GB)
 ```
 
 ## Ba vấn đề khi truyền luồng qua HTTP
@@ -371,9 +371,9 @@ def export():
 ### Vấn đề 1 — Không báo lỗi được sau khi đã gửi byte đầu
 
 ```text
-   Da gui header 200 OK va mot phan du lieu
-   → gio truy van loi → KHONG the doi thanh 500 nua
-   → nguoi dung nhan mot file CSV BI CAT NGANG ma khong biet
+   Đã gửi header 200 OK và một phần dữ liệu
+   → giờ truy vấn lỗi → KHÔNG thể đổi thành 500 nữa
+   → người dùng nhận một file CSV BỊ CẮT NGANG mà không biết
 ```
 
 Cách giảm nhẹ — ghi một dòng đánh dấu kết thúc:
@@ -384,7 +384,7 @@ def sinh_du_lieu():
         ...
         for row in cur:
             yield ...
-        yield '# END_OF_EXPORT\n'        # ← nguoi nhan kiem tra dong nay
+        yield '# END_OF_EXPORT\n'        # ← người nhận kiểm tra dòng này
     except Exception as e:
         yield f'# ERROR: {e}\n'
         raise
@@ -393,18 +393,18 @@ def sinh_du_lieu():
 ### Vấn đề 2 — Kết nối bị giữ suốt thời gian truyền
 
 ```text
-   Mot lan xuat mat 10 phut = mot ket noi database bi chiem 10 phut.
-   10 nguoi cung xuat = 10 ket noi bi chiem.
-   → voi pool 20 ket noi ([phase-8 bai 3]), day la nua pool.
+   Một lần xuất mất 10 phút = một kết nối database bị chiếm 10 phút.
+   10 người cùng xuất = 10 kết nối bị chiếm.
+   → với pool 20 kết nối ([phase-8 bài 3]), đây là nửa pool.
 ```
 
 Giải pháp cho hệ thống lớn: **xuất bất đồng bộ**.
 
 ```text
-   1. POST /exports        → tao mot job, tra ve ngay job_id
-   2. Worker nen chay COPY ra file tren object storage
-   3. GET /exports/{id}    → tra ve trang thai
-   4. Xong → tra ve URL co chu ky, het han sau 1 gio
+   1. POST /exports        → tạo một job, trả về ngay job_id
+   2. Worker nền chạy COPY ra file trên object storage
+   3. GET /exports/{id}    → trả về trạng thái
+   4. Xong → trả về URL có chữ ký, hết hạn sau 1 giờ
 ```
 
 Cách này giải phóng cả kết nối database lẫn kết nối HTTP, và cho phép người dùng đóng trình duyệt rồi quay lại.
@@ -445,12 +445,12 @@ Dòng cuối là lý do duy nhất **bắt buộc** phải dùng cursor: khi b�
 
 ```text
    1. CO CAN ANH CHUP NHAT QUAN KHONG?
-        Co     → CURSOR (chap nhan giu transaction)
-        Khong  → keyset (tot hon o moi mat khac)
+        Có     → CURSOR (chấp nhận giữ transaction)
+        Không  → keyset (tốt hơn ở mọi mặt khác)
 
    2. XU LY MOI DONG MAT BAO LAU?
         < 1 ms   → cursor on
-        > 10 ms  → keyset + diem dung ben vung
+        > 10 ms  → keyset + điểm dừng bền vững
 
    3. CO PHAI CHI DE XUAT RA FILE KHONG?
         Dung   → COPY

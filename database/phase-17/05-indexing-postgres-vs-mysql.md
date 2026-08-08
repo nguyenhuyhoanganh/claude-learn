@@ -7,34 +7,34 @@ Cùng một câu lệnh `CREATE INDEX`, hai hệ, hai cấu trúc trên đĩa ho
 ```text
    POSTGRESQL — HEAP + INDEX RIENG
    ═══════════════════════════════
-   Index primary key           Index phu (tren name)
+   Index primary key           Index phụ (trên name)
    ┌──────────────────┐        ┌──────────────────────┐
    │ 42 → ctid(1204,7)│        │ 'An' → ctid(1204,7)  │
    └────────┬─────────┘        └──────────┬───────────┘
             │                             │
             └──────────┬──────────────────┘
                        ▼
-   HEAP (bang, ROI RAC, khong sap xep)
+   HEAP (bảng, RỜI RẠC, không sắp xếp)
    ┌────────────────────────────────────────┐
    │ page 1204, khe 7:  42│An│1990-01-02│15000│
    └────────────────────────────────────────┘
 
-   → CA HAI index deu tro THANG toi vi tri vat ly
-   → Ca hai deu ton 2 chang
+   → CẢ HAI index đều trỏ THẲNG tới vị trí vật lý
+   → Cả hai đều tốn 2 chặng
 
 
    MYSQL INNODB — CLUSTERED INDEX
    ══════════════════════════════
-   Clustered index (CHINH LA BANG)     Index phu (tren name)
+   Clustered index (CHÍNH LÀ BẢNG)     Index phụ (trên name)
    ┌──────────────────────────────┐    ┌──────────────────┐
    │ LA: 42│An│1990-01-02│15000   │    │ 'An' → 42        │
    │     43│Binh│...              │    └────────┬─────────┘
-   └──────────────────────────────┘             │ tro toi KHOA CHINH
+   └──────────────────────────────┘             │ trỏ tới KHOÁ CHÍNH
               ▲                                 │
               └─────────────────────────────────┘
-                     phai tra CLUSTERED INDEX lan nua
+                     phải tra CLUSTERED INDEX lần nữa
 
-   → Tra khoa chinh: 1 chang  ✔
+   → Tra khoá chính: 1 chặng  ✔
    → Tra index phu : 3 chang  ✘
 ```
 
@@ -51,7 +51,7 @@ SELECT * FROM users WHERE id = 42;
 
 ```text
    PostgreSQL : index → ctid → heap                    2 CHANG
-   InnoDB     : clustered index → LA CO SAN DU LIEU    1 CHANG   ✔ nhanh hon
+   InnoDB     : clustered index → LÁ CÓ SẴN DỮ LIỆU    1 CHẶNG   ✔ nhanh hơn
 ```
 
 ```sql
@@ -60,8 +60,8 @@ SELECT * FROM users WHERE name = 'An';
 ```
 
 ```text
-   PostgreSQL : index phu → ctid → heap                2 CHANG   ✔ nhanh hon
-   InnoDB     : index phu → khoa chinh → clustered     3 CHANG
+   PostgreSQL : index phụ → ctid → heap                2 CHẶNG   ✔ nhanh hơn
+   InnoDB     : index phụ → khoá chính → clustered     3 CHẶNG
 ```
 
 Không bên nào thắng tuyệt đối. Bên nào thắng phụ thuộc **truy vấn của bạn đi qua đường nào nhiều hơn**.
@@ -70,16 +70,16 @@ Không bên nào thắng tuyệt đối. Bên nào thắng phụ thuộc **truy 
 
 ```text
    INNODB: index phu chua GIA TRI KHOA CHINH.
-   → khoa chinh lon → MOI index phu phinh theo
+   → khoá chính lớn → MỌI index phụ phình theo
 
-   Bang 100 trieu dong, 5 index phu:
+   Bảng 100 triệu dòng, 5 index phụ:
      PK = BIGINT (8 byte)   :  100tr × 8  × 5 =  4,0 GB
      PK = UUID CHAR(36)     :  100tr × 36 × 5 = 18,0 GB
                                                  ────────
                                        THEM 14 GB
 
    POSTGRESQL: index phu chua `ctid` (6 byte, CO DINH)
-   → kich thuoc khoa chinh KHONG anh huong index phu
+   → kích thước khoá chính KHÔNG ảnh hưởng index phụ
 ```
 
 Đây là lý do lời khuyên "khoá chính phải nhỏ" **quan trọng hơn nhiều** trên InnoDB.
@@ -88,17 +88,17 @@ Không bên nào thắng tuyệt đối. Bên nào thắng phụ thuộc **truy 
 
 ```sql
 UPDATE users SET last_login = now() WHERE id = 42;
--- 5 index, khong cai nao chua cot `last_login`
+-- 5 index, không cái nào chứa cột `last_login`
 ```
 
 ```text
-   POSTGRESQL: tao PHIEN BAN MOI → ctid doi
+   POSTGRESQL: tạo PHIÊN BẢN MỚI → ctid đổi
                → PHAI cap nhat CA 5 index
-               → ke ca index tren cot khong doi
-               (tru khi dat HOT update)
+               → kể cả index trên cột không đổi
+               (trừ khi đạt HOT update)
 
-   INNODB    : sua TAI CHO, khoa chinh khong doi
-               → KHONG dung index phu nao   ✔
+   INNODB    : sửa TẠI CHỖ, khoá chính không đổi
+               → KHÔNG đụng index phụ nào   ✔
 ```
 
 Đây là lý do chính trong bài viết của Uber ([bài 3](02-thao-luan-uuid-pk-va-postgres-vs-mysql.md)).
@@ -120,11 +120,11 @@ SELECT * FROM users ORDER BY id LIMIT 1000;
 ```
 
 ```text
-   INNODB    : dong da SAP XEP VAT LY theo khoa chinh
-               → doc TUAN TU, cuc nhanh                    ✔
+   INNODB    : dòng đã SẮP XẾP VẬT LÝ theo khoá chính
+               → đọc TUẦN TỰ, cực nhanh                    ✔
 
-   POSTGRESQL: heap khong sap xep
-               → index cho thu tu, nhung nhay NGAU NHIEN vao heap
+   POSTGRESQL: heap không sắp xếp
+               → index cho thứ tự, nhưng nhảy NGẪU NHIÊN vào heap
 ```
 
 Đo mức độ "còn sắp xếp" của bảng PostgreSQL:
@@ -137,7 +137,7 @@ WHERE tablename = 'users' AND attname = 'id';
 ```text
  attname | correlation
 ---------+-------------
- id      |        0.98     ← gan 1 → van sap xep tot (bang chi noi them)
+ id      |        0.98     ← gần 1 → vẫn sắp xếp tốt (bảng chỉ nối thêm)
 ```
 
 Sắp xếp lại một lần:
@@ -154,19 +154,19 @@ Nhưng thứ tự này **không được duy trì** — dòng chèn sau đó l�
 -- PostgreSQL 11+
 CREATE INDEX idx ON users (name) INCLUDE (email, phone);
 
--- MySQL: khong co INCLUDE, phai dua vao KHOA
+-- MySQL: không có INCLUDE, phải đưa vào KHOÁ
 CREATE INDEX idx ON users (name, email, phone);
 ```
 
 ```text
-   POSTGRESQL: `INCLUDE` de cot phu CHI O LA
-     → nut trong nhe → cay THAP hon
-     → cot phu co the la KIEU BAT KY (khong can so sanh duoc)
+   POSTGRESQL: `INCLUDE` để cột phụ CHỈ Ở LÁ
+     → nút trong nhẹ → cây THẤP hơn
+     → cột phụ có thể là KIỂU BẤT KỲ (không cần so sánh được)
 
-   MYSQL: phai dua het vao khoa
-     → cot phu nam o MOI TANG → cay CAO hon
-     → nhung BU LAI: index phu von da chua khoa chinh
-       → `SELECT id FROM users WHERE name='An'` la index-only scan MIEN PHI
+   MYSQL: phải đưa hết vào khoá
+     → cột phụ nằm ở MỌI TẦNG → cây CAO hơn
+     → nhưng BÙ LẠI: index phụ vốn đã chứa khoá chính
+       → `SELECT id FROM users WHERE name='An'` là index-only scan MIỄN PHÍ
 ```
 
 Dòng cuối là một ưu điểm ẩn của InnoDB: mọi index phụ đều **tự động covering cho khoá chính**.
@@ -174,13 +174,13 @@ Dòng cuối là một ưu điểm ẩn của InnoDB: mọi index phụ đều *
 ## Hệ quả 6 — Index-Only Scan và visibility map
 
 ```text
-   POSTGRESQL: index KHONG luu thong tin MVCC
-     → phai kiem tra VISIBILITY MAP
-     → chua VACUUM → `Heap Fetches` cao → mat tac dung
+   POSTGRESQL: index KHÔNG lưu thông tin MVCC
+     → phải kiểm tra VISIBILITY MAP
+     → chưa VACUUM → `Heap Fetches` cao → mất tác dụng
 
-   INNODB: thong tin phien ban nam trong CLUSTERED INDEX
-     → index phu van phai tra clustered de kiem tra
-     → tru khi doc o muc READ UNCOMMITTED
+   INNODB: thông tin phiên bản nằm trong CLUSTERED INDEX
+     → index phụ vẫn phải tra clustered để kiểm tra
+     → trừ khi đọc ở mức READ UNCOMMITTED
 ```
 
 ```sql
@@ -190,7 +190,7 @@ EXPLAIN (ANALYZE) SELECT name FROM users WHERE name = 'An';
 
 ```text
 Index Only Scan using idx_name on users
-  Heap Fetches: 0          ← tot; neu > 0 thi can VACUUM
+  Heap Fetches: 0          ← tốt; nếu > 0 thì cần VACUUM
 ```
 
 ## Hệ quả 7 — Các loại index có sẵn
@@ -213,13 +213,13 @@ Index Only Scan using idx_name on users
 Hai dòng in đậm nhất đáng chú ý:
 
 ```text
-   INDEX BO PHAN — PostgreSQL co, MySQL KHONG
+   INDEX BỘ PHẬN — PostgreSQL có, MySQL KHÔNG
      CREATE INDEX idx ON jobs (created_at) WHERE status = 'pending';
-     → 1,8 MB thay vi 2,1 GB  (nho hon ~1.200 lan)
-     → day la mot trong nhung khac biet co gia tri thuc te lon nhat
+     → 1,8 MB thay vì 2,1 GB  (nhỏ hơn ~1.200 lần)
+     → đây là một trong những khác biệt có giá trị thực tế lớn nhất
 
-   BRIN — cho bang rat lon co du lieu tuong quan thu tu vat ly
-     Bang 1 ty dong: B-Tree ~30 GB, BRIN ~3 MB  (nho hon 10.000 lan)
+   BRIN — cho bảng rất lớn có dữ liệu tương quan thứ tự vật lý
+     Bảng 1 tỷ dòng: B-Tree ~30 GB, BRIN ~3 MB  (nhỏ hơn 10.000 lần)
 ```
 
 MySQL có thể mô phỏng index bộ phận bằng cột ảo:
@@ -228,7 +228,7 @@ MySQL có thể mô phỏng index bộ phận bằng cột ảo:
 ALTER TABLE jobs ADD COLUMN pending_at DATETIME
   GENERATED ALWAYS AS (IF(status='pending', created_at, NULL)) VIRTUAL;
 CREATE INDEX idx ON jobs (pending_at);
--- NULL khong duoc danh index → gan giong index bo phan
+-- NULL không được đánh index → gần giống index bộ phận
 ```
 
 Nhưng đây là cách vòng, và không linh hoạt bằng.
@@ -248,13 +248,13 @@ ALTER TABLE t ADD INDEX idx (col), ALGORITHM=INPLACE, LOCK=NONE;
 ```
 
 ```text
-   MySQL: khai bao TUONG MINH ALGORITHM va LOCK
-     → neu khong lam online duoc, no BAO LOI NGAY
-     → "that bai som" — rat dang gia
+   MySQL: khai báo TƯỜNG MINH ALGORITHM và LOCK
+     → nếu không làm online được, nó BÁO LỖI NGAY
+     → "thất bại sớm" — rất đáng giá
 
-   PostgreSQL: CONCURRENTLY co the THAT BAI GIUA CHUNG
-     → de lai index INVALID: khong duoc dung, nhung VAN lam cham ghi
-     → phai ra soat dinh ky
+   PostgreSQL: CONCURRENTLY có thể THẤT BẠI GIỮA CHỪNG
+     → để lại index INVALID: không được dùng, nhưng VẪN làm chậm ghi
+     → phải rà soát định kỳ
 ```
 
 ---
@@ -298,9 +298,9 @@ CREATE INDEX idx_orders_user_time
 ```
 
 ```text
-   → Index Only Scan, KHONG cham heap
-   → `INCLUDE` de total/status chi o la → cay thap
-   → nho VACUUM de giu Heap Fetches = 0
+   → Index Only Scan, KHÔNG chạm heap
+   → `INCLUDE` để total/status chỉ ở lá → cây thấp
+   → nhớ VACUUM để giữ Heap Fetches = 0
 ```
 
 **Trên MySQL:**
@@ -310,15 +310,15 @@ CREATE INDEX idx_orders_user_time ON orders (user_id, created_at DESC, total, st
 ```
 
 ```text
-   → Covering index, khong tra clustered index
-   → `id` (khoa chinh) DA CO SAN trong moi index phu → khong can them
-   → nen dam bao khoa chinh NHO
+   → Covering index, không tra clustered index
+   → `id` (khoá chính) ĐÃ CÓ SẴN trong mọi index phụ → không cần thêm
+   → nên đảm bảo khoá chính NHỎ
 ```
 
 ### Bài toán: bảng hàng đợi công việc
 
 ```sql
--- Truy van nong: lay viec dang cho
+-- Truy vấn nóng: lấy việc đang chờ
 SELECT * FROM jobs WHERE status = 'pending' ORDER BY created_at LIMIT 10;
 ```
 
@@ -329,9 +329,9 @@ CREATE INDEX idx_jobs_pending ON jobs (created_at) WHERE status = 'pending';
 ```
 
 ```text
-   → Index BO PHAN: chi chua ~5.000 dong dang cho
+   → Index BỘ PHẬN: chỉ chứa ~5.000 dòng đang chờ
    → 1,8 MB thay vi 2,1 GB
-   → va no TU NHO LAI khi cong viec duoc xu ly xong
+   → và nó TỰ NHỎ LẠI khi công việc được xử lý xong
 ```
 
 **Trên MySQL:**
@@ -341,9 +341,9 @@ CREATE INDEX idx_jobs_status_time ON jobs (status, created_at);
 ```
 
 ```text
-   → Index DAY DU tren ca 100 trieu dong
+   → Index ĐẦY ĐỦ trên cả 100 triệu dòng
    → 2,1 GB
-   → hoac mo phong bang cot ao (phuc tap hon)
+   → hoặc mô phỏng bằng cột ảo (phức tạp hơn)
 ```
 
 Đây là ví dụ rõ nhất cho thấy **index bộ phận là ưu thế thực tế lớn nhất của PostgreSQL** trong lĩnh vực index.
