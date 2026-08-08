@@ -4,7 +4,7 @@
 
 Bind Mount **map một thư mục cụ thể trên host** vào bên trong container. Thay đổi ở host ngay lập tức có mặt trong container và ngược lại.
 
-```
+```text
 Host: /home/user/myapp/src/   ←──── hai chiều ────→  Container: /app/src/
      (bạn edit ở đây)                                  (container đọc từ đây)
 ```
@@ -15,14 +15,14 @@ Host: /home/user/myapp/src/   ←──── hai chiều ────→  Conta
 
 **Vấn đề với workflow không dùng Bind Mount:**
 
-```
+```text
 Sửa code → docker build → docker run → Test → Sửa code → docker build → ...
            (30-60 giây)                                   (30-60 giây)
 ```
 
 **Với Bind Mount:**
 
-```
+```text
 docker run (1 lần) → Sửa code → Test ngay (0 giây delay) → Sửa code → Test ngay → ...
 ```
 
@@ -79,7 +79,7 @@ docker run -d \
 
 ### Thứ tự ưu tiên (longer path wins)
 
-```
+```text
 /app           → từ bind mount (host directory)
 /app/node_modules → từ anonymous volume (được bảo vệ)
 
@@ -237,7 +237,7 @@ docker run -v feedback:/app/feedback myapp
 
 ## Tóm tắt
 
-```
+```text
 Bind Mount (-v /host/path:/container/path):
 ├── Host path → Container path (hai chiều)
 ├── Dùng $(pwd) để map thư mục project
@@ -255,4 +255,4 @@ docker run \
 
 ---
 
-**Tiếp theo:** Environment Variables, .env files và Build Arguments →
+**Bài kế tiếp** → [Bài 4: Environment Variables & Build Arguments](04-env-variables-va-build-args.md)

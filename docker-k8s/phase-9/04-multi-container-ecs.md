@@ -5,12 +5,12 @@
 ### Vấn đề: Container Names không hoạt động trong ECS
 
 Locally với Docker Compose:
-```
+```text
 backend container → kết nối đến "mongo" → Docker resolve IP tự động
 ```
 
 Trên AWS ECS:
-```
+```text
 backend container → kết nối đến "mongo" → KHÔNG hoạt động!
 
 Lý do: Containers có thể chạy trên các server khác nhau
@@ -24,7 +24,7 @@ Khi các containers cùng thuộc 1 **Task** trong ECS:
 - Được đảm bảo chạy trên cùng 1 machine
 - Giao tiếp với nhau qua `localhost` (không phải container name)
 
-```
+```text
 Docker Compose (local):     AWS ECS (production):
   mongodb://mongo:27017  →    mongodb://localhost:27017
 ```
@@ -51,7 +51,7 @@ MONGODB_URL=localhost      # localhost trong cùng task
 
 ### Cấu hình MongoDB Container trong ECS
 
-```
+```text
 Task Definition → Add Container:
   Name: mongodb
   Image: mongo         (official Docker Hub image)
@@ -63,7 +63,7 @@ Task Definition → Add Container:
 
 ### Cấu hình Backend Container trong ECS
 
-```
+```text
 Container: goals-backend (Node.js)
 Image: YOUR_USERNAME/goals-node
 Port: 80
@@ -90,14 +90,14 @@ Command: node,app.js   # Chạy trực tiếp với node
 
 ### Vấn đề: IP thay đổi mỗi lần deploy
 
-```
+```text
 Lần 1 deploy: http://54.12.34.56/goals
 Lần 2 deploy: http://54.67.89.01/goals  ← IP mới!
 ```
 
 ### Giải pháp: Application Load Balancer
 
-```
+```text
 Load Balancer DNS: ecs-lb-xxxx.us-east-1.elb.amazonaws.com
   → Không bao giờ thay đổi
   → Có thể map custom domain lên đây
@@ -105,7 +105,7 @@ Load Balancer DNS: ecs-lb-xxxx.us-east-1.elb.amazonaws.com
 ```
 
 **Tạo Load Balancer trong EC2:**
-```
+```text
 EC2 → Load Balancers → Create Application Load Balancer
   Name: ecs-lb
   Scheme: Internet-facing
@@ -116,7 +116,7 @@ EC2 → Load Balancers → Create Application Load Balancer
 ```
 
 **Gắn Load Balancer vào ECS Service:**
-```
+```text
 Service → Load Balancing: Application Load Balancer
   → Choose: ecs-lb
   → Container: goals-backend 80:80
@@ -129,7 +129,7 @@ Service → Load Balancing: Application Load Balancer
 
 ### Vấn đề: Data mất khi Container Restart
 
-```
+```text
 Scenario:
   1. User thêm goal vào MongoDB
   2. Deploy image mới → Task restart
@@ -142,7 +142,7 @@ Lý do: Fargate containers là stateless
 
 ### Giải pháp: EFS (Elastic File System)
 
-```
+```text
 EFS = "Hard drive ảo" gắn vào containers
   → Tồn tại độc lập với containers
   → Data không mất khi container restart
@@ -150,7 +150,7 @@ EFS = "Hard drive ảo" gắn vào containers
 ```
 
 **Tạo EFS:**
-```
+```text
 AWS EFS → Create File System:
   Name: db-storage
   VPC: cùng VPC với ECS
@@ -174,7 +174,7 @@ Security Group cho EFS:
 ```
 
 **Lưu ý quan trọng với Rolling Deployment:**
-```
+```text
 Vấn đề khi update service:
   Old task: MongoDB đang dùng /data/db trên EFS
   New task: Cũng cố gắng dùng /data/db → CONFLICT!
@@ -191,7 +191,7 @@ Giải pháp tốt hơn: Dùng managed database (MongoDB Atlas)
 
 ### Tại Sao Không Dùng MongoDB Container trong Production?
 
-```
+```text
 Thách thức khi tự quản lý database container:
   ✗ Scaling: Cần nhiều replicas → Phức tạp để sync
   ✗ Performance: Traffic spikes → Container overwhelmed
@@ -202,7 +202,7 @@ Thách thức khi tự quản lý database container:
 
 ### MongoDB Atlas — Cloud Managed MongoDB
 
-```
+```text
 atlas.mongodb.com → Cluster → Connect → Connect your Application
   Connection String: mongodb+srv://username:password@cluster.mongodb.net/dbname
 ```
@@ -243,7 +243,7 @@ services:
 ```
 
 **Cấu hình Atlas Security:**
-```
+```text
 MongoDB Atlas → Network Access:
   → Allow access from anywhere (0.0.0.0/0)
   → Hoặc IP cụ thể của AWS servers
@@ -257,7 +257,7 @@ MongoDB Atlas → Database Access:
 
 ## Kiến Trúc Cuối Cùng
 
-```
+```text
 Internet
   │
   ▼
@@ -272,4 +272,4 @@ MongoDB Atlas (cloud managed)
 
 ---
 
-**Tiếp theo:** Multi-Stage Builds và React Production →
+**Bài kế tiếp** → [Bài 5: Multi-Stage Builds — React Production Deployment](05-multi-stage-builds.md)

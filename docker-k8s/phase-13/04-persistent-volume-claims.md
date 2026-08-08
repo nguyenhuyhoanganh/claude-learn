@@ -2,7 +2,7 @@
 
 ## PVC là Gì?
 
-```
+```text
 PersistentVolume    → Admin tạo: "Storage này có sẵn"
 PersistentVolumeClaim → Developer tạo: "Pod cần storage như này"
 → Kubernetes tự match PVC với PV phù hợp
@@ -63,7 +63,7 @@ kubectl apply -f host-pvc.yaml   # Rồi mới tạo PVC
 kubectl get pvc                  # Kiểm tra status
 ```
 
-```
+```text
 NAME      STATUS  VOLUME   CAPACITY  ACCESS MODES  STORAGECLASS
 host-pvc  Bound   host-pv  1Gi       RWO           standard
 ```
@@ -186,4 +186,4 @@ kubectl delete pvc NAME
 
 ---
 
-**Tiếp theo:** Environment Variables & ConfigMaps →
+**Bài kế tiếp** → [Bài 5: Environment Variables & ConfigMaps](05-environment-variables-configmaps.md)

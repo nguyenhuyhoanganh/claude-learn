@@ -2,7 +2,7 @@
 
 ## Kubernetes Hoạt Động Bằng Objects
 
-```
+```text
 Kubernetes nhận Objects → Làm điều gì đó
 
 Ví dụ:
@@ -21,7 +21,7 @@ Ví dụ:
 
 ## Pod Object
 
-```
+```text
 Pod = Đơn vị nhỏ nhất của Kubernetes
     = Shell bọc quanh container(s)
 
@@ -46,7 +46,7 @@ Tương đương: docker run <image>
 
 ## Deployment Object
 
-```
+```text
 Deployment = Controller quản lý Pods
 
 Bạn nói: "Tôi muốn 3 Pods với container X"
@@ -60,7 +60,7 @@ Kubernetes sẽ:
 ```
 
 **So sánh với EC2/ECS:**
-```
+```text
 EC2 (manual): Bạn tự restart container khi crash
 ECS Task:     AWS tự restart container khi crash
 K8s Deployment: Kubernetes tự restart Pod khi crash
@@ -71,7 +71,7 @@ K8s Deployment: Kubernetes tự restart Pod khi crash
 
 ## Service Object
 
-```
+```text
 Vấn đề với Pod IP:
   1. Pod bị restart → IP thay đổi
   2. Internal cluster only → Không accessible từ ngoài
@@ -85,7 +85,7 @@ Service = Giải pháp:
 
 ### 3 Loại Service
 
-```
+```text
 ClusterIP (mặc định):
   → Chỉ accessible trong cluster
   → Dùng cho pod-to-pod communication
@@ -107,7 +107,7 @@ LoadBalancer:
 
 ## Mối Quan Hệ Giữa Các Objects
 
-```
+```text
 Deployment
   ├── Tạo và quản lý → Pods
   └── Pods được expose bởi → Service
@@ -120,4 +120,4 @@ Service
 
 ---
 
-**Tiếp theo:** Imperative Approach — kubectl Commands →
+**Bài kế tiếp** → [Bài 3: Imperative Approach — kubectl Commands](03-imperative-approach.md)

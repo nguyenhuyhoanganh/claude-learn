@@ -4,7 +4,7 @@
 
 **ECS (Elastic Container Service)** = Dịch vụ AWS quản lý containers thay bạn.
 
-```
+```text
 DIY (EC2):
   Bạn → SSH → Install Docker → docker run
   Bạn chịu trách nhiệm mọi thứ
@@ -18,7 +18,7 @@ ECS (Managed):
 
 ## 4 Khái Niệm Cốt Lõi trong ECS
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │                  CLUSTER                        │
 │  (Mạng tổng thể, grouping của containers)       │
@@ -57,7 +57,7 @@ ECS (Managed):
 
 ECS dùng **Fargate** để chạy containers:
 
-```
+```text
 Truyền thống (EC2):
   → AWS tạo EC2 instance
   → Instance chạy 24/7
@@ -77,7 +77,7 @@ Fargate (Serverless):
 
 ### Bước 1: Tạo Cluster
 
-```
+```text
 ECS → Create Cluster
 → Networking only (Fargate)
 → Cluster name: goals-app
@@ -87,7 +87,7 @@ ECS → Create Cluster
 
 ### Bước 2: Tạo Task Definition
 
-```
+```text
 Task Definitions → Create new Task Definition
 → Launch type: FARGATE
 → Task definition name: goals
@@ -98,7 +98,7 @@ Task Definitions → Create new Task Definition
 
 ### Bước 3: Thêm Container vào Task
 
-```
+```text
 Container Definitions → Add container
 → Container name: node-demo
 → Image: YOUR_USERNAME/node-example-1
@@ -110,7 +110,7 @@ Container Definitions → Add container
 
 ### Bước 4: Tạo Service
 
-```
+```text
 Cluster → Services → Create
 → Launch type: FARGATE
 → Task definition: goals:1
@@ -122,7 +122,7 @@ Cluster → Services → Create
 
 ### Bước 5: Tìm Public IP
 
-```
+```text
 Cluster → Tasks → Click Task ID
 → Tìm Public IP
 → Truy cập trên browser
@@ -148,7 +148,7 @@ Mọi thứ trong ECS Container Definition đều tương đương với `docker
 
 ## Update Image trong ECS
 
-```
+```text
 1. Sửa code local + rebuild image:
    docker build -t YOUR_USERNAME/your-image .
    docker push YOUR_USERNAME/your-image
@@ -170,7 +170,7 @@ Mọi thứ trong ECS Container Definition đều tương đương với `docker
 
 ## Ưu Điểm của ECS vs EC2
 
-```
+```text
 ECS (Managed):
   ✓ Không cần cài Docker thủ công
   ✓ AWS lo OS updates
@@ -190,4 +190,4 @@ Nhược điểm:
 
 ---
 
-**Tiếp theo:** Multi-Container trong ECS — Localhost, EFS, và MongoDB Atlas →
+**Bài kế tiếp** → [Bài 4: Multi-Container trong ECS — Localhost, EFS, và MongoDB Atlas](04-multi-container-ecs.md)

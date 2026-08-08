@@ -86,7 +86,7 @@ kubectl scale deployment/my-app --replicas=1
 
 ## Auto-Restart Containers
 
-```
+```text
 Scenario:
   Container crash (bug, OOM, etc.)
   → Pod phát hiện → Restart container
@@ -118,7 +118,7 @@ kubectl rollout status deployment/my-app
 ```
 
 **Tại sao phải đổi tag?**
-```
+```text
 Kubernetes chỉ pull image mới nếu tag thay đổi
   :latest → :v1 = pull
   :v1 → :v1 = không pull (dùng cached)
@@ -126,7 +126,7 @@ Kubernetes chỉ pull image mới nếu tag thay đổi
 ```
 
 **Rolling Update Strategy (mặc định):**
-```
+```text
 Old Pod (v1) tiếp tục chạy
   ↓ (đồng thời)
 New Pod (v2) được tạo và start
@@ -155,7 +155,7 @@ kubectl rollout undo deployment/my-app --to-revision=1
 ```
 
 **Scenario rollback:**
-```
+```text
 v2 deploy thất bại (image tag sai, code bug...)
   kubectl rollout undo → v1 được restore
   → Users vẫn thấy app v1, không bị gián đoạn
@@ -195,4 +195,4 @@ minikube dashboard
 
 ---
 
-**Tiếp theo:** Declarative Approach — YAML Config Files →
+**Bài kế tiếp** → [Bài 4: Declarative Approach — YAML Config Files](04-declarative-approach.md)

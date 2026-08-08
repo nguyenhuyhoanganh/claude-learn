@@ -12,7 +12,7 @@ Trước khi bắt đầu, hãy đảm bảo:
 
 Trước khi chạy container, cần hiểu mối quan hệ giữa **Image** và **Container**:
 
-```
+```text
 Image                    Container
 ──────────               ──────────
 "Bản thiết kế"           "Ngôi nhà thực tế"
@@ -26,7 +26,7 @@ Dùng để tạo container    Tạo từ image
 
 Một image có thể tạo ra **nhiều container** chạy đồng thời.
 
-```
+```text
 Image: node:18
     │
     ├──▶ Container 1 (chạy app A)
@@ -147,7 +147,7 @@ docker run -p 3000:3000 --name my-app my-node-app
 
 ### Giải thích `-p 3000:3000`
 
-```
+```text
 -p <host_port>:<container_port>
 -p 3000:3000
 
@@ -238,7 +238,7 @@ docker pull node:18
 
 ## Workflow thực tế
 
-```
+```text
 1. Viết code
         │
         ▼
@@ -268,7 +268,7 @@ docker run hello-world
 ```
 
 Output:
-```
+```text
 Hello from Docker!
 This message shows that your installation appears to be working correctly.
 ...
@@ -307,4 +307,4 @@ docker rmi <image>   # xóa image
 
 ---
 
-**Tiếp theo:** Học sâu hơn về Images & Containers — cách hoạt động, layered filesystem, và nhiều lệnh hơn →
+**Bài kế tiếp** → [Bài 6: Lộ Trình Học Docker & Kubernetes](06-lo-trinh-hoc.md)

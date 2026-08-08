@@ -4,7 +4,7 @@
 
 Containers giải quyết vấn đề "works on my machine" — môi trường bên trong container giống nhau ở mọi nơi Docker chạy. Nhưng việc **di chuyển container từ máy local lên server thật** vẫn có những điểm cần chú ý.
 
-```
+```text
 Development:
   Laptop → Docker → Container chạy local
   → Bạn test trên localhost
@@ -20,7 +20,7 @@ Production:
 
 ### 1. Bind Mounts — KHÔNG dùng trong Production
 
-```
+```text
 Development:
   Container có source code từ bind mount
   → ./src trên laptop → /app trong container
@@ -36,7 +36,7 @@ Production:
 
 ### 2. Build Step (React và các framework tương tự)
 
-```
+```text
 Development:
   Chạy dev server → Hot reload
   Code chưa được optimize
@@ -48,7 +48,7 @@ Production:
 
 ### 3. Multi-Container: Có thể split qua nhiều hosts
 
-```
+```text
 Development (Docker Compose trên 1 máy):
   frontend + backend + database → cùng 1 laptop
   → Docker Compose xử lý network tự động
@@ -64,7 +64,7 @@ Production (nhiều machines):
 
 ## Bind Mounts trong Production — Tại Sao Không?
 
-```
+```text
 Vấn đề nếu dùng bind mount trong production:
 
   1. Mount path phụ thuộc vào host machine
@@ -120,7 +120,7 @@ docker run my-image
 
 ## Tổng quan Module Deployment
 
-```
+```text
 Bài 2: EC2 (DIY)
   → Remote server, SSH, install Docker
   → Push/pull image, run container
@@ -144,4 +144,4 @@ Bài 6: Tổng kết
 
 ---
 
-**Tiếp theo:** Deploy với EC2 — Self-Managed Approach →
+**Bài kế tiếp** → [Bài 2: Deploy với EC2 — DIY Approach](02-deploy-voi-ec2.md)

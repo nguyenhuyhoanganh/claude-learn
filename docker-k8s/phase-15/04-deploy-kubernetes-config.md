@@ -92,7 +92,7 @@ curl http://abc123.us-east-2.elb.amazonaws.com/signup \
 
 ## AWS Tự Động Tạo Load Balancer
 
-```
+```text
 EC2 Console → Load Balancers
 → Thấy 1 Load Balancer được tạo tự động bởi EKS
 → URL này = EXTERNAL-IP trong kubectl get services
@@ -157,4 +157,4 @@ env:
 
 ---
 
-**Tiếp theo:** EFS Volumes trên EKS →
+**Bài kế tiếp** → [Bài 5: EFS Volumes trên AWS EKS](05-efs-volumes-tren-eks.md)

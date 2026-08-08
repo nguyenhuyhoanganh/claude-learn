@@ -20,7 +20,7 @@
 
 ## Tóm Tắt Sơ Đồ
 
-```
+```text
 Người dùng
   │
   ▼
@@ -42,7 +42,7 @@ Master Node (API Server)
 
 ## Tại Sao Học Kubernetes?
 
-```
+```text
 1. Auto-restart khi container crash
    → Không cần monitor 24/7
 
@@ -77,4 +77,4 @@ Bạn đã học:
 
 ---
 
-**Tiếp theo:** Phase 12 — Kubernetes trong thực tế: Deployments, Services, kubectl →
+**Phase kế tiếp** → [Bài 1: Setup Kubernetes Local — kubectl & Minikube](../phase-12/01-setup-kubectl-minikube.md)

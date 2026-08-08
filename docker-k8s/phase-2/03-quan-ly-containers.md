@@ -4,7 +4,7 @@
 
 Container có vòng đời rõ ràng:
 
-```
+```text
 docker run ──▶ RUNNING ──▶ docker stop ──▶ STOPPED ──▶ docker rm ──▶ (xóa)
                   │                              │
                   │          docker start ◀──────┘
@@ -28,7 +28,7 @@ docker ps -a -q
 ```
 
 Output của `docker ps`:
-```
+```text
 CONTAINER ID   IMAGE        COMMAND              CREATED        STATUS         PORTS                  NAMES
 a1b2c3d4e5f6   my-node-app  "node server.js"     2 hours ago    Up 2 hours     0.0.0.0:3000->80/tcp   goalsapp
 ```
@@ -252,4 +252,4 @@ docker cp <src> <dest>           # copy files
 
 ---
 
-**Tiếp theo:** Naming & Tagging Images, và chia sẻ Images qua Docker Hub →
+**Bài kế tiếp** → [Bài 4: Đặt tên, Tag và Chia sẻ Images](04-naming-tagging-va-chia-se-images.md)

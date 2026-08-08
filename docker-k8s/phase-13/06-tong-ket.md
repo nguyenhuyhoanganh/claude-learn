@@ -3,7 +3,7 @@
 ## Những Gì Đã Học
 
 ### 1. State và Volumes
-```
+```text
 State = Data không được phép mất
   → User-generated data (accounts, files, orders)
   → Intermediate results (temp, cache)
@@ -16,7 +16,7 @@ Volumes = Giải pháp persist data
 
 ### 2. Các Loại Volume
 
-```
+```text
 emptyDir:
   → Folder rỗng tạo mới khi Pod start
   → Survive container restart
@@ -107,7 +107,7 @@ data:
 
 ## Cheat Sheet — Khi Nào Dùng Gì?
 
-```
+```text
 Tạm thời, 1 Pod, không cần share:
   → emptyDir
 
@@ -147,4 +147,4 @@ kubectl describe configmap NAME
 
 ---
 
-**Tiếp theo:** Phase 14 — Kubernetes Networking →
+**Phase kế tiếp** → [Bài 1: Services & Giao Tiếp Pod](../phase-14/01-services-va-pod-communication.md)

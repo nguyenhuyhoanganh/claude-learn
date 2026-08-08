@@ -2,7 +2,7 @@
 
 ## Toàn Bộ Hành Trình
 
-```
+```text
 Phase 1–3:   Docker cơ bản — Images, Containers, Volumes, Networks
 Phase 4–5:   Docker Compose — Multi-container local development
 Phase 6–8:   Deployment thủ công lên AWS EC2
@@ -18,7 +18,7 @@ Phase 15:    Kubernetes trên AWS EKS — Production deployment
 
 ### Docker Cơ Bản
 
-```
+```text
 ✓ Docker là gì và tại sao cần dùng
 ✓ Image vs Container
 ✓ Dockerfile — cách build image
@@ -30,7 +30,7 @@ Phase 15:    Kubernetes trên AWS EKS — Production deployment
 
 ### Docker Compose
 
-```
+```text
 ✓ docker-compose.yml — cấu hình multi-container
 ✓ services, volumes, networks trong compose file
 ✓ docker compose up / down / build
@@ -40,7 +40,7 @@ Phase 15:    Kubernetes trên AWS EKS — Production deployment
 
 ### Deployment
 
-```
+```text
 ✓ Manual deployment — SSH vào EC2, chạy Docker trực tiếp
 ✓ AWS ECS — managed service, không cần quản lý servers
 ✓ Task Definitions, Services, Clusters trên ECS
@@ -50,7 +50,7 @@ Phase 15:    Kubernetes trên AWS EKS — Production deployment
 
 ### Kubernetes
 
-```
+```text
 ✓ Pods — đơn vị nhỏ nhất, chứa containers
 ✓ Deployments — quản lý Pods, rolling updates
 ✓ Services — ClusterIP, LoadBalancer, NodePort
@@ -64,7 +64,7 @@ Phase 15:    Kubernetes trên AWS EKS — Production deployment
 
 ### AWS EKS
 
-```
+```text
 ✓ EKS = Kubernetes thật, không phải ECS
 ✓ IAM Roles cho Cluster và Node Groups
 ✓ CloudFormation VPC setup
@@ -92,7 +92,7 @@ Phase 15:    Kubernetes trên AWS EKS — Production deployment
 
 ### 1. CI/CD Pipelines
 
-```
+```text
 CI/CD = Continuous Integration / Continuous Delivery
 
 Không có trong khóa vì:
@@ -125,7 +125,7 @@ jobs:
 
 ### 2. Các Cloud Provider Khác
 
-```
+```text
 Khóa này dùng AWS làm ví dụ.
 
 Các provider khác:
@@ -142,7 +142,7 @@ Concepts đã học vẫn áp dụng:
 
 ### 3. Cluster Administration
 
-```
+```text
 Khóa này = developer perspective (không phải admin)
 
 Admin topics (không có trong khóa):
@@ -161,7 +161,7 @@ Thực tế:
 
 ### 4. Ngôn Ngữ Lập Trình Khác
 
-```
+```text
 Khóa dùng: Node.js, Python, PHP/Laravel
 
 Docker hoạt động y chang với mọi ngôn ngữ:
@@ -179,7 +179,7 @@ Concept = 100% giống nhau
 
 ### 1. Practice, Practice, Practice
 
-```
+```text
 Cách tốt nhất để giỏi:
   → Dockerize một project bạn đã có
   → Thêm Docker Compose cho local dev
@@ -190,7 +190,7 @@ Cách tốt nhất để giỏi:
 
 ### 2. Tài Liệu Chính Thức
 
-```
+```text
 Docker:
   → docs.docker.com
   → Dockerfile reference
@@ -209,7 +209,7 @@ AWS:
 
 ### 3. VS Code Docker Extension
 
-```
+```text
 VS Code có Docker extension cực kỳ hữu ích:
   → Tự generate Dockerfile cho project
   → Quản lý containers/images trong sidebar
@@ -222,7 +222,7 @@ Cài đặt:
 
 ### 4. Chủ Đề Nên Khám Phá Tiếp
 
-```
+```text
 Beginner tiếp theo:
   □ GitHub Actions CI/CD pipeline với Docker
   □ Docker với ngôn ngữ bạn đang dùng (Java, Go, etc.)
@@ -329,7 +329,7 @@ kubectl get nodes
 
 ## Mindmap: Docker & Kubernetes Ecosystem
 
-```
+```text
                     Container Ecosystem
                           │
            ┌──────────────┼──────────────┐
@@ -363,7 +363,7 @@ Deployment Options:
 
 ## Lời Kết
 
-```
+```text
 Bạn đã hoàn thành một khóa học dài và chắc chắn.
 
 Những gì bạn có thể làm ngay bây giờ:
@@ -382,3 +382,5 @@ hiện đại. Cứ áp dụng vào project thật — đó là cách tốt nh�
 ---
 
 *Hoàn thành khóa Docker & Kubernetes — The Practical Guide*
+
+**Quay lại** → [Mục lục khoá Docker & Kubernetes](../README.md)

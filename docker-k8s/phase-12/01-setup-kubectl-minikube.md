@@ -2,7 +2,7 @@
 
 ## Cần Cài Gì?
 
-```
+```text
 Để làm việc với Kubernetes, cần 2 tools:
 
 1. kubectl (Kube Control)
@@ -20,7 +20,7 @@
 
 ## kubectl — Công Cụ Giao Tiếp
 
-```
+```text
 kubectl create deployment ...  → Tạo deployment
 kubectl get pods               → Liệt kê pods
 kubectl apply -f config.yaml   → Apply config file
@@ -36,7 +36,7 @@ kubectl chạy trên local machine → Gửi lệnh đến cluster
 
 ## minikube — Cluster Local
 
-```
+```text
 minikube tạo 1 Virtual Machine trên laptop
   → VM này chứa toàn bộ Kubernetes cluster
   → Master Node + Worker Node gộp vào 1 VM
@@ -112,7 +112,7 @@ minikube start --driver=virtualbox
 
 ## Luồng Làm Việc
 
-```
+```text
 Developer
   │ kubectl apply -f deployment.yaml
   ▼
@@ -130,4 +130,4 @@ Pod → Container running!
 
 ---
 
-**Tiếp theo:** Kubernetes Objects — Pod, Deployment, Service →
+**Bài kế tiếp** → [Bài 2: Kubernetes Objects — Pod, Deployment, Service](02-kubernetes-objects.md)

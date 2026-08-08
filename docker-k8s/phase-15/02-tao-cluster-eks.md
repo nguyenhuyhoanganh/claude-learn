@@ -2,7 +2,7 @@
 
 ## Tổng Quan Các Bước
 
-```
+```text
 1. Tạo IAM Role cho EKS Cluster
 2. Tạo VPC Network (dùng CloudFormation template)
 3. Tạo EKS Cluster
@@ -16,7 +16,7 @@
 
 EKS cần quyền tạo các AWS resources khác (EC2, Load Balancer...) thay mặt bạn.
 
-```
+```text
 AWS Console → IAM → Roles → Create role
 
 1. Select: AWS service
@@ -27,7 +27,7 @@ AWS Console → IAM → Roles → Create role
 ```
 
 **Tại sao cần?**
-```
+```text
 EKS muốn tạo EC2 instances → cần quyền
 EKS muốn tạo Load Balancers → cần quyền
 EKS muốn manage networking → cần quyền
@@ -40,7 +40,7 @@ EKS muốn manage networking → cần quyền
 
 EKS cần một VPC (Virtual Private Cloud) được config đặc biệt — vừa accessible từ internet, vừa có internal network.
 
-```
+```text
 AWS Console → CloudFormation → Create stack
 
 1. Template source: Amazon S3 URL
@@ -59,7 +59,7 @@ AWS Console → CloudFormation → Create stack
 
 ## Bước 3: Tạo EKS Cluster
 
-```
+```text
 AWS Console → EKS → Create cluster
 
 1. Name: kub-dep-demo (tên tùy chọn)
@@ -89,7 +89,7 @@ brew install awscli
 
 ### Tạo Access Key
 
-```
+```text
 AWS Console → Account name → Security Credentials
 → Access Keys → Create Access Key
 → Download .csv file (lưu kỹ, chỉ hiển thị 1 lần!)
@@ -143,7 +143,7 @@ kubectl get namespaces
 
 ## Lưu Ý Quan Trọng
 
-```
+```text
 ⚠ Region phải nhất quán!
   → Cluster tạo ở us-east-2
   → aws configure: region = us-east-2
@@ -155,4 +155,4 @@ kubectl get namespaces
 
 ---
 
-**Tiếp theo:** Thêm Worker Nodes vào Cluster →
+**Bài kế tiếp** → [Bài 3: Thêm Worker Nodes (Node Groups)](03-node-groups.md)

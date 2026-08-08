@@ -129,7 +129,7 @@ docker rm -v mycontainer     # -v xóa anonymous volumes gắn với container
 
 `.dockerignore` loại bỏ files khỏi **build context** (không copy vào image):
 
-```
+```text
 # .dockerignore
 node_modules/           # Deps — cài trong container
 .git/                   # Git history
@@ -165,7 +165,7 @@ tests/
 | Production | ✅ Dùng COPY | ❌ Không dùng |
 | Development | ❌ Chậm (rebuild) | ✅ Dùng Bind Mount |
 
-```
+```text
 Production flow:
 Code → docker build → Image (code baked in) → docker run
 
@@ -178,7 +178,7 @@ Code (live) ←→ Bind Mount ←→ Container (không có COPY)
 
 ## Checklist Storage quyết định
 
-```
+```text
 1. Data này có cần persist không?
    NO  → Container layer (mặc định, không cần gì thêm)
    YES → Volumes hoặc Bind Mount
@@ -215,4 +215,4 @@ Bạn đã học:
 
 ---
 
-**Tiếp theo:** Phase 4 — Networking trong Docker (Container-to-Container, Container-to-Internet) →
+**Phase kế tiếp** → [Bài 1: Ba loại giao tiếp trong Dockerized App](../phase-4/01-ba-loai-giao-tiep-trong-docker.md)

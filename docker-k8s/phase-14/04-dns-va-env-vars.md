@@ -4,7 +4,7 @@
 
 Kubernetes clusters hiện đại đi kèm với **CoreDNS** — một DNS service tự động tạo domain names cho tất cả Services trong cluster.
 
-```
+```text
 CoreDNS chạy như 1 Service trong namespace kube-system:
   kubectl get pods -n kube-system
   → coredns-xxx-yyy    1/1   Running
@@ -19,7 +19,7 @@ CoreDNS tự động:
 
 ## Domain Pattern của CoreDNS
 
-```
+```text
 {service-name}.{namespace}
 
 Ví dụ:
@@ -65,7 +65,7 @@ Kubernetes **tự động** inject env vars vào mọi container với thông ti
 
 ### Pattern
 
-```
+```text
 {SERVICE_NAME_UPPERCASE}_SERVICE_HOST
 {SERVICE_NAME_UPPERCASE}_SERVICE_PORT
 
@@ -164,4 +164,4 @@ service-name.namespace  # Cũng work!
 
 ---
 
-**Tiếp theo:** Frontend và Reverse Proxy →
+**Bài kế tiếp** → [Bài 5: Frontend & Reverse Proxy trong Kubernetes](05-frontend-va-reverse-proxy.md)

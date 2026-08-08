@@ -2,7 +2,7 @@
 
 ## Tại Sao Cần EFS (Không Dùng hostPath)?
 
-```
+```text
 Trên minikube:
   hostPath → Chạy OK (chỉ 1 node)
 
@@ -36,7 +36,7 @@ Driver này cho phép Kubernetes hiểu và dùng EFS.
 
 ## Bước 2: Tạo Security Group cho EFS
 
-```
+```text
 EC2 Console → Security Groups → Create security group
 
 Name: eks-efs
@@ -57,7 +57,7 @@ Outbound rules: giữ mặc định
 
 ## Bước 3: Tạo EFS File System
 
-```
+```text
 EFS Console → Create file system
 
 Name: eks-efs
@@ -183,7 +183,7 @@ GET /users/logs → data vẫn còn! (stored trên EFS, không mất)
 
 ## EFS Monitoring
 
-```
+```text
 EFS Console → File system → Monitoring tab
   → Thấy client connections (số pods kết nối)
   → Thấy data written (bytes ghi)
@@ -194,7 +194,7 @@ EFS Console → File system → Monitoring tab
 
 ## Toàn Bộ Flow
 
-```
+```text
 Kubernetes Pods
   ↓ dùng
 PVC (efs-pvc)
@@ -209,4 +209,4 @@ AWS EFS File System
 
 ---
 
-**Tiếp theo:** Tổng kết Phase 15 →
+**Bài kế tiếp** → [Tổng Kết Phase 15 — Kubernetes trên AWS EKS](06-tong-ket.md)

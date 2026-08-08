@@ -43,7 +43,7 @@ CMD ["npm", "start"]
 
 ### .dockerignore (cho cả backend và frontend)
 
-```
+```text
 node_modules
 Dockerfile
 .git
@@ -138,7 +138,7 @@ docker run -it \
 
 ### 1. Browser code ≠ Container code
 
-```
+```text
 Node.js code → chạy TRONG container
   → Docker resolve container names
   → "mongodb" → 172.18.0.2
@@ -150,7 +150,7 @@ React code → chạy TRONG BROWSER
 
 ### 2. Volume precedence (path dài hơn thắng)
 
-```
+```text
 -v ./backend:/app         → mount /app từ host
 -v /app/node_modules      → mount /app/node_modules anonymous
 
@@ -160,7 +160,7 @@ Kết quả: /app/* từ host, NGOẠI TRỪ /app/node_modules
 
 ### 3. MongoDB authentication connection string
 
-```
+```text
 mongodb://username:password@hostname:port/database?authSource=admin
           ↑                 ↑               ↑
           Credentials       Container name  Bắt buộc khi dùng
@@ -169,7 +169,7 @@ mongodb://username:password@hostname:port/database?authSource=admin
 
 ### 4. React cần `-it` để không tự tắt
 
-```
+```text
 -i: giữ STDIN mở
 -t: attach pseudo-TTY
 React dev server expects interactive input → nếu không có sẽ tự exit
@@ -179,7 +179,7 @@ React dev server expects interactive input → nếu không có sẽ tự exit
 
 ## Hạn chế của Setup Hiện Tại
 
-```
+```text
 1. Phải nhớ và gõ nhiều lệnh dài
    → Giải pháp: Docker Compose (Phase 6)
 
@@ -210,4 +210,4 @@ Bạn đã học:
 
 ---
 
-**Tiếp theo:** Phase 6 — Docker Compose: Quản lý multi-container với 1 lệnh →
+**Phase kế tiếp** → [Bài 1: Docker Compose là gì và Tại sao Cần?](../phase-6/01-docker-compose-la-gi.md)

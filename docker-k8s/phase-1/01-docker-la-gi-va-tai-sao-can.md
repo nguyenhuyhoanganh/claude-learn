@@ -39,7 +39,7 @@ Container là một **đơn vị phần mềm chuẩn hoá**, bao gồm:
 
 **Ví dụ trực quan:** Hãy nghĩ đến một hộp picnic. Hộp đó chứa đầy đủ thức ăn và dụng cụ ăn uống. Bạn có thể mang hộp đó đến bất kỳ đâu và có ngay bữa picnic — không cần lo thiếu đĩa hay dao nĩa. Container hoạt động theo cùng nguyên lý: tất cả những gì ứng dụng cần đều nằm trong container.
 
-```
+```text
 ┌─────────────────────────┐
 │       Container         │
 │  ┌────────────────────┐ │
@@ -90,4 +90,4 @@ Nhiều người hay nhầm lẫn hai khái niệm này:
 
 ---
 
-**Tiếp theo:** So sánh Docker Containers với Virtual Machines →
+**Bài kế tiếp** → [Bài 2: Containers vs Virtual Machines](02-containers-vs-virtual-machines.md)

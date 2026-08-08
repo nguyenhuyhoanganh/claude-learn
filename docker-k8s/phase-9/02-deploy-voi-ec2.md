@@ -4,7 +4,7 @@
 
 **EC2 (Elastic Compute Cloud)** = Máy tính ảo chạy trong cloud của AWS.
 
-```
+```text
 EC2 Instance = Remote computer
   - Chạy hệ điều hành (Amazon Linux, Ubuntu, etc.)
   - Bạn có toàn quyền truy cập qua SSH
@@ -16,7 +16,7 @@ EC2 Instance = Remote computer
 
 ## Quy Trình Deploy 3 Bước
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │  BƯỚC 1: Tạo EC2 Instance                           │
 │  → Chọn OS (Amazon Linux)                           │
@@ -43,7 +43,7 @@ EC2 Instance = Remote computer
 
 ### Trong AWS Console
 
-```
+```text
 1. Vào EC2 Dashboard → Launch Instance
 2. Chọn: Amazon Linux AMI (64-bit x86)
 3. Chọn: t2.micro (Free tier eligible)
@@ -61,7 +61,7 @@ EC2 Instance = Remote computer
 
 ### Key Pair — Quan trọng!
 
-```
+```text
 File .pem = "Chìa khóa" để mở cửa SSH
   → Chỉ download được 1 lần
   → Mất file = Mất quyền SSH vào instance
@@ -74,7 +74,7 @@ Không bao giờ:
 ```
 
 Thêm vào `.dockerignore`:
-```
+```text
 *.pem
 ```
 
@@ -157,7 +157,7 @@ sudo docker ps
 
 Mặc định EC2 chỉ cho phép SSH (port 22). Cần thêm rule cho HTTP:
 
-```
+```text
 AWS Console → EC2 → Security Groups
 → Chọn security group của instance (Launch-Wizard-X)
 → Inbound Rules → Edit Inbound Rules
@@ -213,7 +213,7 @@ AWS Console → Instances → Actions → Instance State → Terminate
 
 ## Nhược Điểm của DIY Approach
 
-```
+```text
 Bạn phải tự quản lý:
   ✗ Tạo và cấu hình server
   ✗ Security groups và firewall
@@ -234,4 +234,4 @@ Bạn phải tự quản lý:
 
 ---
 
-**Tiếp theo:** AWS ECS — Managed Container Service →
+**Bài kế tiếp** → [Bài 3: AWS ECS — Managed Container Service](03-aws-ecs-managed-service.md)

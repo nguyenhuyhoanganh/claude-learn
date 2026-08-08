@@ -4,7 +4,7 @@
 
 Bind mounts rất tiện trong development, nhưng **không phù hợp cho production**:
 
-```
+```text
 Development (laptop):
   Container mount → ./src trên laptop
   → Code luôn fresh, live-reload
@@ -23,7 +23,7 @@ Vấn đề: Bind mount phụ thuộc vào cấu trúc folder của host machine
 
 ## Giải pháp: Kết hợp COPY + Bind Mount
 
-```
+```text
 Image chứa snapshot của code (qua COPY)
   ↕ (development)
 Bind mount override với code mới nhất
@@ -82,7 +82,7 @@ RUN chown -R www-data:www-data /var/www/html
 
 **Tại sao cần `chown`?**
 
-```
+```text
 PHP-FPM chạy với user "www-data" (user mặc định của PHP image)
 Laravel cần ghi files vào /var/www/html:
   - storage/logs/
@@ -119,7 +119,7 @@ php:
 
 **Quy tắc:** Context phải là folder cha của tất cả folders/files mà Dockerfile cần COPY.
 
-```
+```text
 project/
 ├── docker-compose.yml
 ├── dockerfiles/
@@ -160,7 +160,7 @@ artisan:
 
 ### Development (Dockerfile với COPY + Compose với Bind Mount)
 
-```
+```text
 Image build:  COPY src .  → snapshot
 ↕
 Runtime:  -v ./src:/var/www/html  → override với live code
@@ -168,7 +168,7 @@ Runtime:  -v ./src:/var/www/html  → override với live code
 
 ### Production (chỉ dùng COPY từ Dockerfile)
 
-```
+```text
 Image build:  COPY src .  → snapshot
 Runtime:  không có bind mount  → dùng snapshot
 ```
@@ -192,4 +192,4 @@ Bạn đã học:
 
 ---
 
-**Tiếp theo:** Phase 9 — Deploying Docker Containers →
+**Phase kế tiếp** → [Bài 1: Từ Development đến Production](../phase-9/01-tu-development-den-production.md)

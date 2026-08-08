@@ -4,7 +4,7 @@
 
 Khóa học này chia làm 3 phần lớn:
 
-```
+```text
 Phần 1: Docker Foundation (Section 2-7)
     ├── Images & Containers
     ├── Volumes & Data Management
@@ -212,3 +212,5 @@ Khác với học lập trình, học Docker/Kubernetes đòi hỏi:
 ---
 
 **Bắt đầu học thực chất từ Phase 2:** Images & Containers — nền tảng của mọi thứ →
+
+**Phase kế tiếp** → [Bài 1: Images & Containers — Nền tảng cốt lõi](../phase-2/01-images-va-containers-concepts.md)

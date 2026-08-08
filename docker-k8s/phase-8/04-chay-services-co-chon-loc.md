@@ -4,7 +4,7 @@
 
 Khi làm việc với project Laravel, không phải lúc nào cũng cần chạy tất cả 6 services. Cần phân biệt:
 
-```
+```text
 Lúc setup ban đầu:
   → composer create-project    (1 lần)
   → artisan migrate            (1 lần hoặc khi schema thay đổi)
@@ -155,4 +155,4 @@ docker compose down -v                     # Remove data
 
 ---
 
-**Tiếp theo:** COPY vs Bind Mounts — Development vs Production →
+**Bài kế tiếp** → [Bài 5: COPY vs Bind Mounts — Development & Production](05-copy-vs-bind-mount-production.md)

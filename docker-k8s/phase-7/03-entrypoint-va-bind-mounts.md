@@ -83,7 +83,7 @@ docker run \
 
 Bind mount cho phép commands trong container **tác động lên host machine**:
 
-```
+```text
 Host: /home/user/project/
           ↕ Bind Mount
 Container: /app/
@@ -147,4 +147,4 @@ docker run mynpm install  # → npm install
 
 ---
 
-**Tiếp theo:** Sử dụng Utility Containers với Docker Compose →
+**Bài kế tiếp** → [Bài 4: Utility Containers với Docker Compose](04-utility-containers-voi-compose.md)

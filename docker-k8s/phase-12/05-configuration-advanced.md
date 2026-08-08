@@ -22,7 +22,7 @@ containers:
 
 ### Cách Hoạt Động
 
-```
+```text
 Pod đang chạy
   │
   ├── Sau 5 giây (initialDelaySeconds)
@@ -60,7 +60,7 @@ livenessProbe:
 
 ### Khi Nào Cần Liveness Probe?
 
-```
+```text
 Mặc định (không cần config):
   → Kubernetes detect khi container exit/crash
   → Đủ cho hầu hết trường hợp
@@ -77,7 +77,7 @@ Nên thêm Liveness Probe khi:
 
 ### Vấn Đề
 
-```
+```text
 kubectl set image deployment/my-app my-app=USERNAME/my-app:v2
 
 Nếu tag KHÔNG đổi (vẫn là :v1):
@@ -100,7 +100,7 @@ containers:
 
 ### Khi Nào Dùng Cái Nào?
 
-```
+```text
 Always:
   ✓ Dùng :latest tag hoặc không có tag
   ✓ Development: muốn luôn có code mới nhất
@@ -197,4 +197,4 @@ metadata:
 
 ---
 
-**Tiếp theo:** Phase 13 — Volumes & Persistent Storage trong Kubernetes →
+**Bài kế tiếp** → [Tổng Kết Phase 12 — Kubernetes Core Concepts](06-tong-ket.md)

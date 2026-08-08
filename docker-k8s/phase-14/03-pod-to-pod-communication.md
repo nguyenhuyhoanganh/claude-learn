@@ -4,7 +4,7 @@
 
 Trong thực tế, mỗi service nên có Deployment riêng:
 
-```
+```text
 users-deployment   → Users API Pods
 auth-deployment    → Auth API Pods
 tasks-deployment   → Tasks API Pods
@@ -19,7 +19,7 @@ Mỗi Pod type có service riêng:
 
 ## Vấn Đề: Pod IP Không Ổn Định
 
-```
+```text
 Auth Pod IP: 10.96.0.15
   → Pod restart → IP mới: 10.96.0.23 (khác rồi!)
   → Scale up từ 1 → 3 pods → IP nào?
@@ -29,7 +29,7 @@ Auth Pod IP: 10.96.0.15
 
 **Giải pháp: Service = Stable IP**
 
-```
+```text
 auth-service (ClusterIP): 10.96.100.5
   → Không đổi dù Pod restart
   → Load balance đến các Auth Pods
@@ -61,7 +61,7 @@ env:
 
 Kubernetes **tự động** tạo env vars cho tất cả Services:
 
-```
+```text
 Pattern: SERVICE_NAME_SERVICE_HOST
 
 Ví dụ:
@@ -90,7 +90,7 @@ const AUTH_ADDRESS = process.env.AUTH_SERVICE_SERVICE_HOST;
 Kubernetes có built-in **CoreDNS** service tự động tạo domain names cho tất cả Services.
 
 **Pattern:**
-```
+```text
 service-name.namespace
 ```
 
@@ -134,7 +134,7 @@ kubectl get namespaces
 
 Nếu không chỉ định namespace trong YAML → tự động dùng `default`.
 
-```
+```text
 auth-service.default     → auth-service trong namespace "default"
 auth-service.production  → nếu tạo namespace riêng cho prod
 ```
@@ -191,4 +191,4 @@ spec:
 
 ---
 
-**Tiếp theo:** CoreDNS và Auto-generated Env Vars chi tiết →
+**Bài kế tiếp** → [Bài 4: CoreDNS và Auto-generated Environment Variables](04-dns-va-env-vars.md)

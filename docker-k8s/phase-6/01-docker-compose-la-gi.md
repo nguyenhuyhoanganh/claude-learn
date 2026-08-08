@@ -39,7 +39,7 @@ docker run -it --name goals-frontend --rm -p 3000:3000 \
 
 Docker Compose là tool giúp bạn **thay thế nhiều `docker build` và `docker run` commands bằng một file cấu hình** và **một lệnh duy nhất**.
 
-```
+```text
 Thay vì:
   docker build + docker run (lần 1)
   docker build + docker run (lần 2)
@@ -64,7 +64,7 @@ Dùng Docker Compose:
 
 ## Sơ đồ hoạt động
 
-```
+```text
 docker-compose.yml
 ┌──────────────────────────────────────────────┐
 │  services:                                   │
@@ -100,7 +100,7 @@ docker-compose.yml
 
 ## Docker Compose tỏa sáng nhất khi nào?
 
-```
+```text
 1 container:    Docker Compose vẫn hữu ích
   → Không cần gõ lại lệnh dài
   → File cấu hình dễ đọc, dễ chia sẻ với team
@@ -131,4 +131,4 @@ docker-compose version
 
 ---
 
-**Tiếp theo:** Cấu trúc file `docker-compose.yml` →
+**Bài kế tiếp** → [Bài 2: Cấu trúc File docker-compose.yml](02-cau-truc-docker-compose-yml.md)

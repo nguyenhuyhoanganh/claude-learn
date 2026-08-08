@@ -4,7 +4,7 @@
 
 ### Cách Hoạt Động
 
-```
+```text
 Khi Pod start:
   → Kubernetes tạo một folder MỚI và RỖNG
   → Tất cả containers trong Pod có thể dùng folder này
@@ -34,7 +34,7 @@ spec:
 
 ### Hạn Chế của emptyDir
 
-```
+```text
 Vấn đề với nhiều replicas:
   Pod 1 (replica 1)  →  emptyDir A (data của Pod 1)
   Pod 2 (replica 2)  →  emptyDir B (data của Pod 2)
@@ -50,7 +50,7 @@ Vấn đề với nhiều replicas:
 
 ### Cách Hoạt Động
 
-```
+```text
 Node (máy vật lý/VM chạy Kubernetes):
   /data/                   ← hostPath trỏ vào đây
   └── my-story.txt
@@ -81,7 +81,7 @@ spec:
 
 ### type Options cho hostPath
 
-```
+```text
 DirectoryOrCreate  → Tạo folder nếu chưa tồn tại
 Directory          → Folder phải đã tồn tại
 FileOrCreate       → Tạo file nếu chưa tồn tại
@@ -90,7 +90,7 @@ File               → File phải đã tồn tại
 
 ### Hạn Chế của hostPath
 
-```
+```text
 Multi-node cluster:
   Node 1 → /data/ (có data)
   Node 2 → /data/ (KHÔNG có data, hoặc data khác)
@@ -123,7 +123,7 @@ Multi-node cluster:
 
 ## Khi Nào Dùng?
 
-```
+```text
 emptyDir:
   ✓ Data tạm thời trong 1 Pod
   ✓ Chỉ cần survive container restarts (không phải pod restarts)
@@ -140,4 +140,4 @@ hostPath:
 
 ---
 
-**Tiếp theo:** CSI Volume Type và Persistent Volumes →
+**Bài kế tiếp** → [Bài 3: CSI Volume Type và Persistent Volumes](03-csi-va-persistent-volumes.md)

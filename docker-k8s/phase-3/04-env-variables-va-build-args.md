@@ -273,7 +273,7 @@ docker run -d \
 
 ## Tóm tắt
 
-```
+```text
 ENV (Runtime Variables):
 ├── Khai báo trong Dockerfile với default value
 ├── Override bằng: docker run -e KEY=VALUE
@@ -294,4 +294,4 @@ ARG (Build-time Variables):
 
 ---
 
-**Tiếp theo:** Phase 4 — Networking trong Docker (Container-to-Container communication) →
+**Bài kế tiếp** → [Bài 5: Tổng kết Volumes & Storage Patterns](05-volumes-tong-ket-va-patterns.md)

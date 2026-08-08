@@ -224,4 +224,4 @@ volumes:
 
 ---
 
-**Tiếp theo:** Chạy Services có chọn lọc và `--build` flag →
+**Bài kế tiếp** → [Bài 4: Chạy Services Có Chọn lọc](04-chay-services-co-chon-loc.md)

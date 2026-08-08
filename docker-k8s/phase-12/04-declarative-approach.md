@@ -2,7 +2,7 @@
 
 ## Imperative vs Declarative
 
-```
+```text
 Imperative (lệnh):
   kubectl create deployment ...
   kubectl expose deployment ...
@@ -133,7 +133,7 @@ spec:
 ```
 
 **Vì sao cần selector?**
-```
+```text
 Deployment tạo Pods → Nhưng nếu scale, có Pods mới xuất hiện
   → Deployment cần biết Pods nào THUỘC về nó
   → Dựa vào label matching
@@ -236,7 +236,7 @@ kubectl apply -f master-deployment.yaml
 
 ## Khi Nào Dùng Imperative vs Declarative?
 
-```
+```text
 Imperative:
   ✓ Học, thử nghiệm nhanh
   ✓ One-off commands (scale, rollback)
@@ -252,4 +252,4 @@ Declarative:
 
 ---
 
-**Tiếp theo:** Cấu Hình Nâng Cao — Liveness Probes, Image Pull Policy →
+**Bài kế tiếp** → [Bài 5: Cấu Hình Nâng Cao — Liveness Probes & Image Pull Policy](05-configuration-advanced.md)

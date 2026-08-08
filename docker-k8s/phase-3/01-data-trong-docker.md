@@ -27,7 +27,7 @@ docker run -d myapp
 
 ### Loại 1: Application Data (Code + Dependencies)
 
-```
+```text
 Đặc điểm:
 - Source code, node_modules, compiled files
 - Được COPY vào image khi build
@@ -38,7 +38,7 @@ Giải pháp: Lưu trong Image layers (mặc định)
 
 ### Loại 2: Temporary Data
 
-```
+```text
 Đặc điểm:
 - Data sinh ra khi app chạy (cache, session tạm thời)
 - Không cần persist khi container stop
@@ -49,7 +49,7 @@ Giải pháp: Container layer (mặc định) — tự mất khi container xóa
 
 ### Loại 3: Permanent Data
 
-```
+```text
 Đặc điểm:
 - User uploads, database files, log files
 - PHẢI persist khi container stop/restart/remove
@@ -64,7 +64,7 @@ Giải pháp: Volumes (Named) hoặc Bind Mounts
 
 Ứng dụng Node.js cho phép user submit "goals" — mỗi goal được lưu vào file JSON:
 
-```
+```text
 Container đang chạy:
 ├── /app/server.js        (code — từ image)
 ├── /app/node_modules/    (deps — từ image)
@@ -89,7 +89,7 @@ docker run myapp
 
 ## Sơ đồ tổng quan giải pháp
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    Docker Storage                        │
 │                                                          │
@@ -129,4 +129,4 @@ docker run myapp
 
 ---
 
-**Tiếp theo:** Anonymous Volumes và Named Volumes — cách dùng và khi nào dùng →
+**Bài kế tiếp** → [Bài 2: Volumes — Anonymous và Named](02-volumes-anonymous-va-named.md)

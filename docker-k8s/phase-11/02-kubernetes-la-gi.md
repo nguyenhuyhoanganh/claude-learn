@@ -11,7 +11,7 @@ Nhưng quan trọng hơn là **hiểu thực sự** nó làm gì.
 
 ## Kubernetes = Docker Compose cho Multi-Machine
 
-```
+```text
 Docker Compose:
   - Quản lý nhiều containers trên 1 máy (local)
   - Viết docker-compose.yml → docker compose up
@@ -32,7 +32,7 @@ Kubernetes:
 
 ### Vấn đề với AWS ECS
 
-```
+```text
 Học ECS → Biết dùng ECS trên AWS
 Chuyển sang Azure → Phải học lại từ đầu
 Chuyển sang Google Cloud → Lại học từ đầu
@@ -48,7 +48,7 @@ Config cho Azure ACI:
 
 ### Kubernetes: Chuẩn Thống Nhất
 
-```
+```text
 Học Kubernetes → Dùng được ở mọi nơi!
 
 Kubernetes config (YAML):
@@ -93,7 +93,7 @@ Config này chạy được trên AWS, Azure, GCP, hoặc bất kỳ cluster nà
 
 ## Kubernetes Làm Gì?
 
-```
+```text
 Bạn viết:  "Tôi muốn 3 instances của app X luôn chạy"
            "Nếu traffic cao, scale lên 10 instances"
            "Nếu container crash, tự restart"
@@ -108,7 +108,7 @@ Kubernetes thực hiện:
 
 ## Kubernetes KHÔNG Làm Gì?
 
-```
+```text
 Kubernetes KHÔNG:
   → Tạo remote servers/machines cho bạn
   → Cài Docker trên các servers
@@ -121,4 +121,4 @@ Kubernetes KHÔNG:
 
 ---
 
-**Tiếp theo:** Kiến Trúc Kubernetes — Pods, Nodes, Cluster →
+**Bài kế tiếp** → [Bài 3: Kiến Trúc Kubernetes](03-kien-truc-kubernetes.md)

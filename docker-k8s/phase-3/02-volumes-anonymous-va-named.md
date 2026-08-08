@@ -4,7 +4,7 @@
 
 Volume là một **thư mục đặc biệt** được Docker quản lý, tồn tại bên ngoài container filesystem. Khi container bị xóa, Volume vẫn còn đó.
 
-```
+```text
 Host Machine
 └── /var/lib/docker/volumes/
     ├── my_feedback_volume/
@@ -172,7 +172,7 @@ docker volume prune
 
 ## Tóm tắt — Khi nào dùng gì?
 
-```
+```text
 Data cần persist giữa container restart/remove?
 │
 ├── YES → Named Volume: -v myvolume:/container/path
@@ -188,4 +188,4 @@ Data cần persist giữa container restart/remove?
 
 ---
 
-**Tiếp theo:** Bind Mounts — cách tốt nhất cho development workflow →
+**Bài kế tiếp** → [Bài 3: Bind Mounts & Development Workflow](03-bind-mounts-va-dev-workflow.md)

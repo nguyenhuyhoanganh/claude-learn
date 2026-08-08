@@ -4,7 +4,7 @@
 
 Khi ứng dụng chạy trong container, nó có thể cần giao tiếp với:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    Container Network                     │
 │                                                          │
@@ -99,7 +99,7 @@ mongoose.connect('mongodb://mongodb:27017/mydb');
 
 Thay vì nhét cả Node.js app và MongoDB vào một container:
 
-```
+```text
 ❌ Bad: 1 container chứa tất cả
 ┌─────────────────────────────────┐
 │  Node.js App + MongoDB          │
@@ -152,4 +152,4 @@ docker run -d --name redis redis:alpine
 
 ---
 
-**Tiếp theo:** Docker Networks — Cách kết nối containers với nhau một cách elegant →
+**Bài kế tiếp** → [Bài 2: Docker Networks — Kết nối Containers với nhau](02-docker-networks.md)

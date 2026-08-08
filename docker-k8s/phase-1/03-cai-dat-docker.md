@@ -4,7 +4,7 @@
 
 Docker có thể cài trên ba hệ điều hành chính: macOS, Windows, và Linux. Cách cài đặt khác nhau tùy OS và yêu cầu hệ thống.
 
-```
+```text
 macOS/Windows mới   → Docker Desktop (khuyến nghị)
 macOS/Windows cũ    → Docker Toolbox (legacy)
 Linux               → Docker Engine trực tiếp
@@ -179,4 +179,4 @@ Khuyến nghị dùng **Visual Studio Code** với extension:
 
 ---
 
-**Tiếp theo:** Tổng quan các công cụ Docker và chạy container đầu tiên →
+**Bài kế tiếp** → [Bài 4: Hệ sinh thái công cụ Docker](04-he-sinh-thai-cong-cu-docker.md)

@@ -4,7 +4,7 @@
 
 Docker không chỉ là một công cụ đơn lẻ. Đây là cả một hệ sinh thái gồm nhiều thành phần phối hợp với nhau:
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │              Docker Ecosystem                    │
 │                                                  │
@@ -153,7 +153,7 @@ Khi bạn có hàng chục, hàng trăm containers cần:
 
 → Đó là lúc bạn cần Kubernetes.
 
-```
+```text
 Docker Compose: quản lý containers trên 1 máy
 Kubernetes:     quản lý containers trên nhiều máy (cluster)
 ```
@@ -164,7 +164,7 @@ Kubernetes:     quản lý containers trên nhiều máy (cluster)
 
 ## Quan hệ giữa các công cụ
 
-```
+```text
 Bạn → Docker CLI ──────────────────▶ Docker Engine (Daemon)
                                            │
                                            ▼
@@ -197,4 +197,4 @@ Docker Desktop và Docker Compose chỉ là lớp tiện ích phía trên, đề
 
 ---
 
-**Tiếp theo:** Chạy container đầu tiên với Docker →
+**Bài kế tiếp** → [Bài 5: Chạy Container Đầu Tiên](05-container-dau-tien.md)

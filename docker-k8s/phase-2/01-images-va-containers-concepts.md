@@ -4,7 +4,7 @@
 
 Docker xoay quanh hai khái niệm trung tâm: **Image** và **Container**. Hiểu rõ sự khác biệt và mối quan hệ giữa hai thứ này là nền tảng cho mọi thứ còn lại.
 
-```
+```text
 Image                          Container
 ─────────────────────          ─────────────────────
 Template / Blueprint           Running instance
@@ -54,7 +54,7 @@ Container là **running instance** được tạo từ một image. Container:
 
 ### Quan hệ Image → Container
 
-```
+```text
 Image: node:18
     │
     ├──▶ Container 1 (chạy app A trên port 3000)
@@ -166,7 +166,7 @@ Container có **network riêng biệt** với host. Dù `EXPOSE 80` trong Docker
 
 Flag `-p (publish)` tạo "cổng nối" từ host vào container:
 
-```
+```text
 localhost:3000  ──[-p 3000:80]──▶  container:80
 ```
 
@@ -174,7 +174,7 @@ localhost:3000  ──[-p 3000:80]──▶  container:80
 
 ## Tóm tắt
 
-```
+```text
 Docker Hub / Dockerfile
         │
         ▼
@@ -195,4 +195,4 @@ Docker Hub / Dockerfile
 
 ---
 
-**Tiếp theo:** Hiểu Image Layers & Caching để tối ưu quá trình build →
+**Bài kế tiếp** → [Bài 2: Image Layers & Caching](02-image-layers-va-caching.md)

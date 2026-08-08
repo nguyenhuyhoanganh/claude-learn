@@ -121,7 +121,7 @@ docker compose down -v
 
 ## Điều Docker Compose làm Tự động
 
-```
+```text
 1. Network: Tạo default network, thêm tất cả services vào
    → Không cần docker network create thủ công
 
@@ -142,7 +142,7 @@ docker compose down -v
 
 ## Điều Docker Compose KHÔNG làm
 
-```
+```text
 1. Thay thế Dockerfile
    → Vẫn cần Dockerfile cho custom images
 
@@ -176,4 +176,4 @@ Bạn đã học:
 
 ---
 
-**Tiếp theo:** Phase 7 — Utility Containers & Executing Commands →
+**Phase kế tiếp** → [Bài 1: Utility Containers là gì và Tại sao Cần?](../phase-7/01-utility-containers-la-gi.md)

@@ -8,7 +8,7 @@ Kubernetes có nhiều built-in volume types: `awsElasticBlockStore`, `azureDisk
 
 **CSI = Giải pháp:**
 
-```
+```text
 Kubernetes định nghĩa CSI interface
   ↓
 Third-party providers (AWS, Azure, etc.) implement driver cho interface đó
@@ -43,7 +43,7 @@ spec:
 
 ### Vấn Đề với Normal Volumes
 
-```
+```text
 Normal volumes (emptyDir, hostPath):
   → Được định nghĩa bên trong Pod spec
   → Phụ thuộc vào Pod lifecycle
@@ -54,7 +54,7 @@ Normal volumes (emptyDir, hostPath):
 
 ### PersistentVolume = Giải Pháp
 
-```
+```text
 Cluster
   ├── Node 1
   │   └── Pod A  ──── PVC ──── PersistentVolume (EFS/cloud storage)
@@ -68,7 +68,7 @@ Cluster
 
 ### 3 Tầng: PV → PVC → Pod
 
-```
+```text
 PersistentVolume (PV):
   → Admin định nghĩa: "Có storage này sẵn sàng"
   → Standalone Kubernetes resource
@@ -109,7 +109,7 @@ spec:
 
 ### accessModes Options
 
-```
+```text
 ReadWriteOnce (RWO):
   → Nhiều Pods trên CÙNG 1 Node có thể đọc/ghi
   → Chỉ 1 Node access tại 1 thời điểm
@@ -142,11 +142,11 @@ kubectl get pv                # Liệt kê tất cả PVs
 kubectl describe pv host-pv   # Chi tiết 1 PV
 ```
 
-```
+```text
 NAME     CAPACITY  ACCESS MODES  STATUS  CLAIM        STORAGECLASS
 host-pv  1Gi       RWO           Bound   default/pvc  standard
 ```
 
 ---
 
-**Tiếp theo:** PersistentVolumeClaims — Cách Pod dùng PV →
+**Bài kế tiếp** → [Bài 4: PersistentVolumeClaims — Kết Nối Pod với PV](04-persistent-volume-claims.md)

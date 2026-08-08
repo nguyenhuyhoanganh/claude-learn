@@ -130,7 +130,7 @@ docker run -it \
 
 ### Vì sao React cần `-it`?
 
-```
+```text
 React dev server được thiết kế để chạy interactive:
 - Nó lắng nghe keyboard input (Ctrl+C để dừng)
 - Nếu không có input stream → nó tự assume "không ai quan tâm"
@@ -162,4 +162,4 @@ Tất cả đang giao tiếp qua **localhost** (host machine). Bước tiếp th
 
 ---
 
-**Tiếp theo:** Kết nối containers với Docker Networks →
+**Bài kế tiếp** → [Bài 3: Kết nối Containers với Docker Networks](03-ket-noi-containers-voi-networks.md)

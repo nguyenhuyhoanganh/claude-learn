@@ -4,7 +4,7 @@
 
 React/Vue/Angular app = **JavaScript chạy trong browser**, không chạy trong container.
 
-```
+```text
 Container (nginx)          Browser (người dùng)
   └── Serve React files →  └── JS code chạy tại đây
                                   │
@@ -32,7 +32,7 @@ const API_URL = 'http://12.34.56.78/api/tasks';  // IP của LoadBalancer
 
 Dùng nginx (server serve React app) như một **reverse proxy**:
 
-```
+```text
 Browser → http://frontend-url/api/tasks
                 ↓ (nginx trong container nhận request)
 nginx config → forward đến tasks-service.default:8000
@@ -87,7 +87,7 @@ async function addTask(text) {
 
 ## Tại Sao Reverse Proxy Hoạt Động?
 
-```
+```text
 Browser gọi:  /api/tasks (cùng domain với frontend)
                 ↓
 nginx server (trong container, trong cluster) nhận
@@ -168,7 +168,7 @@ spec:
 
 ## Toàn Bộ Architecture
 
-```
+```text
 Internet
   │
   ▼
@@ -191,7 +191,7 @@ Frontend Pod (nginx)
 
 ## Lợi Ích của Reverse Proxy Pattern
 
-```
+```text
 ✓ Frontend code không chứa IP/domain của backend
 ✓ Dùng cluster-internal DNS từ nginx
 ✓ Không cần CORS config (cùng origin)
@@ -202,4 +202,4 @@ Frontend Pod (nginx)
 
 ---
 
-**Tiếp theo:** Tổng kết Phase 14 →
+**Bài kế tiếp** → [Tổng Kết Phase 14 — Kubernetes Networking](06-tong-ket.md)

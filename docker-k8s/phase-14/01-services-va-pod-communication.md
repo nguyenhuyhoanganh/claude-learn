@@ -2,7 +2,7 @@
 
 ## Recap: Tại Sao Cần Service?
 
-```
+```text
 Pod có IP address, nhưng:
   → IP thay đổi mỗi khi Pod restart
   → Pod IP chỉ accessible bên trong cluster
@@ -30,7 +30,7 @@ spec:
       targetPort: 80
 ```
 
-```
+```text
 ClusterIP Service:
   → Chỉ accessible từ TRONG cluster
   → Các Pod khác trong cluster có thể gọi
@@ -53,7 +53,7 @@ spec:
       nodePort: 30080   # Range: 30000-32767
 ```
 
-```
+```text
 NodePort:
   → Accessible qua IP của Worker Node
   → Phải biết IP của Node
@@ -72,7 +72,7 @@ spec:
       targetPort: 8080
 ```
 
-```
+```text
 LoadBalancer:
   → Cần cloud provider support (AWS, GCP, Azure)
   → Tự động tạo External Load Balancer
@@ -88,7 +88,7 @@ Trên minikube:
 
 ## Kiến Trúc Multi-Service
 
-```
+```text
 Internet
   │
   ▼
@@ -140,7 +140,7 @@ spec:
 
 ## Khi Nào Dùng Loại Service Nào?
 
-```
+```text
 Public API / Frontend:
   → type: LoadBalancer
 
@@ -155,4 +155,4 @@ Development/testing:
 
 ---
 
-**Tiếp theo:** Giao tiếp trong cùng 1 Pod →
+**Bài kế tiếp** → [Bài 2: Giao Tiếp Bên Trong Pod (Pod-internal)](02-pod-internal-communication.md)

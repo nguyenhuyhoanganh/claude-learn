@@ -3,7 +3,7 @@
 ## Những Gì Đã Học
 
 ### 1. Setup Môi Trường
-```
+```text
 kubectl  → CLI giao tiếp với cluster
 minikube → Cluster local trong VM (cho development)
 
@@ -14,7 +14,7 @@ minikube status
 
 ### 2. Kubernetes Objects
 
-```
+```text
 Pod        = Đơn vị nhỏ nhất, bọc container(s)
            → Ephemeral, cluster-internal IP
            → Không tạo trực tiếp
@@ -90,7 +90,7 @@ spec:
 
 ### 5. Labels & Selectors
 
-```
+```text
 Labels:    Metadata tags gắn vào objects (key: value)
 Selectors: Cơ chế kết nối objects với nhau
 
@@ -102,7 +102,7 @@ matchExpressions: selector nâng cao với In/NotIn/Exists/DoesNotExist
 
 ### 6. Rolling Updates
 
-```
+```text
 Khi deploy version mới:
   Old Pod (v1) tiếp tục chạy
   ↓
@@ -158,7 +158,7 @@ kubectl rollout undo deployment/NAME --to-revision=1
 
 ## Key Takeaways
 
-```
+```text
 1. Kubernetes works with Objects (Pod, Deployment, Service...)
 2. Deployment manages Pods — tự restart, scale, rolling update
 3. Service = stable endpoint cho Pods (LoadBalancer cho public access)
@@ -171,4 +171,4 @@ kubectl rollout undo deployment/NAME --to-revision=1
 
 ---
 
-**Tiếp theo:** Phase 13 — Volumes & Persistent Data →
+**Phase kế tiếp** → [Bài 1: Volumes trong Kubernetes — Lý Thuyết & So Sánh](../phase-13/01-volumes-trong-kubernetes.md)

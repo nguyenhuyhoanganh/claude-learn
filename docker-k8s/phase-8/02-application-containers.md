@@ -67,7 +67,7 @@ services:
 
 **`context: .`** — Tại sao không dùng `context: ./dockerfiles`?
 
-```
+```text
 Nginx Dockerfile cần truy cập:
   - nginx/nginx.conf    → nằm ngoài ./dockerfiles
   - src/                → nằm ngoài ./dockerfiles
@@ -123,7 +123,7 @@ services:
 
 **Tại sao không publish port 9000?**
 
-```
+```text
 Nginx → PHP: Container-to-container trong cùng network
 → Không cần publish port ra ngoài
 → fastcgi_pass php:9000 hoạt động nội bộ
@@ -222,4 +222,4 @@ docker compose up -d --build server
 
 ---
 
-**Tiếp theo:** Utility Containers — Composer, Artisan, NPM →
+**Bài kế tiếp** → [Bài 3: Utility Containers — Composer, Artisan, NPM](03-utility-containers.md)

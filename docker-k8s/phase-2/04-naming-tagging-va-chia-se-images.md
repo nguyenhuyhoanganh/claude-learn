@@ -22,7 +22,7 @@ docker exec -it goalsapp /bin/sh
 
 ### Cấu trúc tên image
 
-```
+```text
 name:tag
 ────┬──── ────┬────
    │          │
@@ -31,7 +31,7 @@ name:tag
 ```
 
 **Ví dụ:**
-```
+```text
 node          → tên là "node", tag mặc định là "latest"
 node:14       → node version 14
 node:18       → node version 18
@@ -138,7 +138,7 @@ Output JSON chứa:
 
 ### Cách 1: Chia sẻ Dockerfile + Source Code
 
-```
+```text
 [Người chia sẻ]                    [Người nhận]
 Dockerfile + source code ──▶ Build image ──▶ Run container
 ```
@@ -150,7 +150,7 @@ Dockerfile + source code ──▶ Build image ──▶ Run container
 
 ### Cách 2: Chia sẻ Built Image (qua Registry)
 
-```
+```text
 [Người chia sẻ]                    [Người nhận]
 docker push ──▶ Registry ──▶ docker pull ──▶ docker run
 ```
@@ -277,4 +277,4 @@ docker logout                             # Đăng xuất
 
 ---
 
-**Tiếp theo:** Phase 3 — Quản lý Data với Volumes →
+**Bài kế tiếp** → [Bài 5: Dockerfile Best Practices & Patterns](05-dockerfile-best-practices.md)

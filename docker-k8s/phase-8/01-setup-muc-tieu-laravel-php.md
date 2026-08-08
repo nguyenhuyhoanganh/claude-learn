@@ -20,7 +20,7 @@ Với Docker: chỉ cần Docker, mọi thứ trong containers.
 
 ## Kiến trúc 6 Containers
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Application Containers                        │
 │                   (Chạy liên tục với compose up)                │
@@ -46,7 +46,7 @@ Với Docker: chỉ cần Docker, mọi thứ trong containers.
 
 ### Luồng request
 
-```
+```text
 Browser
   │ HTTP (localhost:8000)
   ▼
@@ -63,7 +63,7 @@ MySQL Container
 
 ## Cấu trúc Project
 
-```
+```text
 laravel-docker/
 ├── docker-compose.yml
 ├── dockerfiles/
@@ -83,7 +83,7 @@ laravel-docker/
 
 Tất cả containers share cùng một quy ước: source code nằm ở `/var/www/html` trong container.
 
-```
+```text
 Nginx container: /var/www/html  ← Serve files từ đây
 PHP container:   /var/www/html  ← Interpret PHP files từ đây
 Artisan/NPM:     /var/www/html  ← Run commands từ đây
@@ -106,4 +106,4 @@ Host:            ./src          ← Bind mount vào /var/www/html
 
 ---
 
-**Tiếp theo:** Application Containers (Nginx + PHP + MySQL) →
+**Bài kế tiếp** → [Bài 2: Application Containers — Nginx, PHP, MySQL](02-application-containers.md)

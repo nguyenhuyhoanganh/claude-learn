@@ -44,7 +44,7 @@ volumes:                # Khai báo named volumes (ở top level)
 
 Tạo file `docker-compose.yml` tại **root của project**:
 
-```
+```text
 my-project/
 ├── docker-compose.yml    ← File Compose ở đây
 ├── backend/
@@ -265,4 +265,4 @@ volumes:
 
 ---
 
-**Tiếp theo:** Chi tiết cấu hình từng service →
+**Bài kế tiếp** → [Bài 3: Cấu hình Services Chi tiết](03-cau-hinh-services-chi-tiet.md)

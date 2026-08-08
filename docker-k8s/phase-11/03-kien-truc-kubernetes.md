@@ -2,7 +2,7 @@
 
 ## Big Picture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         CLUSTER                                  │
 │                                                                  │
@@ -27,7 +27,7 @@
 
 ## Pod — Đơn Vị Nhỏ Nhất
 
-```
+```text
 Pod = Shell bọc xung quanh container(s)
     = Đơn vị deployment nhỏ nhất trong Kubernetes
 
@@ -55,7 +55,7 @@ Pod = Shell bọc xung quanh container(s)
 
 ## Worker Node — Máy Chạy Pods
 
-```
+```text
 Worker Node = Remote machine (EC2 instance, VM, v.v.)
            = Nơi các Pods được chạy
 
@@ -81,7 +81,7 @@ Bên trong Worker Node:
 
 ## Master Node — Bộ Não Điều Khiển
 
-```
+```text
 Master Node = Control Center
            = Điều phối toàn bộ cluster
 
@@ -111,7 +111,7 @@ Bên trong Master Node (Control Plane):
 
 ## Luồng Hoạt Động
 
-```
+```text
 1. Developer viết Kubernetes config (YAML)
 
 2. kubectl apply -f config.yaml
@@ -134,7 +134,7 @@ Bên trong Master Node (Control Plane):
 
 ## Cluster
 
-```
+```text
 Cluster = Tổng hợp tất cả các Nodes
 
 Cluster
@@ -153,7 +153,7 @@ Trong cluster:
 
 ## Điều Bạn Phải Làm vs Kubernetes Làm
 
-```
+```text
 BẠN phải:                    KUBERNETES sẽ:
   ✓ Tạo cluster (servers)      → Quản lý Pods
   ✓ Cài Docker trên nodes      → Create/Delete Pods
@@ -167,4 +167,4 @@ BẠN phải:                    KUBERNETES sẽ:
 
 ---
 
-**Tiếp theo:** Các Thuật Ngữ Quan Trọng trong Kubernetes →
+**Bài kế tiếp** → [Bài 4: Thuật Ngữ Quan Trọng & Tổng Kết Phase 11](04-thuat-ngu-va-tong-ket.md)

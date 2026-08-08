@@ -4,7 +4,7 @@
 
 **State** = Dữ liệu được tạo ra và sử dụng bởi app mà không được phép mất.
 
-```
+```text
 Loại 1: User-generated data
   → User accounts, orders, files người dùng upload
   → Thường lưu trong database hoặc file
@@ -24,7 +24,7 @@ Loại 2: Intermediate results (tạm thời)
 
 Với Docker đơn lẻ, ta dùng `-v` hoặc Docker Compose volumes. Nhưng với Kubernetes:
 
-```
+```text
 Ta không chạy "docker run" trực tiếp
 → Kubernetes tạo và quản lý containers
 → Ta cần cấu hình Kubernetes để gắn volumes vào containers
@@ -51,7 +51,7 @@ Thêm vào đó:
 
 ## Nguyên Tắc Cơ Bản
 
-```
+```text
 Volume gắn vào POD (không phải container):
   Pod
   ├── Container A → có thể dùng volume
@@ -91,7 +91,7 @@ spec:
 
 ## Các Loại Volume (Overview)
 
-```
+```text
 emptyDir:
   → Tạo folder rỗng khi Pod start
   → Xóa khi Pod bị xóa
@@ -116,4 +116,4 @@ PersistentVolume (PV):
 
 ---
 
-**Tiếp theo:** emptyDir và hostPath chi tiết →
+**Bài kế tiếp** → [Bài 2: emptyDir và hostPath Volumes](02-emptydir-va-hostpath.md)

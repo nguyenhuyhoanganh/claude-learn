@@ -171,4 +171,4 @@ docker compose run --rm <service> <args>
 
 ---
 
-**Tiếp theo:** Phase 8 — Laravel & PHP: Dự án phức tạp thực tế →
+**Phase kế tiếp** → [Bài 1: Setup Mục tiêu — Laravel & PHP Project](../phase-8/01-setup-muc-tieu-laravel-php.md)

@@ -2,7 +2,7 @@
 
 ## Vấn đề hiện tại
 
-```
+```text
 1. MongoDB: Data bị mất mỗi khi container bị xóa/restart
    → Cần: Named Volume cho /data/db
 
@@ -76,7 +76,7 @@ docker run -d \
 
 **Giải thích 3 volumes:**
 
-```
+```text
 1. -v logs:/app/logs
    Named volume → log files không mất khi container xóa
 
@@ -94,7 +94,7 @@ docker run -d \
 
 ### Volume precedence (path dài hơn thắng)
 
-```
+```text
 -v /host/backend:/app           → map /app
 -v /app/node_modules            → map /app/node_modules (path dài hơn)
 
@@ -185,7 +185,7 @@ docker run -it \
 
 **Tại sao chỉ bind `src/` chứ không phải cả folder?**
 
-```
+```text
 /path/to/frontend/
 ├── src/           ← Code ta viết, cần sync
 ├── public/        ← Static files, ít thay đổi
@@ -201,7 +201,7 @@ docker run -it \
 
 ### backend/.dockerignore
 
-```
+```text
 node_modules
 Dockerfile
 .git
@@ -211,7 +211,7 @@ Dockerfile
 
 ### frontend/.dockerignore
 
-```
+```text
 node_modules
 Dockerfile
 .git
@@ -221,7 +221,7 @@ build/
 
 **Tại sao quan trọng?**
 
-```
+```text
 Không có .dockerignore:
   COPY . .  → Copy cả node_modules (hàng trăm MB)
   → Build chậm vì copy nhiều file thừa
@@ -274,4 +274,4 @@ docker run -it \
 
 ---
 
-**Tiếp theo:** Tóm tắt Phase 5 và giới thiệu Docker Compose →
+**Bài kế tiếp** → [Bài 5: Tổng kết Multi-Container Applications](05-tong-ket-multi-container.md)

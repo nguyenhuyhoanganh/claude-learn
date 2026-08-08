@@ -2,7 +2,7 @@
 
 ## Tại Sao Cần Node Group?
 
-```
+```text
 EKS Cluster vừa tạo:
   → Chỉ có "bộ não" (Control Plane / Master Node)
   → Chưa có máy thực sự chạy containers
@@ -22,7 +22,7 @@ Worker nodes (EC2 instances) cũng cần quyền để:
 - Ghi logs
 - Connect với cluster network
 
-```
+```text
 AWS Console → IAM → Roles → Create role
 
 1. Select: AWS service
@@ -40,7 +40,7 @@ AWS Console → IAM → Roles → Create role
 
 ## Bước 2: Tạo Node Group
 
-```
+```text
 AWS Console → EKS → Cluster → Compute tab
 → Add node group
 
@@ -51,7 +51,7 @@ AWS Console → EKS → Cluster → Compute tab
 
 ### Config EC2 Instance Type
 
-```
+```text
 AMI type: Amazon Linux 2 (default)
 Instance type: t3.small (MINIMUM!)
   ⚠ KHÔNG dùng t3.micro — quá nhỏ, pods sẽ bị pending
@@ -63,7 +63,7 @@ Disk size: 20GB (default)
 
 ### Scaling Config
 
-```
+```text
 Minimum: 1 node
 Maximum: 3 nodes  
 Desired: 2 nodes   ← 2 nodes thật, phân tán Pods tự động
@@ -71,12 +71,12 @@ Desired: 2 nodes   ← 2 nodes thật, phân tán Pods tự động
 
 ### Remote Access
 
-```
+```text
 → Disable (không cần SSH vào nodes)
 → EKS quản lý nodes, ta không cần SSH trực tiếp
 ```
 
-```
+```text
 Click Next → Next → Create
 ```
 
@@ -101,7 +101,7 @@ kubectl get nodes
 
 ## Hiểu Pods vs Nodes
 
-```
+```text
 Nodes (EC2 instances):
   → Máy thật (physical/virtual computers)
   → Được config trong Node Group
@@ -121,7 +121,7 @@ Scale nodes ≠ Scale pods:
 
 ## Xóa Cluster Khi Không Cần (Tiết Kiệm Chi Phí)
 
-```
+```text
 Thứ tự xóa:
 1. Delete Node Group (EC2 instances)
 2. Delete Cluster
@@ -135,4 +135,4 @@ Thứ tự xóa:
 
 ---
 
-**Tiếp theo:** Deploy Kubernetes config lên EKS →
+**Bài kế tiếp** → [Bài 4: Deploy Kubernetes Config lên EKS](04-deploy-kubernetes-config.md)

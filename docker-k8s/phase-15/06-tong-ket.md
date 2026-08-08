@@ -4,7 +4,7 @@
 
 ### 1. EKS vs ECS
 
-```
+```text
 ECS = AWS-specific container service
   → Không biết Kubernetes
   → Config khác hoàn toàn
@@ -17,7 +17,7 @@ EKS = Kubernetes trên AWS
 
 ### 2. Setup Cluster EKS
 
-```
+```text
 Bước 1: IAM Role cho Cluster (eksClusterRole)
   → AmazonEKSClusterPolicy
 
@@ -34,7 +34,7 @@ Bước 4: AWS CLI + update kubectl config
 
 ### 3. Worker Nodes
 
-```
+```text
 IAM Role cho Nodes (EKSNodeGroupRole):
   → AmazonEKSWorkerNodePolicy
   → AmazonEKS_CNI_Policy
@@ -59,7 +59,7 @@ kubectl get services
 
 ### 5. EFS Volumes
 
-```
+```text
 Cài CSI Driver → kubectl apply -k [github URL]
 Tạo Security Group (NFS port 2049)
 Tạo EFS File System trong cùng VPC
@@ -74,7 +74,7 @@ Deployment: dùng PVC qua persistentVolumeClaim
 
 ## Checklist Deploy Production
 
-```
+```text
 □ Images built và pushed lên Docker Hub
 □ YAML files có image names đúng
 □ EKS cluster đang chạy
@@ -90,7 +90,7 @@ Deployment: dùng PVC qua persistentVolumeClaim
 
 ## Checklist Xóa Cluster (Tiết Kiệm Chi Phí)
 
-```
+```text
 1. kubectl delete -f kubernetes/      # Xóa K8s resources
 2. AWS Console → EKS → Node Groups → Delete
 3. AWS Console → EKS → Cluster → Delete
@@ -134,7 +134,7 @@ kubectl delete service NAME
 
 ## Key Takeaways
 
-```
+```text
 1. EKS = Kubernetes, không phải ECS
 2. YAML files giống hoàn toàn với minikube
 3. LoadBalancer service → AWS tạo real LB tự động
@@ -147,4 +147,4 @@ kubectl delete service NAME
 
 ---
 
-**Tiếp theo:** Phase 16 — Tổng Kết Khóa Học →
+**Phase kế tiếp** → [Phase 16 — Tổng Kết Khóa Học Docker & Kubernetes](../phase-16/01-tong-ket-khoa-hoc.md)

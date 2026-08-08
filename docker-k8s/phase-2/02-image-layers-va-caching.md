@@ -4,7 +4,7 @@
 
 Mỗi instruction trong Dockerfile tạo ra một **layer** riêng biệt. Image là tập hợp nhiều layers xếp chồng lên nhau.
 
-```
+```text
 Layer 6: CMD ["node", "server.js"]        ← instruction của bạn
 Layer 5: COPY . .                          ← instruction của bạn
 Layer 4: RUN npm install                   ← instruction của bạn
@@ -47,7 +47,7 @@ docker build -t myapp .
 
 **Khi một layer thay đổi → tất cả layers sau đó bị rebuild**
 
-```
+```text
 Layer 3: COPY package.json .    → Không đổi  ✓ cache
 Layer 4: RUN npm install        → Không đổi  ✓ cache
 Layer 5: COPY . .               → FILE THAY ĐỔI → rebuild này và tất cả sau
@@ -92,7 +92,7 @@ CMD ["node", "server.js"]
 
 **Kết quả:** Khi bạn thay đổi `server.js`, chỉ `COPY . .` và `CMD` bị rebuild. `npm install` vẫn được dùng từ cache → **nhanh hơn nhiều**.
 
-```
+```text
 COPY package.json .   → cache ✓ (không đổi)
 RUN npm install       → cache ✓ (không đổi)
 COPY . .              → rebuild (code thay đổi)
@@ -105,7 +105,7 @@ CMD [...]             → rebuild
 
 Khi bạn start container từ image, Docker thêm một **thin writable layer** lên trên tất cả image layers:
 
-```
+```text
 ┌─────────────────────────────────┐
 │  Container Layer (writable)     │  ← files được tạo/sửa trong container
 ├─────────────────────────────────┤
@@ -182,4 +182,4 @@ docker image inspect myapp
 
 ---
 
-**Tiếp theo:** Quản lý Containers — stop, start, logs, interactive mode →
+**Bài kế tiếp** → [Bài 3: Quản lý Containers](03-quan-ly-containers.md)

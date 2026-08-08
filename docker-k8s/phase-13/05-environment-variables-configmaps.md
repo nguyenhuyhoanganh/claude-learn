@@ -33,7 +33,7 @@ const folder = process.env.STORY_FOLDER;
 
 ## Vấn Đề: Env Vars Hard-coded trong YAML
 
-```
+```text
 Vấn đề:
   → Nhiều Deployments dùng cùng env vars
   → Phải update nhiều files khi thay đổi
@@ -70,7 +70,7 @@ kubectl get configmap
 kubectl describe configmap data-store-env
 ```
 
-```
+```text
 Name: data-store-env
 Data
 ====
@@ -94,7 +94,7 @@ containers:
 
 ## Toàn Bộ Flow
 
-```
+```text
 ConfigMap (data-store-env):
   data:
     folder: story
@@ -176,4 +176,4 @@ env:
 
 ---
 
-**Tiếp theo:** Tổng kết Phase 13 →
+**Bài kế tiếp** → [Tổng Kết Phase 13 — Volumes & Persistent Data trong Kubernetes](06-tong-ket.md)

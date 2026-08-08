@@ -228,7 +228,7 @@ docker build --build-arg APP_VERSION=2.0 -t myapp .
 
 Tương tự `.gitignore`, file `.dockerignore` loại bỏ files/dirs không cần thiết khi build.
 
-```
+```text
 # .dockerignore
 node_modules/       # Dependencies (sẽ được install trong container)
 .git/               # Git history
@@ -353,4 +353,4 @@ CMD ["node", "dist/server.js"]
 
 ---
 
-**Tiếp theo:** Phase 3 — Quản lý Data & Volumes trong Docker →
+**Phase kế tiếp** → [Bài 1: Data trong Docker — Ba loại và vấn đề cần giải quyết](../phase-3/01-data-trong-docker.md)

@@ -6,7 +6,7 @@ Trước khi có Docker và containers phổ biến, Virtual Machines (VM) là c
 
 ### Cách VM hoạt động
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │              Host OS (Windows/macOS/Linux)        │
 ├──────────────────────────────────────────────────┤
@@ -56,7 +56,7 @@ Containers chia sẻ kernel của host OS, không cần một OS riêng biệt c
 
 ### Cách Containers hoạt động
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │              Host OS (Windows/macOS/Linux)        │
 ├──────────────────────────────────────────────────┤
@@ -131,4 +131,4 @@ Container có thể có một **lớp OS mỏng** (thin OS layer) bên trong, nh
 
 ---
 
-**Tiếp theo:** Cài đặt Docker trên máy tính →
+**Bài kế tiếp** → [Bài 3: Cài đặt Docker](03-cai-dat-docker.md)

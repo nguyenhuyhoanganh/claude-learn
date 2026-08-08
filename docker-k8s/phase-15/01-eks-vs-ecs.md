@@ -2,7 +2,7 @@
 
 ## Recap: Các Lựa Chọn Deploy Kubernetes
 
-```
+```text
 Option 1: DIY (tự làm tất cả)
   → Tạo EC2 instances thủ công
   → SSH vào từng máy, cài Kubernetes software
@@ -32,7 +32,7 @@ Option 3: Managed Service (EKS) ← Chúng ta dùng
 | **Learning curve** | Học lại từ đầu nếu đổi provider | Kiến thức K8s áp dụng ở mọi nơi |
 | **Dùng khi** | Chỉ cần deploy containers, không cần K8s | Muốn dùng Kubernetes trên AWS |
 
-```
+```text
 ECS: AWS-specific container service
   → Không cần biết Kubernetes
   → Concepts riêng: Task Definition, Task, Service, Cluster (ECS)
@@ -48,7 +48,7 @@ EKS: Kubernetes trên AWS
 
 ## Tại Sao Dùng EKS?
 
-```
+```text
 Học Kubernetes rồi → Apply ngay trên EKS
   → Không cần học lại ECS-specific concepts
   → Config files portable (dùng được Azure AKS, GKE...)
@@ -64,7 +64,7 @@ EKS = minikube nhưng thật sự trên cloud
 
 ## Chi Phí EKS
 
-```
+```text
 ⚠ EKS không miễn phí!
   → EKS cluster: ~$0.10/giờ (~$73/tháng)
   → EC2 instances (worker nodes): tùy loại
@@ -76,4 +76,4 @@ EKS = minikube nhưng thật sự trên cloud
 
 ---
 
-**Tiếp theo:** Tạo EKS Cluster bước-bước →
+**Bài kế tiếp** → [Bài 2: Tạo EKS Cluster Từng Bước](02-tao-cluster-eks.md)

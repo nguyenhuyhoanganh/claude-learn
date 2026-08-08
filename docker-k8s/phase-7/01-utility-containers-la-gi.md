@@ -12,7 +12,7 @@
 - **Không** start app khi run
 - Chạy một **lệnh cụ thể** do người dùng chỉ định, xong thì dừng
 
-```
+```text
 Application Container:
   docker run node-app
   → Chạy server → Tiếp tục chạy đến khi stop
@@ -30,7 +30,7 @@ Utility Container:
 
 Để tạo project mới, cần chạy `npm init`. Nhưng `npm` chỉ có nếu cài Node.js.
 
-```
+```text
 ❌ Cách truyền thống:
    1. Vào nodejs.org
    2. Download và cài Node.js
@@ -55,7 +55,7 @@ Với Docker: chỉ cần container có Composer, chạy `composer create-projec
 
 Đây là triết lý cốt lõi:
 
-```
+```text
 Truyền thống:                    Với Docker:
 ┌─────────────────────┐          ┌─────────────────────┐
 │  Host Machine       │          │  Host Machine       │
@@ -76,7 +76,7 @@ Mỗi project khác version         └─────────────�
 
 ## Khi nào dùng Utility Containers?
 
-```
+```text
 1. Khởi tạo project (npm init, composer create-project)
    → Cần tools nhưng chưa có project
 
@@ -94,7 +94,7 @@ Mỗi project khác version         └─────────────�
 
 ## Cấu trúc cơ bản
 
-```
+```text
 Project folder/
 ├── Dockerfile          ← Custom utility image (có ENTRYPOINT)
 ├── docker-compose.yml  ← Config utility container
@@ -105,4 +105,4 @@ Bind mount là chìa khóa: commands chạy trong container nhưng tác động 
 
 ---
 
-**Tiếp theo:** Các cách chạy lệnh trong containers →
+**Bài kế tiếp** → [Bài 2: Các Cách Chạy Lệnh trong Containers](02-chay-lenh-trong-containers.md)

@@ -67,7 +67,7 @@ services:
 
 ### Khi nào dùng `env_file` thay `environment`?
 
-```
+```text
 environment: (inline)
 → Tốt cho dev, cấu hình đơn giản
 → Config visible trong docker-compose.yml
@@ -103,7 +103,7 @@ services:
 
 **Lợi thế của Compose:** Bind mounts dùng **relative path** thay vì absolute path.
 
-```
+```text
 docker run:    -v /Users/user/project/backend:/app
 docker-compose: - ./backend:/app
 ```
@@ -146,7 +146,7 @@ services:
 
 Cần cho React dev server vì nó mong đợi interactive input.
 
-```
+```text
 docker run -it goals-react
 ↕
 docker-compose.yml:
@@ -251,4 +251,4 @@ volumes:
 
 ---
 
-**Tiếp theo:** docker-compose up và down commands →
+**Bài kế tiếp** → [Bài 4: docker-compose up và down](04-docker-compose-up-va-down.md)

@@ -2,7 +2,7 @@
 
 ## 1. Concepts Cốt Lõi: Images & Containers
 
-```
+```text
 IMAGE                          CONTAINER
   ├── Dockerfile → build         ├── Thin read-write layer
   ├── Chứa code + environment    ├── Chạy code trong image
@@ -13,14 +13,14 @@ IMAGE                          CONTAINER
 ```
 
 ### Containers tập trung vào 1 nhiệm vụ
-```
+```text
 ✓ 1 container = 1 web server
 ✓ 1 container = 1 database
 ✗ Không: 1 container = web server + database + cache
 ```
 
 ### Images là Immutable
-```
+```text
 Image được build → không thay đổi
 Container tạo mới → fresh layer mỗi lần
 Data trong container → mất khi container remove
@@ -107,7 +107,7 @@ docker run --network my-network my-app
 # → my-app có thể dùng "mongo" làm hostname
 ```
 
-```
+```text
 Container types:
   → World (internet): Mặc định, container gửi được request ra ngoài
   → Host machine: localhost KHÔNG work; dùng host.docker.internal
@@ -244,7 +244,7 @@ sudo docker run -d -p 80:80 USERNAME/my-app
 
 ### Phương pháp 2: Managed Service (ECS)
 
-```
+```text
 ECS Hierarchy:
   Cluster
     └── Service
@@ -255,7 +255,7 @@ ECS Hierarchy:
 
 ### Key Rules
 
-```
+```text
 ✓ COPY thay vì bind mounts trong production
 ✓ localhost (không phải container name) trong ECS cùng task
 ✓ Load Balancer cho stable URL
@@ -269,7 +269,7 @@ ECS Hierarchy:
 
 ## 9. Trade-offs Summary
 
-```
+```text
 Control ←──────────────────────────────────→ Ease-of-use
 High                                          High
   │                                             │
@@ -300,4 +300,4 @@ responsibility OS/security      everything      │
 
 ---
 
-**Tiếp theo:** Phase 11 — Getting Started with Kubernetes →
+**Phase kế tiếp** → [Bài 1: Vấn Đề với Manual Deployment](../phase-11/01-van-de-voi-deployment-thu-cong.md)

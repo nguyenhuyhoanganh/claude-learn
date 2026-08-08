@@ -4,7 +4,7 @@
 
 ### Development Setup (hiện tại)
 
-```
+```text
 Dockerfile:
   CMD ["npm", "start"]
   → Chạy React development server (port 3000)
@@ -14,7 +14,7 @@ Dockerfile:
 
 ### Production Requirements
 
-```
+```text
 npm run build
   → Compile JSX → browser-compatible JS
   → Minify và optimize code
@@ -28,7 +28,7 @@ Cần 2 thứ để serve production React app:
 
 ### Tại Sao `CMD ["npm", "run", "build"]` Không Đủ?
 
-```
+```text
 RUN npm run build → Tạo static files → Image chứa files
 CMD ["npm", "run", "build"] → Build xong → Container exit
   → Không có process nào chạy liên tục
@@ -41,7 +41,7 @@ CMD ["npm", "run", "build"] → Build xong → Container exit
 
 ### Khái niệm
 
-```
+```text
 Dockerfile thông thường:
   FROM base-image
   ... instructions ...
@@ -91,7 +91,7 @@ CMD ["nginx", "-g", "daemon off;"]
 ```
 
 **Kết quả:**
-```
+```text
 Final image chứa:
   ✓ nginx web server
   ✓ Optimized static files trong /usr/share/nginx/html
@@ -107,7 +107,7 @@ Final image chứa:
 
 ### Vấn đề với `localhost` trong Browser Code
 
-```
+```text
 React code chạy trong BROWSER của user, không trong container!
 
 Frontend container → serve HTML/JS → Browser của user
@@ -166,7 +166,7 @@ docker push YOUR_USERNAME/goals-react
 ## Frontend và Backend: Cùng Task hay Khác Task?
 
 ### Cùng Task (cùng machine, cùng URL)
-```
+```text
 Điều kiện: Chỉ 1 container expose port 80!
 
 ❌ KHÔNG được:
@@ -180,7 +180,7 @@ docker push YOUR_USERNAME/goals-react
 ```
 
 ### Khác Task (khác machine, khác URL)
-```
+```text
 Task 1 (Backend): Node.js API → Load Balancer A
 Task 2 (Frontend): Nginx + React → Load Balancer B
 
@@ -288,4 +288,4 @@ docker push YOUR_USERNAME/goals-react
 
 ---
 
-**Tiếp theo:** Tổng Kết Deployment →
+**Bài kế tiếp** → [Bài 6: Tổng Kết — Docker Deployment](06-tong-ket-deployment.md)

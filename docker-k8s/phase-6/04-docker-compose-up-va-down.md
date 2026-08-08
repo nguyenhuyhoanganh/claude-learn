@@ -30,7 +30,7 @@ docker compose up backend
 
 ### Những gì `up` làm tự động:
 
-```
+```text
 docker compose up
   │
   ├── Tạo network (nếu chưa có): projectname_default
@@ -71,7 +71,7 @@ docker compose down --rmi all
 
 ### Những gì `down` xóa:
 
-```
+```text
 docker compose down (không có -v):
   ✓ Xóa containers
   ✓ Xóa network (projectname_default)
@@ -123,7 +123,7 @@ docker compose up -d --build
 
 **Khi nào cần `--build`?**
 
-```
+```text
 1. Thay đổi Dockerfile
 2. Thay đổi dependencies (package.json)
 3. Thay đổi code (khi KHÔNG dùng bind mount)
@@ -251,4 +251,4 @@ docker compose down -v
 
 ---
 
-**Tiếp theo:** Tổng kết Docker Compose →
+**Bài kế tiếp** → [Bài 5: Tổng kết Docker Compose](05-tong-ket-docker-compose.md)

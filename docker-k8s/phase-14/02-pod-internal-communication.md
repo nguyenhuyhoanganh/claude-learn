@@ -58,7 +58,7 @@ containers:
 
 ## So Sánh với Docker Compose
 
-```
+```text
 Docker Compose:
   services:
     users: ...
@@ -92,7 +92,7 @@ spec:
 # Auth chỉ được gọi qua localhost từ bên trong Pod
 ```
 
-```
+```text
 Internet → users-service → Pod:8080 (users container)
                                ↓ localhost:80
                            Pod:80 (auth container)
@@ -103,7 +103,7 @@ Internet → users-service → Pod:8080 (users container)
 
 ## Khi Nào Đặt 2 Containers Trong 1 Pod?
 
-```
+```text
 ✓ Dùng cùng 1 Pod khi:
   → Hai services phụ thuộc chặt chẽ
   → Luôn cần scale cùng nhau
@@ -133,4 +133,4 @@ kubectl get pods
 
 ---
 
-**Tiếp theo:** Giao tiếp giữa các Pods khác nhau →
+**Bài kế tiếp** → [Bài 3: Giao Tiếp Giữa Các Pods (Pod-to-Pod)](03-pod-to-pod-communication.md)

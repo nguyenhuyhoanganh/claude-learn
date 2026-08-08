@@ -88,13 +88,13 @@ fetch('http://goals-backend/goals')
 //  Tưởng sẽ work như Node backend
 ```
 
-```
+```text
 Kết quả: ERR_NAME_NOT_RESOLVED
 ```
 
 ### Lý do tại sao không hoạt động
 
-```
+```text
 Node Backend (chạy TRONG container):
   Container → Docker Network → Resolve "mongodb" → Connect
   ✓ Docker xử lý DNS resolution
@@ -109,7 +109,7 @@ React Frontend:
   ✗ Docker không thể giúp ở đây
 ```
 
-```
+```text
 ┌────────────────────────────────────────────────────────┐
 │  Docker Container (React dev server)                   │
 │  ┌─────────────────────────────────────────────────┐  │
@@ -146,7 +146,7 @@ fetch('http://localhost/goals')
 
 ## Sơ đồ giao tiếp cuối cùng
 
-```
+```text
 Browser (user's machine)
    │
    │ localhost:3000 (React frontend)
@@ -173,7 +173,7 @@ Browser JavaScript
 
 ## Tóm tắt: Khi nào publish port?
 
-```
+```text
 MongoDB container:  KHÔNG publish
   → Chỉ backend cần, cùng network, giao tiếp nội bộ
 
@@ -186,4 +186,4 @@ React Frontend:     CÓ publish (-p 3000:3000)
 
 ---
 
-**Tiếp theo:** Thêm Data Persistence và Hot-Reload →
+**Bài kế tiếp** → [Bài 4: Data Persistence và Hot-Reload](04-persistence-va-hot-reload.md)

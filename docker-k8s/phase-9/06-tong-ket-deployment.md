@@ -2,7 +2,7 @@
 
 ## Hai Triết Lý Deployment
 
-```
+```text
 ┌──────────────────────────────┬──────────────────────────────────┐
 │   DIY (EC2, tự quản lý)      │   Managed Service (ECS, v.v.)    │
 ├──────────────────────────────┼──────────────────────────────────┤
@@ -25,7 +25,7 @@
 
 ### 1. Không dùng Bind Mounts trong Production
 
-```
+```text
 Development:  docker run -v $(pwd)/src:/app my-image
               → Live code sync, hot-reload
 
@@ -36,7 +36,7 @@ Production:   docker run my-image
 
 ### 2. Multi-Container: localhost vs container names
 
-```
+```text
 Local (Docker Compose):
   → Container names hoạt động (Docker DNS)
   → mongodb://mongo:27017
@@ -51,7 +51,7 @@ AWS ECS (khác Task):
 
 ### 3. Browser Code vs Server Code
 
-```
+```text
 Server-side code (Node.js, PHP):
   → Chạy trong container
   → Container names hoạt động (same network)
@@ -66,7 +66,7 @@ Browser-side code (React, Vue, Angular):
 
 ### 4. Databases trong Production: Consider Managed Services
 
-```
+```text
 Self-managed MongoDB container:
   ✗ Scaling phức tạp
   ✗ Backup phải tự lo
@@ -83,7 +83,7 @@ MongoDB Atlas / AWS RDS (managed):
 
 ### 5. Multi-Stage Builds cho Apps có Build Step
 
-```
+```text
 Frontend (React, Angular, Vue):
   Development: npm start → dev server
   Production: npm run build → static files + nginx serve
@@ -133,7 +133,7 @@ sudo docker run -d --rm -p 80:80 USERNAME/my-repo
 
 ## Cheat Sheet: ECS Deployment
 
-```
+```text
 1. Push image đến Docker Hub
    docker build → docker tag → docker push
 
@@ -210,4 +210,4 @@ Bạn đã học:
 
 ---
 
-**Tiếp theo:** Phase 10 — Docker Summary →
+**Phase kế tiếp** → [Tổng Kết: Docker & Containers — Toàn Bộ Khóa Học](../phase-10/01-tong-ket-toan-khoa.md)

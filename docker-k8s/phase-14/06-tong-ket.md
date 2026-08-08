@@ -4,7 +4,7 @@
 
 ### 1. Service Types và Use Cases
 
-```
+```text
 LoadBalancer:
   → Public-facing services (frontend, public API)
   → Cần cloud provider (AWS, GCP, Azure)
@@ -22,7 +22,7 @@ NodePort:
 
 ### 2. Pod-internal Communication
 
-```
+```text
 2 containers trong cùng 1 Pod → dùng localhost
 
 users-container:
@@ -41,7 +41,7 @@ Manifest:
 
 ### 3. Pod-to-Pod Communication (3 cách)
 
-```
+```text
 Cách 1: Manual IP lookup (không khuyến khích)
   kubectl get services → lấy CLUSTER-IP
   value: "10.96.100.5"
@@ -57,7 +57,7 @@ Cách 3: CoreDNS domain (khuyến khích nhất)
 
 ### 4. Reverse Proxy Pattern
 
-```
+```text
 Frontend (React) trong browser:
   fetch('/api/tasks')  ← gửi đến cùng server
 
@@ -75,7 +75,7 @@ nginx trong container (cluster):
 
 ## Architecture Reference
 
-```
+```text
 Internet
   │
   ├── LoadBalancer (users-service, port 80)
@@ -112,7 +112,7 @@ kubectl exec -it POD-NAME -- env | grep AUTH
 
 ### CoreDNS Domain Pattern
 
-```
+```text
 {service-name}.{namespace}
 
 Ví dụ:
@@ -123,7 +123,7 @@ Ví dụ:
 
 ### Auto Env Var Pattern
 
-```
+```text
 {SERVICE_NAME_UPPERCASE}_SERVICE_HOST
 {SERVICE_NAME_UPPERCASE}_SERVICE_PORT
 
@@ -136,7 +136,7 @@ Ví dụ (service: auth-service):
 
 ## Key Takeaways
 
-```
+```text
 1. ClusterIP = internal services (auth, DB không expose ra ngoài)
 2. LoadBalancer = public services (gần nhất với production usage)
 3. Cùng Pod → localhost; khác Pod → service name
@@ -148,4 +148,4 @@ Ví dụ (service: auth-service):
 
 ---
 
-**Tiếp theo:** Phase 15 — Deploy lên AWS EKS →
+**Phase kế tiếp** → [Bài 1: AWS EKS vs AWS ECS — Chọn Gì?](../phase-15/01-eks-vs-ecs.md)

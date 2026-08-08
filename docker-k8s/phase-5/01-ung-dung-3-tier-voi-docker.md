@@ -4,7 +4,7 @@
 
 Chúng ta sẽ Dockerize một ứng dụng web hiện đại gồm 3 thành phần riêng biệt:
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │                         Browser                              │
 │                    (user's machine)                          │
@@ -59,7 +59,7 @@ Chúng ta sẽ Dockerize một ứng dụng web hiện đại gồm 3 thành ph�
 
 Đây là điều **quan trọng nhất** cần hiểu trong bài này:
 
-```
+```text
 Node.js Backend:
   Code chạy trong container
   → Docker có thể resolve "mongodb" → IP address
@@ -90,7 +90,7 @@ React Frontend:
 
 ## Tại sao tách riêng 3 containers?
 
-```
+```text
 ❌ Nhét tất cả vào 1 container:
 ┌─────────────────────────────────┐
 │  MongoDB + Node.js + React     │
@@ -112,4 +112,4 @@ React Frontend:
 
 ---
 
-**Tiếp theo:** Dockerize từng service →
+**Bài kế tiếp** → [Bài 2: Dockerize Từng Service](02-dockerize-tung-service.md)

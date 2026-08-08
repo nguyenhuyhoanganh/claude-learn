@@ -28,7 +28,7 @@ Docker Network tạo ra một **mạng nội bộ** cho các containers. Các co
 - Giao tiếp với nhau bằng **tên container** (không cần biết IP)
 - Docker tự động resolve tên → IP address
 
-```
+```text
 favorites-net (Docker Network)
 ├── node-app container    → có thể gọi "mongodb"
 └── mongodb container     → có thể gọi "node-app"
@@ -86,7 +86,7 @@ mongoose.connect('mongodb://mongodb:27017/mydb');
 
 Docker **không sửa source code**. Nó can thiệp ở tầng network:
 
-```
+```text
 1. Code gọi: mongoose.connect('mongodb://mongodb:27017')
 2. Request rời khỏi container
 3. Docker intercepts request, thấy hostname "mongodb"
@@ -217,7 +217,7 @@ curl http://localhost:3000/health  # ✓
 
 ## Tóm tắt
 
-```
+```text
 Container → Internet:
   Hoạt động ngay, không cần gì thêm
 
@@ -238,4 +238,4 @@ Lưu ý:
 
 ---
 
-**Tiếp theo:** Phase 5 — Multi-Container Applications thực tế →
+**Phase kế tiếp** → [Bài 1: Ứng Dụng 3-Tier với Docker](../phase-5/01-ung-dung-3-tier-voi-docker.md)

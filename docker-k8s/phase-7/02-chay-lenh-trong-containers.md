@@ -49,7 +49,7 @@ docker run -it \
 
 ### CMD bị ghi đè hoàn toàn
 
-```
+```text
 Dockerfile:  CMD ["node"]           ← Default: chạy node REPL
 docker run node npm init            ← Override: chạy npm init
 Kết quả:     node REPL bị bỏ qua, npm init chạy
@@ -95,4 +95,4 @@ docker run -it -v $(pwd):/app node-util node --version
 
 ---
 
-**Tiếp theo:** ENTRYPOINT và Bind Mounts →
+**Bài kế tiếp** → [Bài 3: ENTRYPOINT và Bind Mounts](03-entrypoint-va-bind-mounts.md)

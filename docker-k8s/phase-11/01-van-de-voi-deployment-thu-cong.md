@@ -10,7 +10,7 @@ Trong Phase 9, chúng ta đã deploy containers lên EC2 và ECS. Nhưng kể c�
 
 ### Vấn đề 1: Container Crashes
 
-```
+```text
 Scenario thực tế:
   3 giờ sáng → Container crash (bug, memory leak, v.v.)
   App không còn accessible
@@ -27,7 +27,7 @@ Manual approach:
 
 ### Vấn đề 2: Traffic Spikes — Scaling
 
-```
+```text
 Bình thường:    1 container xử lý tốt
 Traffic spike:  1 container overwhelmed → chậm hoặc crash
 
@@ -48,7 +48,7 @@ Khi traffic giảm: Scale down → chỉ cần 1-2 containers
 
 ### Vấn đề 3: Load Balancing
 
-```
+```text
 Nếu có nhiều containers cùng chạy:
   Ai phân phối requests đến đúng container?
   
@@ -69,7 +69,7 @@ Cần: Phân phối đều traffic
 
 Docker không chỉ cho web apps. Ví dụ:
 
-```
+```text
 Image processing pipeline:
   Container nhận file upload
   → Transform/resize images
@@ -86,7 +86,7 @@ Giải pháp: Nhiều containers xử lý song song
 
 **Có, nhưng với một cái giá:**
 
-```
+```text
 ECS làm được:
   ✓ Auto-restart containers khi crash
   ✓ Auto-scaling (có cấu hình)
@@ -103,7 +103,7 @@ Nhưng:
 
 ## Giải Pháp: Kubernetes
 
-```
+```text
 Kubernetes giải quyết tất cả vấn đề trên:
   ✓ Tự động restart containers khi crash
   ✓ Auto-scaling (lên và xuống)
@@ -115,4 +115,4 @@ Một configuration file → Deploy ở bất cứ đâu
 
 ---
 
-**Tiếp theo:** Kubernetes là gì và tại sao dùng nó →
+**Bài kế tiếp** → [Bài 2: Kubernetes Là Gì?](02-kubernetes-la-gi.md)
