@@ -177,6 +177,86 @@ CMD ["start"]
 - Dùng `CMD` cho web servers và long-running processes → linh hoạt
 - Dùng `ENTRYPOINT` khi image là wrapper cho một command cụ thể
 
+### Dạng mảng và dạng chuỗi — khác biệt gây mất dữ liệu
+
+Cả `CMD` lẫn `ENTRYPOINT` viết được theo hai dạng, và chúng **không tương đương**:
+
+```dockerfile
+CMD ["node", "server.js"]      # dạng exec (mảng)   ← LUÔN DÙNG DẠNG NÀY
+CMD node server.js             # dạng shell (chuỗi)
+```
+
+Khác biệt nằm ở chỗ **tiến trình nào trở thành PID 1** trong container:
+
+```text
+   DẠNG EXEC — CMD ["node", "server.js"]
+   ═════════════════════════════════════
+   PID 1 = node
+   docker stop → SIGTERM gửi tới PID 1 = node
+   → Node nhận được tín hiệu, đóng kết nối, ghi nốt dữ liệu, thoát sạch ✓
+
+
+   DẠNG SHELL — CMD node server.js
+   ═══════════════════════════════
+   Docker biến nó thành:  /bin/sh -c "node server.js"
+
+   PID 1 = /bin/sh
+     └── PID 7 = node
+
+   docker stop → SIGTERM gửi tới PID 1 = /bin/sh
+   → sh KHÔNG chuyển tín hiệu cho tiến trình con
+   → node KHÔNG BIẾT GÌ, vẫn chạy
+   → sau 10 giây, Docker gửi SIGKILL giết cứng ✗
+```
+
+Hậu quả thực tế của dạng shell:
+
+| Hậu quả | Ví dụ |
+|---|---|
+| Mất dữ liệu chưa ghi | Bộ đệm ghi log, transaction dở dang |
+| Request đang xử lý bị cắt giữa chừng | Người dùng nhận lỗi khi bạn deploy |
+| Mỗi lần `docker stop` mất đúng 10 giây | Vì luôn phải chờ hết hạn rồi mới `SIGKILL` |
+| Kết nối database không đóng sạch | Để lại kết nối treo ở phía server |
+
+Kiểm chứng bằng thời gian dừng:
+
+```bash
+# Dạng shell
+time docker stop container-dang-shell
+```
+
+```text
+real    0m10.3s      ← phải chờ hết hạn 10 giây
+```
+
+```bash
+# Dạng exec
+time docker stop container-dang-exec
+```
+
+```text
+real    0m0.4s       ← thoát ngay khi nhận tín hiệu
+```
+
+> **Quy tắc**: **luôn dùng dạng mảng** cho `CMD` và `ENTRYPOINT`. Nếu thật sự cần tính năng của shell (biến môi trường, ống lệnh), viết tường minh: `CMD ["sh", "-c", "exec node server.js"]` — chú ý từ khoá `exec` để `node` **thay thế** tiến trình `sh` và trở thành PID 1.
+
+### Khi ứng dụng sinh tiến trình con: cần init
+
+Nếu ứng dụng của bạn tự sinh tiến trình con (worker, trình duyệt không giao diện), PID 1 phải biết dọn **tiến trình mồ côi** — việc mà ứng dụng thường không làm:
+
+```bash
+docker run --init myapp
+```
+
+```dockerfile
+# Hoặc nhúng tini vào image
+RUN apk add --no-cache tini
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "server.js"]
+```
+
+Không có nó, container tích tụ dần tiến trình "xác sống" (zombie) cho tới khi hết bảng tiến trình.
+
 ---
 
 ## ENV — Biến môi trường
@@ -350,6 +430,40 @@ CMD ["node", "dist/server.js"]
 | Chạy với non-root user | Bảo mật |
 | Thêm HEALTHCHECK | Orchestrator biết container có healthy không |
 | Dùng multi-stage build | Image production nhỏ gọn |
+| Dùng dạng mảng cho CMD/ENTRYPOINT | Ứng dụng nhận được tín hiệu dừng, thoát sạch |
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách đúng |
+|---|---|---|
+| `CMD node server.js` (dạng chuỗi) | Ứng dụng **không nhận được `SIGTERM`**, bị giết cứng sau 10 giây, mất dữ liệu chưa ghi | `CMD ["node", "server.js"]` |
+| `RUN apt install` và `RUN rm` ở **hai lệnh riêng** | Image **không nhỏ đi** — xem [bài 2](02-image-layers-va-caching.md) | Gộp bằng `&&` |
+| Đặt `ENV` hay đổi lên đầu Dockerfile | Đổi biến là **mất cache toàn bộ** phía sau | Đặt xuống thấp nhất có thể |
+| Truyền bí mật qua `ARG` | `docker history` **đọc lại được** giá trị `ARG` | Dùng BuildKit secret mount |
+| Truyền bí mật qua `ENV` | Nằm luôn trong image, và mọi tiến trình con đều thấy | Truyền lúc chạy, hoặc dùng Secret |
+| Quên `USER` — chạy bằng root | Thoát container là chiếm quyền máy chủ | `USER node` hoặc tạo user riêng |
+| `COPY . .` mà không có `.dockerignore` | `node_modules`, `.git`, `.env` vào thẳng image | Luôn có `.dockerignore` |
+| Dùng `ADD` thay `COPY` cho file thường | `ADD` tự giải nén và tải URL — hành vi bất ngờ | Dùng `COPY`, chỉ dùng `ADD` khi cần giải nén |
+| `HEALTHCHECK` gọi vào phụ thuộc bên ngoài | Database chậm → container bị đánh dấu hỏng oan | Chỉ kiểm tra chính tiến trình đó |
+| `npm install` ở production | Có thể cài phiên bản khác `package-lock.json` | `npm ci --omit=dev` |
+| Ứng dụng sinh tiến trình con mà không có init | Tích tụ tiến trình xác sống | `docker run --init` hoặc nhúng `tini` |
+| Build một image dùng chung cho cả dev và production | Image production mang theo công cụ dev | Multi-stage build |
+
+---
+
+## Tóm tắt bài 5
+
+- Thứ tự Dockerfile quyết định tốc độ build: **ít đổi lên trên, hay đổi xuống dưới**.
+- **`FROM` phải ghim phiên bản cụ thể**, không dùng `latest` — xem [bài 4](04-naming-tagging-va-chia-se-images.md).
+- **Gộp `RUN` bằng `&&`** vì lớp chỉ cộng thêm, không trừ đi. Xoá ở lệnh sau không làm image nhỏ lại.
+- **`CMD`/`ENTRYPOINT` phải viết dạng mảng.** Dạng chuỗi làm `/bin/sh` thành PID 1, ứng dụng **không nhận được `SIGTERM`** và bị giết cứng sau 10 giây — mất dữ liệu chưa ghi và cắt request đang xử lý.
+- Cần tính năng shell thì viết `CMD ["sh", "-c", "exec node server.js"]` — từ khoá **`exec`** để ứng dụng thay thế `sh` và trở thành PID 1.
+- Ứng dụng sinh tiến trình con thì cần **`--init`** hoặc **`tini`**, nếu không sẽ tích tụ tiến trình xác sống.
+- **`ARG` và `ENV` đều không giữ được bí mật** — `docker history` đọc ra được. Dùng BuildKit secret mount.
+- **Multi-stage build** cho image production nhỏ và không mang theo công cụ build.
+- **`.dockerignore` và `USER` non-root** là hai dòng rẻ nhất mà hiệu quả bảo mật cao nhất.
 
 ---
 

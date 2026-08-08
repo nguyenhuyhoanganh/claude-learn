@@ -61,6 +61,70 @@ FROM node:latest
 FROM node:18.17.0-alpine3.18
 ```
 
+### Hiểu đúng về `latest` — nó KHÔNG có nghĩa là "mới nhất"
+
+Đây là hiểu nhầm phổ biến nhất trong toàn bộ Docker, và tên gọi chính là thủ phạm.
+
+```text
+   Người ta TƯỞNG:  latest = phiên bản mới nhất, Docker tự biết
+   SỰ THẬT:         latest chỉ là MỘT CÁI TÊN TAG, không hơn không kém
+
+   Nó chỉ là tag MẶC ĐỊNH khi bạn không ghi tag nào:
+        docker build -t myapp .     ==  docker build -t myapp:latest .
+        docker pull nginx           ==  docker pull nginx:latest
+```
+
+Hệ quả: **`latest` hoàn toàn có thể là bản CŨ.**
+
+```bash
+docker build -t myapp:v2 .        # build bản mới, gắn tag v2
+# Không ai gắn lại tag latest → latest vẫn trỏ vào bản v1 từ tháng trước
+docker run myapp                  # chạy v1, tưởng đang chạy v2
+```
+
+Hai vấn đề thật ở production:
+
+**Một — không tái lập được.** Cùng một `Dockerfile` với `FROM node:18`, build hôm nay và build tháng sau cho ra **hai image khác nhau**, vì tag `18` được đẩy đè khi Node phát hành bản vá.
+
+```text
+   Tháng 1:  node:18  →  18.17.0
+   Tháng 6:  node:18  →  18.20.4     ← cùng tag, image KHÁC
+```
+
+**Hai — không biết mình đang chạy gì.** Khi có sự cố, câu hỏi đầu tiên là *"bản nào đang chạy?"*. Nếu mọi thứ đều là `latest`, không ai trả lời được.
+
+Ba mức ghim phiên bản, chọn theo mức độ nghiêm túc:
+
+| Mức | Cách viết | Tái lập được | Nhận bản vá bảo mật |
+|---|---|---|---|
+| Yếu | `FROM node:latest` | **Không** | Có, nhưng bất ngờ |
+| Trung bình | `FROM node:18` | Không | Có, tự động |
+| **Tốt** | `FROM node:18.20.4-alpine3.20` | **Gần như có** | Phải cập nhật tay |
+| **Mạnh nhất** | `FROM node:18.20.4-alpine3.20@sha256:f2dc6e...` | **Tuyệt đối** | Phải cập nhật tay |
+
+`@sha256:...` là **mã băm nội dung** — nó không thể trỏ tới thứ khác, kể cả khi tag bị đẩy đè. Dùng công cụ như Renovate hoặc Dependabot để tự tạo pull request cập nhật mã băm, giữ được cả tính tái lập lẫn tính cập nhật.
+
+### Quy ước đặt tag hay dùng ở production
+
+```bash
+# Gắn NHIỀU tag cho cùng một image
+docker build \
+  -t myregistry.io/myapp:1.4.2 \
+  -t myregistry.io/myapp:1.4 \
+  -t myregistry.io/myapp:$(git rev-parse --short HEAD) \
+  -t myregistry.io/myapp:latest \
+  .
+```
+
+```text
+   1.4.2        ← phiên bản chính xác, KHÔNG BAO GIỜ đẩy đè
+   1.4          ← trỏ tới bản vá mới nhất của nhánh 1.4
+   a3f2b8c      ← mã commit Git, truy được về đúng dòng code
+   latest       ← tiện cho dev, KHÔNG dùng ở production
+```
+
+Tag theo **mã commit Git** đáng giá nhất khi có sự cố: nhìn tag là biết chính xác code nào đang chạy, không phải đoán.
+
 ---
 
 ## Đặt Tag khi Build Image
@@ -266,7 +330,47 @@ docker logout                             # Đăng xuất
 
 ---
 
-## Tóm tắt
+## Bẫy thường gặp
+
+| Bẫy | Triệu chứng | Cách đúng |
+|---|---|---|
+| Tưởng `latest` là "bản mới nhất" | Chạy nhầm bản cũ mà không biết | `latest` chỉ là **tên tag mặc định**. Ghim phiên bản cụ thể |
+| `docker tag` rồi tưởng đã tạo image mới | `docker images` thấy hai dòng nhưng dung lượng không tăng | Tag chỉ là **cái nhãn** trỏ vào **cùng một image ID** |
+| `docker rmi myapp:v1` khi image còn tag khác | Chỉ gỡ nhãn, image vẫn còn | Muốn xoá thật thì gỡ hết tag, hoặc xoá theo image ID |
+| Push mà quên tiền tố tài khoản | `denied: requested access to the resource is denied` | Tên phải là `<tài-khoản>/<image>:<tag>` |
+| Tưởng `docker run` tự kiểm tra bản mới | Chạy mãi image cũ trên máy | `docker run` chỉ tải khi **chưa có**. Phải `docker pull` để cập nhật |
+| Đẩy đè lên tag phiên bản đã phát hành (`1.4.2`) | Không ai tái lập được bản build cũ | Tag phiên bản là **bất biến**. Chỉ đẩy đè `latest` và tag nhánh |
+| Để image có thông tin nhạy cảm rồi push lên registry công khai | Lộ vĩnh viễn | Kiểm tra `docker history` trước khi push; xem [Phase 19 bài 1](../phase-19/01-bao-mat-image.md) |
+| Dùng `latest` trong Kubernetes manifest | Pod tạo lại có thể nhận image khác → khó chẩn đoán | Ghim tag cụ thể, và đặt `imagePullPolicy` phù hợp |
+
+Hai dòng đầu đáng xem tận mắt:
+
+```bash
+docker tag myapp:v1 myapp:production
+docker images | grep myapp
+```
+
+```text
+REPOSITORY   TAG          IMAGE ID       CREATED        SIZE
+myapp        production   a3f2b8c1d4e5   2 hours ago    142MB
+myapp        v1           a3f2b8c1d4e5   2 hours ago    142MB
+             ▲            ▲▲▲▲▲▲▲▲▲▲▲▲
+        hai tag khác nhau  CÙNG MỘT IMAGE ID → chỉ tốn 142 MB, không phải 284 MB
+```
+
+```bash
+docker rmi myapp:v1
+```
+
+```text
+Untagged: myapp:v1
+       ▲
+   chỉ "gỡ nhãn", KHÔNG xoá image — vì tag production vẫn trỏ vào nó
+```
+
+---
+
+## Tóm tắt bài 4
 
 - Container: dùng `--name` khi run để dễ quản lý
 - Image: dùng `-t name:tag` khi build để có tên rõ ràng
@@ -274,6 +378,10 @@ docker logout                             # Đăng xuất
 - Luôn dùng **tag cụ thể** (không phải `latest`) trong production
 - Chia sẻ image qua Docker Hub: push với `username/image:tag`
 - `docker run` tự pull nếu chưa có local, nhưng không tự check update
+- **`latest` không có nghĩa là "mới nhất"** — nó chỉ là **tên tag mặc định**, và hoàn toàn có thể trỏ vào bản cũ.
+- Cùng một `FROM node:18` build ở hai thời điểm có thể cho **hai image khác nhau**. Muốn tái lập tuyệt đối thì ghim **`@sha256:...`**.
+- **Tag chỉ là cái nhãn** — hai tag trỏ cùng image ID chỉ tốn dung lượng một lần, và `docker rmi` một tag chỉ **gỡ nhãn** chứ không xoá image.
+- Quy ước production: gắn đồng thời `1.4.2` (bất biến), `1.4` (nhánh), **mã commit Git** (truy được về code), và `latest` (chỉ cho dev).
 
 ---
 

@@ -195,4 +195,30 @@ Docker Hub / Dockerfile
 
 ---
 
+## Bốn câu hay bị nhầm
+
+| Câu hỏi | Trả lời ngắn |
+|---|---|
+| Xoá container thì image có mất không? | **Không.** Image vẫn nguyên, tạo container mới bao nhiêu lần cũng được |
+| Xoá image thì container đang chạy có chết không? | **Không xoá được** — Docker từ chối nếu còn container dùng image đó |
+| Hai container từ cùng image có thấy file của nhau không? | **Không.** Mỗi container có lớp ghi riêng, hoàn toàn cách ly |
+| Sửa file trong container rồi `docker commit` được không? | Được, nhưng **đừng làm**. Nó tạo ra image không ai tái lập được. Sửa vào Dockerfile |
+
+Câu cuối đáng nói thêm: `docker commit` biến trạng thái hiện tại của container thành image. Nghe tiện, nhưng nó phá bỏ chính điều làm Docker có giá trị — **môi trường mô tả được bằng file văn bản** ([bài 1 phase-1](../phase-1/01-docker-la-gi-va-tai-sao-can.md)). Sáu tháng sau không ai biết trong image đó có gì.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Sự thật |
+|---|---|
+| Nhầm image với container | Image **tĩnh**, container **động**. `docker images` và `docker ps` là hai danh sách khác nhau |
+| `docker pull` xong tưởng đã chạy | `pull` chỉ **tải về**. Phải `docker run` mới có container |
+| Nghĩ mỗi container copy toàn bộ image | Container chỉ thêm **lớp mỏng ghi được**. 10 container từ image 300 MB không tốn 3 GB |
+| Quên `-p` rồi tưởng ứng dụng lỗi | Container chạy đúng, chỉ là **không có đường vào** từ máy thật |
+| Dùng `docker commit` thay vì sửa Dockerfile | Tạo ra image "hộp đen" không ai tái lập được |
+| Tưởng `EXPOSE` trong Dockerfile là đủ để truy cập | `EXPOSE` chỉ là ghi chú. Cổng thật mở bằng `-p` |
+
+---
+
 **Bài kế tiếp** → [Bài 2: Image Layers & Caching](02-image-layers-va-caching.md)
