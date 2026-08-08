@@ -221,7 +221,7 @@ Loki là lựa chọn mặc định hợp lý cho hầu hết đội: rẻ, dễ
    2025-08-08 10:23:45 ERROR Failed to process order 12345 for customer KH-042: timeout
 
    LOG CÓ CẤU TRÚC (tra được)
-   {"ts":"2025-08-08T10:23:45Z","level":"error","msg":"xu ly don hang that bai",
+   {"ts":"2025-08-08T10:23:45Z","level":"error","msg":"xử lý đơn hàng thất bại",
     "order_id":"12345","customer_id":"KH-042","error":"timeout","duration_ms":5023,
     "trace_id":"a1b2c3d4"}
 ```
@@ -244,7 +244,7 @@ Ba trường nên có trong mọi dòng log:
 ```java
 // Spring Boot với logstash-logback-encoder
 log.atError()
-   .setMessage("xu ly don hang that bai")
+   .setMessage("xử lý đơn hàng thất bại")
    .addKeyValue("order_id", orderId)
    .addKeyValue("customer_id", customerId)
    .addKeyValue("duration_ms", duration)
