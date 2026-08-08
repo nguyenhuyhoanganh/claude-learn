@@ -70,7 +70,7 @@ const SHARDS = [
     { ten: 'shard3', pool: new Pool({ host:'localhost', port:5434, user:'postgres', password:'lab' }) },
 ];
 
-// PHIEN BAN 1 — dinh tuyen bang phep chia lay du (se thay no gay o buoc 5)
+// PHIÊN BẢN 1 — định tuyến bằng phép chia lấy dư (sẽ thấy nó gãy ở bước 5)
 function chonShard(khoa) {
     const bam = crypto.createHash('md5').update(khoa).digest();
     return SHARDS[bam.readUInt32BE(0) % SHARDS.length];
@@ -100,7 +100,7 @@ function sinhMa(doDai = 7) {
 
 async function rutGon(longUrl) {
     const urlId = sinhMa();
-    const shard = chonShard(urlId);          // ← khoa phan tan la urlId
+    const shard = chonShard(urlId);          // ← khoá phân tán là urlId
 
     await shard.pool.query(
         'INSERT INTO urls (url_id, long_url) VALUES ($1, $2)',
@@ -154,7 +154,7 @@ Ba máy chủ, mỗi máy giữ một phần. Không máy nào biết về hai m
 
 ```javascript
 async function moRong(urlId) {
-    const shard = chonShard(urlId);          // ← biet ngay di dau
+    const shard = chonShard(urlId);          // ← biết ngay đi đâu
     const kq = await shard.pool.query(
         'SELECT long_url FROM urls WHERE url_id = $1', [urlId]
     );
@@ -178,7 +178,7 @@ Bây giờ đến phần đau. Tìm theo `long_url` — cột không phải shar
 async function timTheoUrlDai(longUrl) {
     const batDau = Date.now();
 
-    // KHONG BIET no o shard nao → PHAI HOI TAT CA
+    // KHÔNG BIẾT nó ở shard nào → PHẢI HỎI TẤT CẢ
     const ketQua = await Promise.all(
         SHARDS.map(s =>
             s.pool.query('SELECT url_id FROM urls WHERE long_url = $1', [longUrl])
@@ -193,26 +193,26 @@ async function timTheoUrlDai(longUrl) {
 ```
 
 ```text
-  hoi 3 shard, mat 31 ms
+  hỏi 3 shard, mất 31 ms
 ```
 
 So sánh:
 
 ```text
    Co shard key    :  1 shard,  8 ms
-   Khong co        :  3 shard, 31 ms      → CHAM HON ~4 LAN
+   Không có        :  3 shard, 31 ms      → CHẬM HƠN ~4 LẦN
 ```
 
 Và điều tệ hơn con số: **độ trễ bằng shard chậm nhất**, không phải trung bình.
 
 ```javascript
-// Mo phong mot shard thinh thoang cham
+// Mô phỏng một shard thỉnh thoảng chậm
 async function moPhongDuoiTre(soLan = 1000) {
     let tong1 = 0, tongN = 0;
     for (let i = 0; i < soLan; i++) {
-        const doTre = SHARDS.map(() => (Math.random() < 0.01 ? 200 : 5));  // 1% cham 200ms
+        const doTre = SHARDS.map(() => (Math.random() < 0.01 ? 200 : 5));  // 1% chậm 200ms
         tong1 += doTre[0];                    // hoi 1 shard
-        tongN += Math.max(...doTre);          // hoi tat ca → cho cai cham nhat
+        tongN += Math.max(...doTre);          // hỏi tất cả → chờ cái chậm nhất
     }
     console.log(`Hoi 1 shard : trung binh ${(tong1/soLan).toFixed(1)} ms`);
     console.log(`Hoi 3 shard : trung binh ${(tongN/soLan).toFixed(1)} ms`);
@@ -235,7 +235,7 @@ Với 3 shard đã tệ hơn 56%. Với **20 shard**, xác suất ít nhất m�
 Nạp nhiều dữ liệu hơn để thấy rõ:
 
 ```javascript
-// Nap 30.000 ban ghi
+// Nạp 30.000 bản ghi
 const daTao = [];
 for (let i = 0; i < 30000; i++) daTao.push(await rutGon(`https://site${i}.com`));
 ```
@@ -247,7 +247,7 @@ SHARDS.push({ ten:'shard4', pool: new Pool({ host:'localhost', port:5435, ... })
 
 let doiCho = 0;
 for (const urlId of daTao) {
-    // shard cu (tinh voi 3) vs shard moi (tinh voi 4)
+    // shard cũ (tính với 3) vs shard mới (tính với 4)
     const cu  = bamModulo(urlId, 3);
     const moi = bamModulo(urlId, 4);
     if (cu !== moi) doiCho++;
@@ -256,7 +256,7 @@ console.log(`Phai di chuyen: ${(100*doiCho/daTao.length).toFixed(1)}%`);
 ```
 
 ```text
-Phai di chuyen: 74.8%
+Phải di chuyển: 74.8%
 ```
 
 **Ba phần tư dữ liệu phải chuyển máy.** Và trong lúc chuyển, hệ thống ở trạng thái nửa vời: một khoá có thể ở máy cũ hoặc máy mới, và code phải hỏi cả hai.
@@ -286,7 +286,7 @@ class VongBam {
     }
     timShard(khoa) {
         const h = this.bam(khoa);
-        // tim nhi phan: vi tri dau tien >= h
+        // tìm nhị phân: vị trí đầu tiên >= h
         let lo = 0, hi = this.viTri.length - 1, kq = 0;
         while (lo <= hi) {
             const mid = (lo + hi) >> 1;
@@ -314,12 +314,12 @@ console.log(`Phai di chuyen: ${(100*doi/daTao.length).toFixed(1)}%`);
 ```
 
 ```text
-Phai di chuyen: 24.6%
+Phải di chuyển: 24.6%
 ```
 
 ```text
    Chia lay du     :  74,8%
-   Bam nhat quan   :  24,6%     →  IT HON 3 LAN
+   Băm nhất quán   :  24,6%     →  ÍT HƠN 3 LẦN
 ```
 
 Và kiểm tra phân bố có đều không:
@@ -344,12 +344,12 @@ Biết 24,6% cần chuyển là một chuyện; chuyển chúng **trong lúc h�
 
 ```javascript
 async function themShardAnToan(vong, shardMoi) {
-    // GIAI DOAN 1 — che do DOC KEP
-    //   Them shard moi vao vong, nhung khi DOC thi thu ca vi tri MOI lan CU
+    // GIAI ĐOẠN 1 — chế độ ĐỌC KÉP
+    //   Thêm shard mới vào vòng, nhưng khi ĐỌC thì thử cả vị trí MỚI lẫn CŨ
     vong.themShard(shardMoi.ten);
     cheDoDocKep = true;
 
-    // GIAI DOAN 2 — di chuyen theo lo, chay nen
+    // GIAI ĐOẠN 2 — di chuyển theo lô, chạy nền
     for (const shardCu of SHARDS) {
         let offset = 0;
         while (true) {
@@ -361,7 +361,7 @@ async function themShardAnToan(vong, shardMoi) {
                 if (vong.timShard(dong.url_id) === shardMoi.ten) {
                     await shardMoi.pool.query(
                         `INSERT INTO urls (url_id, long_url, created) VALUES ($1,$2,$3)
-                         ON CONFLICT (url_id) DO NOTHING`,          // ← BAT BUOC idempotent
+                         ON CONFLICT (url_id) DO NOTHING`,          // ← BẮT BUỘC idempotent
                         [dong.url_id, dong.long_url, dong.created]);
                     await shardCu.pool.query('DELETE FROM urls WHERE url_id = $1',
                                              [dong.url_id]);
@@ -371,7 +371,7 @@ async function themShardAnToan(vong, shardMoi) {
         }
     }
 
-    // GIAI DOAN 3 — tat doc kep
+    // GIAI ĐOẠN 3 — tắt đọc kép
     cheDoDocKep = false;
 }
 ```
@@ -406,20 +406,20 @@ done
 
 ```javascript
 // Muon: SELECT u.name, count(*) FROM users u JOIN urls ON ... GROUP BY u.name
-// Nhung urls shard theo url_id, users shard theo user_id
-// → mot nguoi dung va cac URL cua ho co the o BA MAY KHAC NHAU
+// Nhưng urls shard theo url_id, users shard theo user_id
+// → một người dùng và các URL của họ có thể ở BA MÁY KHÁC NHAU
 
 async function joinBangTay(userId) {
-    // 1. Lay user tu shard cua user_id
+    // 1. Lấy user từ shard của user_id
     const shardUser = vong.timShard(String(userId));
     const u = await shardUser.pool.query('SELECT * FROM users WHERE user_id=$1', [userId]);
 
-    // 2. Lay urls: KHONG biet o dau → hoi TAT CA
+    // 2. Lấy urls: KHÔNG biết ở đâu → hỏi TẤT CẢ
     const urls = (await Promise.all(
         SHARDS.map(s => s.pool.query('SELECT * FROM urls WHERE user_id=$1', [userId]))
     )).flatMap(r => r.rows);
 
-    // 3. Tu ghep trong bo nho ung dung
+    // 3. Tự ghép trong bộ nhớ ứng dụng
     return { ...u.rows[0], urls };
 }
 ```
@@ -429,9 +429,9 @@ Ba lần gọi mạng, tự gộp trong RAM, không dùng được thuật toán
 **Cách chữa đúng — nhóm cùng vị trí:** shard bảng `urls` theo `user_id` thay vì theo `url_id`.
 
 ```text
-   → JOIN tro thanh CUC BO, chay binh thuong          ✔
-   → Nhung: moRong(urlId) khong con biet di dau       ✘
-             → phai them mot bang tra urlId → userId
+   → JOIN trở thành CỤC BỘ, chạy bình thường          ✔
+   → Nhưng: moRong(urlId) không còn biết đi đâu       ✘
+             → phải thêm một bảng tra urlId → userId
 ```
 
 Đây là bản chất của thiết kế sharding: **mọi lựa chọn đều đánh đổi một mẫu truy vấn lấy một mẫu khác**. Không có shard key nào tốt cho mọi thứ.
@@ -439,13 +439,13 @@ Ba lần gọi mạng, tự gộp trong RAM, không dùng được thuật toán
 ### Transaction xuyên shard
 
 ```javascript
-// KHONG the lam nguyen tu — hai tien trinh database khac nhau
+// KHÔNG thể làm nguyên tử — hai tiến trình database khác nhau
 async function chuyenSoHuu(urlId, tuUser, sangUser) {
     const s1 = vong.timShard(String(tuUser));
     const s2 = vong.timShard(String(sangUser));
 
     await s1.pool.query('UPDATE users SET so_url = so_url - 1 WHERE user_id=$1', [tuUser]);
-    // ⚡ NEU CHET O DAY: tru roi ma khong cong → du lieu SAI VINH VIEN
+    // ⚡ NẾU CHẾT Ở ĐÂY: trừ rồi mà không cộng → dữ liệu SAI VĨNH VIỄN
     await s2.pool.query('UPDATE users SET so_url = so_url + 1 WHERE user_id=$1', [sangUser]);
 }
 ```
@@ -463,7 +463,7 @@ async function chuyenSoHuuSaga(urlId, tuUser, sangUser) {
     try {
         await s2.pool.query('UPDATE users SET so_url = so_url + 1 WHERE user_id=$1', [sangUser]);
     } catch (e) {
-        // BUOC BU TRU — va buoc nay CUNG CO THE THAT BAI
+        // BƯỚC BÙ TRỪ — và bước này CŨNG CÓ THỂ THẤT BẠI
         await s1.pool.query('UPDATE users SET so_url = so_url + 1 WHERE user_id=$1', [tuUser]);
         throw e;
     }
@@ -475,8 +475,8 @@ Chú ý bình luận cuối: **bước bù trừ cũng có thể thất bại**.
 ### `UNIQUE` toàn cục
 
 ```javascript
-// url_id UNIQUE tren tung shard, KHONG duy nhat toan cuc
-// Neu ham sinh ma tinh co tao ra trung, hai shard khac nhau deu chap nhan
+// url_id UNIQUE trên từng shard, KHÔNG duy nhất toàn cục
+// Nếu hàm sinh mã tình cờ tạo ra trùng, hai shard khác nhau đều chấp nhận
 ```
 
 Với `url_id` sinh ngẫu nhiên 7 ký tự từ 62 ký tự thì không gian là `62⁷ ≈ 3,5 × 10¹²`. Nghịch lý ngày sinh cho biết xác suất trùng đạt 50% ở khoảng **2 triệu** bản ghi — không hề xa.
@@ -484,15 +484,15 @@ Với `url_id` sinh ngẫu nhiên 7 ký tự từ 62 ký tự thì không gian l
 Ba cách xử lý:
 
 ```text
-   1. Shard THEO CHINH cot can duy nhat (url_id)
-      → dam bao duy nhat, vi moi gia tri chi co MOT shard hop le  ✔
-      → day chinh la ly do bai nay chon url_id lam shard key
+   1. Shard THEO CHÍNH cột cần duy nhất (url_id)
+      → đảm bảo duy nhất, vì mỗi giá trị chỉ có MỘT shard hợp lệ  ✔
+      → đây chính là lý do bài này chọn url_id làm shard key
 
-   2. Dich vu sinh ID tap trung (Snowflake, ULID)
-      → dam bao duy nhat khi sinh, khong can kiem tra
+   2. Dịch vụ sinh ID tập trung (Snowflake, ULID)
+      → đảm bảo duy nhất khi sinh, không cần kiểm tra
 
-   3. Kiem tra truoc khi ghi tren moi shard
-      → cham, va van co dieu kien tranh chap
+   3. Kiểm tra trước khi ghi trên mọi shard
+      → chậm, và vẫn có điều kiện tranh chấp
 ```
 
 ---

@@ -54,7 +54,7 @@ CREATE TABLE urls (
          ma_ngan = base62(125)       →  "27"
          tra ve  https://sho.rt/27
 
-   DOC:  GET /27
+   ĐỌC:  GET /27
          id = base62_nguoc("27")     →  125
          SELECT long_url WHERE id = 125
          → 301 Redirect
@@ -142,7 +142,7 @@ Nếu sau này shard, `BIGSERIAL` của các shard sẽ đụng nhau.
 ```sql
 CREATE TABLE urls (
     id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    code     TEXT        NOT NULL UNIQUE,       -- ← ma ngan ngau nhien
+    code     TEXT        NOT NULL UNIQUE,       -- ← mã ngắn ngẫu nhiên
     long_url TEXT        NOT NULL,
     created  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -165,7 +165,7 @@ def rut_gon(long_url, so_lan_thu=5):
                         (ma, long_url))
             return ma
         except errors.UniqueViolation:
-            continue                     # trung → sinh ma khac
+            continue                     # trùng → sinh mã khác
     raise RuntimeError("Khong sinh duoc ma sau 5 lan thu")
 ```
 
@@ -174,12 +174,12 @@ Chú ý: dùng `secrets` chứ không phải `random`. `random` dùng bộ sinh 
 ### Xác suất trùng — nghịch lý ngày sinh
 
 ```text
-   Khong gian 7 ky tu base62 = 62⁷ ≈ 3,52 × 10¹²
+   Không gian 7 ký tự base62 = 62⁷ ≈ 3,52 × 10¹²
 
-   Xac suat co IT NHAT MOT lan trung khi da co n ma:
+   Xác suất có ÍT NHẤT MỘT lần trùng khi đã có n mã:
       P ≈ 1 − e^(−n²/2N)
 
-   n = 1 trieu       →  P ≈ 0,000014%   (gan nhu khong)
+   n = 1 triệu       →  P ≈ 0,000014%   (gần như không)
    n = 100 trieu     →  P ≈ 0,14%
    n = 1 ty          →  P ≈ 13%
    n = 2,2 ty        →  P ≈ 50%
@@ -253,12 +253,12 @@ CREATE INDEX idx_pool_free ON code_pool (code) WHERE status = 'free';
 ```
 
 ```sql
--- Lay mot ma, an toan voi nhieu worker chay song song
+-- Lấy một mã, an toàn với nhiều worker chạy song song
 WITH lay AS (
     SELECT code FROM code_pool
      WHERE status = 'free'
      LIMIT 1
-     FOR UPDATE SKIP LOCKED           -- ← chia khoa cua ca thiet ke nay
+     FOR UPDATE SKIP LOCKED           -- ← chìa khoá của cả thiết kế này
 )
 UPDATE code_pool p SET status = 'used'
   FROM lay WHERE p.code = lay.code
@@ -273,7 +273,7 @@ Cảnh báo cần đặt:
 
 ```sql
 SELECT count(*) FROM code_pool WHERE status = 'free';
--- Duoi 1 trieu → chay tien trinh sinh them
+-- Dưới 1 triệu → chạy tiến trình sinh thêm
 ```
 
 ---
@@ -321,7 +321,7 @@ def mo_rong(ma):
     cur.execute("SELECT long_url FROM urls WHERE code = %s", (ma,))
     row = cur.fetchone()
     if not row:
-        redis.setex(f"u:{ma}", 60, "__KHONG_TON_TAI__")   # cache ca ket qua RONG
+        redis.setex(f"u:{ma}", 60, "__KHONG_TON_TAI__")   # cache cả kết quả RỖNG
         return None
 
     redis.setex(f"u:{ma}", 86400, row[0])     # TTL 1 ngay
@@ -338,22 +338,22 @@ Hai chi tiết quan trọng:
 Dữ liệu này gần như **bất biến**, nên cache ở đây hiệu quả bất thường:
 
 ```text
-   Ti le trung cache thuc te: > 98%
-   → chi ~240 truy van/giay xuong database thay vi 12.000
-   → mot may Postgres binh thuong thua suc
+   Tỉ lệ trúng cache thực tế: > 98%
+   → chỉ ~240 truy vấn/giây xuống database thay vì 12.000
+   → một máy Postgres bình thường thừa sức
 ```
 
 ### 301 hay 302 — quyết định ảnh hưởng tới thống kê
 
 ```text
-   301 MOVED PERMANENTLY              302 FOUND (tam thoi)
+   301 MOVED PERMANENTLY              302 FOUND (tạm thời)
    ═════════════════════              ════════════════════
-   Trinh duyet CACHE VINH VIEN        Trinh duyet KHONG cache
-   → lan sau KHONG goi server nua     → moi lan deu goi server
+   Trình duyệt CACHE VĨNH VIỄN        Trình duyệt KHÔNG cache
+   → lần sau KHÔNG gọi server nữa     → mỗi lần đều gọi server
 
-   ✔ giam tai server rat nhieu        ✔ dem duoc MOI lan bam
-   ✘ MAT hoan toan thong ke           ✘ server chiu tai day du
-   ✘ KHONG doi duoc dich den          ✔ doi duoc dich den bat cu luc nao
+   ✔ giảm tải server rất nhiều        ✔ đếm được MỌI lần bấm
+   ✘ MẤT hoàn toàn thống kê           ✘ server chịu tải đầy đủ
+   ✘ KHÔNG đổi được đích đến          ✔ đổi được đích đến bất cứ lúc nào
 ```
 
 Gần như mọi dịch vụ rút gọn URL thương mại dùng **302**, vì thống kê lượt bấm chính là sản phẩm của họ.
@@ -376,7 +376,7 @@ def xu_ly_chuyen_huong(ma):
     if not url:
         return 404
 
-    # Khong cho — day vao hang doi roi tra ve ngay
+    # Không chờ — đẩy vào hàng đợi rồi trả về ngay
     hang_doi.push({"ma": ma, "luc": time.time(), "ip": request.ip,
                    "ua": request.user_agent})
     return redirect(url, code=302)
@@ -385,11 +385,11 @@ def xu_ly_chuyen_huong(ma):
 Worker gộp lô rồi ghi:
 
 ```sql
--- Ghi theo lo 1000 su kien thay vi tung cai
+-- Ghi theo lô 1000 sự kiện thay vì từng cái
 INSERT INTO click_events (code, clicked_at, ip, user_agent)
 SELECT * FROM unnest(:codes, :times, :ips, :uas);
 
--- Va cap nhat bo dem tong hop theo lo
+-- Và cập nhật bộ đếm tổng hợp theo lô
 INSERT INTO click_counts (code, ngay, cnt)
 SELECT code, date(clicked_at), count(*)
 FROM ... GROUP BY 1, 2
@@ -463,7 +463,7 @@ CREATE UNIQUE INDEX idx_urls_code ON urls (code);
 CREATE INDEX idx_urls_user ON urls (user_id, created_at DESC);
 CREATE INDEX idx_urls_expires ON urls (expires_at) WHERE expires_at IS NOT NULL;
 
--- Su kien bam: PHAN MANH theo thang, chi giu 90 ngay
+-- Sự kiện bấm: PHÂN MẢNH theo tháng, chỉ giữ 90 ngày
 CREATE TABLE click_events (
     code       TEXT        NOT NULL,
     clicked_at TIMESTAMPTZ NOT NULL,
@@ -472,7 +472,7 @@ CREATE TABLE click_events (
     referer    TEXT
 ) PARTITION BY RANGE (clicked_at);
 
--- Bang tong hop san cho bao cao
+-- Bảng tổng hợp sẵn cho báo cáo
 CREATE TABLE click_counts (
     code TEXT   NOT NULL,
     ngay DATE   NOT NULL,
@@ -495,23 +495,23 @@ Ba quyết định trong mô hình này:
 
 ```text
                        ┌──────────────┐
-                       │     CDN      │  ← chan phan lon luu luong doc
+                       │     CDN      │  ← chặn phần lớn lưu lượng đọc
                        └──────┬───────┘
                               ▼
                        ┌──────────────┐
-                       │ CAN BANG TAI │
+                       │ CÂN BẰNG TẢI │
                        └──────┬───────┘
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
         ┌──────────┐    ┌──────────┐    ┌──────────┐
-        │ APP 1    │    │ APP 2    │    │ APP N    │  (khong trang thai)
+        │ APP 1    │    │ APP 2    │    │ APP N    │  (không trạng thái)
         └────┬─────┘    └────┬─────┘    └────┬─────┘
              └───────────────┼───────────────┘
                   ┌──────────┴──────────┐
                   ▼                     ▼
           ┌──────────────┐      ┌──────────────┐
-          │    REDIS     │      │  HANG DOI    │
-          │  (98% trung) │      │ (su kien bam)│
+          │    REDIS     │      │  HÀNG ĐỢI    │
+          │  (98% trúng) │      │ (sự kiện bấm)│
           └──────┬───────┘      └──────┬───────┘
                  │ 2% truot            │
                  ▼                     ▼
@@ -521,7 +521,7 @@ Ba quyết định trong mô hình này:
           └──────┬───────┘      └──────────────┘
                  │
           ┌──────▼───────┐
-          │   REPLICA    │  ← truy van phan tich, sao luu
+          │   REPLICA    │  ← truy vấn phân tích, sao lưu
           └──────────────┘
 ```
 

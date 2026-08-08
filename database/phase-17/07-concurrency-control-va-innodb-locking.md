@@ -15,7 +15,7 @@ Bài cuối của phase 17 gồm hai phần: khung tư duy để chọn giữa h
    → KHOÁ TRƯỚC khi làm                 → cứ làm, KIỂM TRA lúc commit
    → người khác CHỜ                     → nếu có tranh thì HUỶ và THỬ LẠI
 
-   Chi phi: THOI GIAN CHO                Chi phi: LAM LAI VIEC DA LAM
+   Chi phí: THỜI GIAN CHỜ                Chi phí: LÀM LẠI VIỆC ĐÃ LÀM
 ```
 
 ## Cách cài đặt
@@ -25,7 +25,7 @@ Bài cuối của phase 17 gồm hai phần: khung tư duy để chọn giữa h
 ```sql
 BEGIN;
 SELECT * FROM seats WHERE id = 14 FOR UPDATE;   -- 🔒 khoá ngay
--- ... kiem tra nghiep vu ...
+-- ... kiểm tra nghiệp vụ ...
 UPDATE seats SET is_booked = true WHERE id = 14;
 COMMIT;                                          -- 🔓 mở khoá
 ```
@@ -169,7 +169,7 @@ Bốn quy tắc (giống với thử lại sau deadlock ở [phase-8 bài 1](../
 ## Vì sao gap lock tồn tại
 
 ```text
-   VAN DE PHANTOM:
+   VẤN ĐỀ PHANTOM:
      Transaction A: SELECT count(*) FROM orders WHERE id BETWEEN 15 AND 25;  → 1
      Transaction B: INSERT INTO orders (id) VALUES (22);
      Transaction A: SELECT count(*) FROM orders WHERE id BETWEEN 15 AND 25;  → 2
@@ -185,7 +185,7 @@ SELECT * FROM orders WHERE id BETWEEN 15 AND 25 FOR UPDATE;
 -- → khoá các khe: (10,20], (20,30]
 
 -- Transaction B
-INSERT INTO orders (id) VALUES (22);   -- ← BI CHAN
+INSERT INTO orders (id) VALUES (22);   -- ← BỊ CHẶN
 ```
 
 ## Cái bẫy: gap lock chặn nhiều hơn bạn nghĩ
@@ -243,7 +243,7 @@ SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
    Một dạng gap lock đặc biệt, đặt khi INSERT.
 
    Hai INSERT vào CÙNG một khe nhưng KHÁC giá trị
-   → KHONG chan nhau
+   → KHÔNG chặn nhau
 
    INSERT 22 và INSERT 25, cả hai vào khe (20,30) → cả hai chạy được  ✔
 ```
@@ -325,7 +325,7 @@ FROM performance_schema.data_locks;
 ```
 
 ```sql
--- Deadlock gan nhat
+-- Deadlock gần nhất
 SHOW ENGINE INNODB STATUS\G
 -- → tìm phần "LATEST DETECTED DEADLOCK"
 ```

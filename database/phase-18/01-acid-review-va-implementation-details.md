@@ -9,22 +9,22 @@ Bài cuối của khoá. Nó quay lại ACID — nơi mọi thứ bắt đầu �
    │ A — ATOMICITY                                                      │
    │   Cơ chế : WAL + undo (InnoDB) hoặc nhiều phiên bản (PostgreSQL)   │
    │   Cài đặt: crash recovery lúc khởi động; ROLLBACK                  │
-   │   Hoc o  : phase-2 bai 2, phase-17 bai 1                           │
+   │   Học ở  : phase-2 bài 2, phase-17 bài 1                           │
    ├────────────────────────────────────────────────────────────────────┤
    │ I — ISOLATION                                                      │
    │   Cơ chế : MVCC (snapshot) hoặc khoá (record/gap/next-key)         │
    │   Cài đặt: isolation level; SSI cho SERIALIZABLE                   │
-   │   Hoc o  : phase-2 bai 3, phase-8 bai 1, phase-17 bai 8            │
+   │   Học ở  : phase-2 bài 3, phase-8 bài 1, phase-17 bài 8            │
    ├────────────────────────────────────────────────────────────────────┤
    │ C — CONSISTENCY                                                    │
    │   Cơ chế : KHÔNG CÓ cơ chế riêng                                   │
    │   Cài đặt: ràng buộc bạn khai báo + HỆ QUẢ của A và I              │
-   │   Hoc o  : phase-2 bai 4, phase-14 bai 2                           │
+   │   Học ở  : phase-2 bài 4, phase-14 bài 2                           │
    ├────────────────────────────────────────────────────────────────────┤
    │ D — DURABILITY                                                     │
    │   Cơ chế : WAL + fsync + checkpoint + ghi cả page                  │
    │   Cài đặt: synchronous_commit; innodb_flush_log_at_trx_commit      │
-   │   Hoc o  : phase-2 bai 2, phase-9 bai 1, phase-17 bai 1            │
+   │   Học ở  : phase-2 bài 2, phase-9 bài 1, phase-17 bài 1            │
    └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -35,7 +35,7 @@ Bài cuối của khoá. Nó quay lại ACID — nơi mọi thứ bắt đầu �
 ## Atomicity — hai kiến trúc, hai hoá đơn
 
 ```text
-   POSTGRESQL — NHIEU PHIEN BAN                INNODB — SUA TAI CHO
+   POSTGRESQL — NHIỀU PHIÊN BẢN                INNODB — SỬA TẠI CHỖ
    ════════════════════════════                ════════════════════
    UPDATE → tạo TUPLE MỚI trong bảng           UPDATE → ghi đè, đẩy giá trị cũ
             phiên bản cũ vẫn nằm đó                     sang UNDO LOG
@@ -100,25 +100,25 @@ Ba câu này nên nằm trong bảng theo dõi của mọi hệ thống PostgreS
 Hai cơ chế, cùng một kết quả:
 
 ```text
-   CHAN PHANTOM BANG SNAPSHOT (PostgreSQL)
+   CHẶN PHANTOM BẰNG SNAPSHOT (PostgreSQL)
      "lọc bỏ mọi dòng sinh ra sau thời điểm tôi bắt đầu"
      → không khoá gì cả → song song cao
      → nhưng KHÔNG chặn được write skew
 
-   CHAN PHANTOM BANG GAP LOCK (MySQL)
+   CHẶN PHANTOM BẰNG GAP LOCK (MySQL)
      "khoá luôn các khoảng trống để không ai chèn vào"
      → chặn thật → ít song song hơn
-     → gay deadlock kho hieu ([phase-17 bai 8])
+     → gây deadlock khó hiểu ([phase-17 bài 8])
 ```
 
 ### Ba bất thường theo thứ tự khó chặn
 
 ```text
    1. DIRTY READ        →  mọi hệ hiện đại đều chặn (trừ SQL Server NOLOCK)
-   2. NON-REPEATABLE    →  REPEATABLE READ chan
+   2. NON-REPEATABLE    →  REPEATABLE READ chặn
    3. PHANTOM           →  PostgreSQL RR chặn; MySQL RR chặn bằng gap lock
-   4. LOST UPDATE       →  PostgreSQL RR chan (loi 40001); RC KHONG chan
-   5. WRITE SKEW        →  CHI SERIALIZABLE chan
+   4. LOST UPDATE       →  PostgreSQL RR chặn (lỗi 40001); RC KHÔNG chặn
+   5. WRITE SKEW        →  CHỈ SERIALIZABLE chặn
 ```
 
 Mức 5 là mức mà hầu hết mọi người không biết tồn tại cho tới khi gặp:
@@ -140,20 +140,20 @@ Mức 5 là mức mà hầu hết mọi người không biết tồn tại cho t
 
 ```text
    ┌──────────────────────────────────────────────────────────────┐
-   │ TANG 1 — KIEU DU LIEU                                        │
+   │ TẦNG 1 — KIỂU DỮ LIỆU                                        │
    │   INT, DATE, NUMERIC... chặn dữ liệu vô nghĩa ngay từ đầu    │
    │   → đừng TEXT cho MỌI THỨ là bỏ tầng bảo vệ đầu tiên          │
    ├──────────────────────────────────────────────────────────────┤
-   │ TANG 2 — RANG BUOC                                           │
+   │ TẦNG 2 — RÀNG BUỘC                                           │
    │   NOT NULL, CHECK, UNIQUE, FOREIGN KEY                       │
    │   → KHÔNG đường nào phá được: không ứng dụng, không job,     │
    │     không kỹ sư sửa tay lúc khẩn cấp                          │
    ├──────────────────────────────────────────────────────────────┤
-   │ TANG 3 — TRANSACTION                                         │
+   │ TẦNG 3 — TRANSACTION                                         │
    │   Bảo vệ BẤT BIẾN giữa NHIỀU dòng/nhiều bảng                 │
    │   → thứ mà ràng buộc không diễn đạt được                     │
    ├──────────────────────────────────────────────────────────────┤
-   │ TANG 4 — DOI SOAT                                            │
+   │ TẦNG 4 — ĐỐI SOÁT                                            │
    │   Job định kỳ kiểm tra những gì ba tầng trên không giữ được  │
    │   → bộ đếm phi chuẩn hoá, dữ liệu mồ côi xuyên dịch vụ       │
    └──────────────────────────────────────────────────────────────┘
@@ -162,7 +162,7 @@ Mức 5 là mức mà hầu hết mọi người không biết tồn tại cho t
 Tầng 4 là tầng bị bỏ qua nhiều nhất, và nó là tầng duy nhất bắt được các lỗi mà **không cơ chế nào của database phát hiện được**:
 
 ```sql
--- Bo dem lech
+-- Bộ đếm lệch
 SELECT p.id, p.comment_count, count(c.id) AS dem_that
 FROM posts p LEFT JOIN comments c ON c.post_id = p.id
 GROUP BY p.id, p.comment_count
@@ -173,7 +173,7 @@ SELECT o.id FROM orders o
 LEFT JOIN users u ON u.id = o.user_id
 WHERE u.id IS NULL;
 
--- Bat bien nghiep vu
+-- Bất biến nghiệp vụ
 SELECT id FROM accounts WHERE balance < 0;
 ```
 
@@ -267,9 +267,9 @@ COMMIT;
 ```text
    ACID là đảm bảo TRONG MỘT database instance.
    Vượt ra ngoài nó:
-     → 2PC (chan, kho van hanh)
+     → 2PC (chặn, khó vận hành)
      → Saga (không có cô lập)
-     → hoac THIET KE DE KHONG CAN ([phase-17 bai 4])
+     → hoặc THIẾT KẾ ĐỂ KHÔNG CẦN ([phase-17 bài 4])
 ```
 
 ---
@@ -297,7 +297,7 @@ Bảng này là kết tinh của cả khoá: **một hệ thống thật cần n
 ```text
    ┌─ ATOMICITY ─────────────────────────────────────────────────┐
    │ □ idle_in_transaction_session_timeout đã đặt                │
-   │ □ Canh bao transaction mo > 5 phut                          │
+   │ □ Cảnh báo transaction mở > 5 phút                          │
    │ □ Cảnh báo khe nhân bản không hoạt động                     │
    │ □ Theo dõi n_dead_tup / pct_chet trên các bảng lớn          │
    │ □ autovacuum_vacuum_scale_factor chỉnh riêng cho bảng lớn   │
@@ -305,8 +305,8 @@ Bảng này là kết tinh của cả khoá: **một hệ thống thật cần n
    ┌─ ISOLATION ─────────────────────────────────────────────────┐
    │ □ Biết rõ isolation level mặc định của hệ đang dùng         │
    │ □ Có vòng lặp thử lại cho lỗi 40001 và deadlock             │
-   │ □ Khoa theo THU TU nhat quan (chong deadlock)               │
-   │ □ Theo doi pg_stat_database.deadlocks                       │
+   │ □ Khoá theo THỨ TỰ nhất quán (chống deadlock)               │
+   │ □ Theo dõi pg_stat_database.deadlocks                       │
    └─────────────────────────────────────────────────────────────┘
    ┌─ CONSISTENCY ───────────────────────────────────────────────┐
    │ □ Khoá ngoại được khai báo (không bỏ "cho nhanh")           │
@@ -332,34 +332,34 @@ Dòng "đã diễn tập phục hồi" là dòng quan trọng nhất trong bốn
 Nếu phải tóm tắt toàn bộ khoá trong một khung tư duy:
 
 ```text
-   1. DATABASE DEM PAGE, KHONG DEM DONG.
+   1. DATABASE ĐẾM PAGE, KHÔNG ĐẾM DÒNG.
       Mọi câu hỏi về hiệu năng đều quy về: "phải đọc bao nhiêu page?"
-      ([phase-3 bai 1])
+      ([phase-3 bài 1])
 
    2. INDEX LÀ BẢN SAO ĐÃ SẮP XẾP — và nó CÓ GIÁ.
       Nhanh khi đọc, chậm khi ghi, tốn đĩa, tốn RAM.
       Chỉ đáng khi lọc ra dưới ~10% số dòng.
       ([phase-4])
 
-   3. MOI DAM BAO DEU CO NUT VAN.
+   3. MỌI ĐẢM BẢO ĐỀU CÓ NÚT VẶN.
       Isolation, durability, nhất quán đọc — đều chỉnh được,
       và chỉnh được THEO TỪNG TRANSACTION.
       ([phase-2], [phase-9])
 
-   4. TRANH CHAP GIAI BANG THU TU, KHONG BANG SO LUONG.
+   4. TRANH CHẤP GIẢI BẰNG THỨ TỰ, KHÔNG BẰNG SỐ LƯỢNG.
       Deadlock sinh ra từ thứ tự khoá khác nhau, không từ số khoá.
-      ([phase-8 bai 1])
+      ([phase-8 bài 1])
 
-   5. MOI DAC TINH KIEN TRUC LA MOT DANH DOI.
+   5. MỌI ĐẶC TÍNH KIẾN TRÚC LÀ MỘT ĐÁNH ĐỔI.
       PostgreSQL vs MySQL, B+Tree vs LSM, bi quan vs lạc quan —
       không cái nào "tốt hơn", chỉ có "hợp hơn với tải của bạn".
       ([phase-17])
 
-   6. LEO HET THANG TRUOC KHI NHAY.
+   6. LEO HẾT THANG TRƯỚC KHI NHẢY.
       Đo đạc → index → query → pool → cấu hình → máy lớn hơn →
-      cache → replica → partition → tach chuc nang → SHARDING.
+      cache → replica → partition → tách chức năng → SHARDING.
       Chín nấc đầu quay đầu được. Nấc thứ mười thì không.
-      ([phase-7 bai 3])
+      ([phase-7 bài 3])
 ```
 
 ## Đọc tiếp
