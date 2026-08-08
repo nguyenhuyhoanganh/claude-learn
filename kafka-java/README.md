@@ -2,9 +2,9 @@
 
 > Kafka với Spring — từ topic đầu tiên tới hệ thống streaming production.
 
-57 bài về Kafka trong hệ sinh thái Java/Spring: nền tảng Kafka (topic, partition, key, offset, rebalancing), Spring Cloud Stream cho producer và consumer, consumer group và scaling, event routing, cụm Kafka và replication, xử lý theo lô, xử lý song song, độ tin cậy và ack, xử lý lỗi và retry, transaction và exactly-once, testing, bảo mật.
+69 bài về Kafka trong hệ sinh thái Java/Spring: nền tảng Kafka (topic, partition, key, offset, rebalancing), Spring Cloud Stream cho producer và consumer, consumer group và scaling, event routing, cụm Kafka và replication, xử lý theo lô, xử lý song song, độ tin cậy và ack, xử lý lỗi và retry, transaction và exactly-once, testing, bảo mật, và phần mổ xẻ nội bộ Kafka (ZooKeeper, KRaft/Raft, ISR, high watermark, failover có số đo).
 
-**57 bài** trong 18 phần.
+**69 bài** trong 19 phần.
 
 ## Mục lục
 
@@ -155,6 +155,25 @@
 | [02](phase-18-best-practices/02-topic-partition-replication.md) | Bài 2: Topic, Partition, Replication Factor — quyết định bao nhiêu |
 | [03](phase-18-best-practices/03-summary-whats-next.md) | Bài 3: Tóm tắt Phase 18-19 + Roadmap kỹ năng tiếp theo |
 
+### Phase 20 — kafka internals (mổ xẻ nội bộ)
+
+> Lớp đào sâu bên dưới Phase 3, 9, 12, 18 — **không thay thế** phase nào. Viết từ một loạt transcript "Kafka Internal" tiếng Việt, đã đối chiếu với transcript chính thức của khoá và tài liệu Apache Kafka; 12 chỗ transcript nói sai được ghi rõ ở [bài 12](phase-20-kafka-internals/12-dinh-chinh-transcript-va-tong-ket.md).
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-20-kafka-internals/01-vi-sao-kafka-ra-doi-tai-linkedin.md) | Bài 1: Vì sao Kafka ra đời — câu chuyện có thật ở LinkedIn |
+| [02](phase-20-kafka-internals/02-cluster-ha-va-scalability.md) | Bài 2: Cluster là gì — High Availability và Scalability giải nghĩa tận gốc |
+| [03](phase-20-kafka-internals/03-doi-chieu-mysql-de-hieu-kafka.md) | Bài 3: Đối chiếu MySQL để hiểu Kafka — replica, binlog, sharding |
+| [04](phase-20-kafka-internals/04-giai-phau-broker-topic-partition-replica.md) | Bài 4: Giải phẫu broker, topic, partition, replica — cái gì nằm ở đâu trên đĩa |
+| [05](phase-20-kafka-internals/05-leader-follower-isr-va-luong-ghi.md) | Bài 5: Leader, Follower, ISR và đường đi thật của một lệnh ghi |
+| [06](phase-20-kafka-internals/06-zookeeper-tu-a-den-z.md) | Bài 6: ZooKeeper từ A đến Z — nó làm gì cho Kafka và vì sao bị loại bỏ |
+| [07](phase-20-kafka-internals/07-kraft-va-thuat-toan-raft.md) | Bài 7: KRaft và thuật toán Raft — bầu cử, nhiệm kỳ, nhật ký metadata |
+| [08](phase-20-kafka-internals/08-cluster-membership-va-vong-doi-broker.md) | Bài 8: Vòng đời một broker — tham gia cụm, nhịp tim, rời cụm |
+| [09](phase-20-kafka-internals/09-failover-thuc-hanh-va-so-lieu.md) | Bài 9: Thực hành failover — 6 kịch bản, lệnh, và số liệu đo được |
+| [10](phase-20-kafka-internals/10-hanh-trinh-mot-message.md) | Bài 10: Hành trình một message — từ `send()` tới tay consumer |
+| [11](phase-20-kafka-internals/11-tu-dien-moi-thanh-phan-kafka.md) | Bài 11: Từ điển mọi thành phần Kafka — làm gì, giải quyết gì, hỏng ra sao |
+| [12](phase-20-kafka-internals/12-dinh-chinh-transcript-va-tong-ket.md) | Bài 12: Bảng đính chính transcript và tổng kết Phase 20 |
+
 ## Nên bắt đầu từ đâu
 
 | Bạn đang ở tình huống | Đọc từ |
@@ -163,6 +182,9 @@
 | Đã có consumer, hay bị lag | phase-6 (consumer group) và phase-11 (concurrency) |
 | Cần đảm bảo không mất message | phase-12 (reliability) và phase-13 (error handling) |
 | Nghe nói exactly-once | phase-14 — có phần bóc trần hiểu lầm phổ biến |
+| Muốn hiểu Kafka hoạt động bên trong ra sao | phase-20 — ISR, high watermark, ZooKeeper vs KRaft, failover có số đo |
+| Chuẩn bị phỏng vấn về hệ phân tán | phase-20 bài 2, 5, 7 — quorum, replication, Raft |
+| Sắp đưa Kafka lên production | phase-20 bài 9 — bảng mặc định phải đổi và bộ chỉ số cảnh báo |
 
 ---
 
