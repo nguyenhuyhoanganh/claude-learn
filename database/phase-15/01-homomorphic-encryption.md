@@ -13,26 +13,26 @@ Nhưng câu trả lời là **có** — và đó là **mã hoá đồng cấu** 
 Nhắc lại ba lớp bảo vệ ở [phase-14 bài 1](../phase-14/01-bao-mat-ket-noi-database-tls.md):
 
 ```text
-   1. KHI TRUYEN  →  TLS         ✔ da giai quyet
-   2. KHI LUU     →  ma hoa dia  ✔ da giai quyet
+   1. KHI TRUYỀN  →  TLS         ✔ đã giải quyết
+   2. KHI LƯU     →  mã hoá đĩa  ✔ đã giải quyết
    3. KHI DUNG    →  ???         ✘ CON HO
 ```
 
 Lỗ hổng thứ ba:
 
 ```text
-   Database PHAI GIAI MA du lieu de:
-     • so sanh trong WHERE
-     • sap xep trong ORDER BY
-     • cong trong SUM()
-     • ghep trong JOIN
+   Database PHẢI GIẢI MÃ dữ liệu để:
+     • so sánh trong WHERE
+     • sắp xếp trong ORDER BY
+     • cộng trong SUM()
+     • ghép trong JOIN
 
-   → Tai THOI DIEM DO, du lieu nam TRONG RAM duoi dang RO
-   → Ai kiem soat may chu deu doc duoc:
-       • nha cung cap dam may
+   → Tại THỜI ĐIỂM ĐÓ, dữ liệu nằm TRONG RAM dưới dạng RÕ
+   → Ai kiểm soát máy chủ đều đọc được:
+       • nhà cung cấp đám mây
        • quan tri vien he thong
-       • ke tan cong da chiem duoc may
-       • lenh cua co quan chuc nang
+       • kẻ tấn công đã chiếm được máy
+       • lệnh của cơ quan chức năng
 ```
 
 Đây là lý do nhiều ngành (y tế, tài chính, quốc phòng) không dám đưa dữ liệu lên đám mây công cộng, dù về mặt kỹ thuật nó rẻ hơn nhiều.
@@ -46,19 +46,19 @@ Mã hoá đồng cấu hứa: **máy chủ tính toán được mà không bao g
 "Đồng cấu" (*homomorphic*) là thuật ngữ toán học, nghĩa là **giữ nguyên cấu trúc phép toán**:
 
 ```text
-   Ma hoa E, giai ma D.  Dong cau voi phep cong nghia la:
+   Mã hoá E, giải mã D.  Đồng cấu với phép cộng nghĩa là:
 
         D( E(a) ⊕ E(b) )  =  a + b
 
-   Nghia la: cong hai BAN MA lai voi nhau, giai ma ket qua,
-             se ra dung tong cua hai gia tri goc.
-             Ma may chu KHONG BAO GIO biet a hay b la gi.
+   Nghĩa là: cộng hai BẢN MÃ lại với nhau, giải mã kết quả,
+             sẽ ra đúng tổng của hai giá trị gốc.
+             Mà máy chủ KHÔNG BAO GIỜ biết a hay b là gì.
 ```
 
 Diễn bằng luồng dữ liệu:
 
 ```text
-   CLIENT (co khoa)                  SERVER (khong co khoa)
+   CLIENT (có khoá)                  SERVER (không có khoá)
    ════════════════                  ══════════════════════
    a = 5                             
    b = 3                             
@@ -68,9 +68,9 @@ Diễn bằng luồng dữ liệu:
                                         = ff41c2...
                      ◀────────────── tra ve ff41c2...
    D(ff41c2...) = 8                  
-        ▲                            SERVER khong he biet:
-   ĐUNG bang 5 + 3                     - gia tri dau vao la 5 va 3
-                                       - ket qua la 8
+        ▲                            SERVER không hề biết:
+   ĐÚNG bằng 5 + 3                     - giá trị đầu vào là 5 và 3
+                                       - kết quả là 8
 ```
 
 ## Ví dụ đơn giản nhất: RSA đồng cấu với phép nhân
@@ -84,17 +84,17 @@ RSA có tính đồng cấu **tự nhiên** với phép nhân — và đây là 
                 =  (a × b)^e mod n
                 =  E(a × b)
 
-   → Nhan hai ban ma  ⟹  duoc ban ma cua TICH
+   → Nhân hai bản mã  ⟹  được bản mã của TÍCH
 ```
 
 Kiểm chứng bằng số nhỏ:
 
 ```python
-# Tham so RSA do choi
+# Tham số RSA đồ chơi
 p, q = 61, 53
 n = p * q            # 3233
-e = 17               # khoa cong khai
-d = 413              # khoa bi mat
+e = 17               # khoá công khai
+d = 413              # khoá bí mật
 
 def ma_hoa(m):  return pow(m, e, n)
 def giai_ma(c): return pow(c, d, n)
@@ -107,7 +107,7 @@ print(f"E(9) = {cb}")
 
 tich_ban_ma = (ca * cb) % n
 print(f"E(7) x E(9) mod n = {tich_ban_ma}")
-print(f"Giai ma           = {giai_ma(tich_ban_ma)}")
+print(f"Giải mã           = {giai_ma(tich_ban_ma)}")
 print(f"7 x 9             = {a*b}")
 ```
 
@@ -115,7 +115,7 @@ print(f"7 x 9             = {a*b}")
 E(7) = 1667
 E(9) = 3110
 E(7) x E(9) mod n = 872
-Giai ma           = 63
+Giải mã           = 63
 7 x 9             = 63          ← KHOP
 ```
 
@@ -130,19 +130,19 @@ Nhưng RSA **chỉ** đồng cấu với phép nhân, không với phép cộng.
 ```text
    ┌────────────────────────────────────────────────────────────────┐
    │ PHAN PHAN (Partially HE — PHE)                                 │
-   │   Ho tro MOT phep toan, KHONG GIOI HAN so lan                  │
-   │   RSA, ElGamal  → chi phep NHAN                                │
-   │   Paillier      → chi phep CONG                                │
-   │   → NHANH, dung duoc trong san pham that                       │
+   │   Hỗ trợ MỘT phép toán, KHÔNG GIỚI HẠN số lần                  │
+   │   RSA, ElGamal  → chỉ phép NHÂN                                │
+   │   Paillier      → chỉ phép CỘNG                                │
+   │   → NHANH, dùng được trong sản phẩm thật                       │
    ├────────────────────────────────────────────────────────────────┤
    │ CO PHAN (Somewhat HE — SHE)                                    │
-   │   Ho tro CA HAI phep toan, nhung GIOI HAN so lan               │
-   │   Moi phep toan lam "nhieu" tich tu; qua nguong → hong         │
-   │   → dung duoc cho cong thuc don gian                           │
+   │   Hỗ trợ CẢ HAI phép toán, nhưng GIỚI HẠN số lần               │
+   │   Mỗi phép toán làm "nhiễu" tích tụ; quá ngưỡng → hỏng         │
+   │   → dùng được cho công thức đơn giản                           │
    ├────────────────────────────────────────────────────────────────┤
    │ TOAN PHAN (Fully HE — FHE)                                     │
-   │   Ho tro MOI phep toan, KHONG GIOI HAN so lan                  │
-   │   Craig Gentry, 2009 — dot pha ly thuyet lon                   │
+   │   Hỗ trợ MỌI phép toán, KHÔNG GIỚI HẠN số lần                  │
+   │   Craig Gentry, 2009 — đột phá lý thuyết lớn                   │
    │   → CHAM HON HANG NGHIN LAN                                    │
    └────────────────────────────────────────────────────────────────┘
 ```
@@ -158,11 +158,11 @@ khoa_cong, khoa_bi_mat = paillier.generate_paillier_keypair()
 luong = [15_000_000, 22_000_000, 18_000_000, 30_000_000]
 luong_ma_hoa = [khoa_cong.encrypt(x) for x in luong]
 
-# SERVER lam viec nay — KHONG co khoa bi mat
-tong_ma_hoa = sum(luong_ma_hoa)                # cong duoc!
-tang_10_pt  = luong_ma_hoa[0] * 1.1            # nhan voi hang so cung duoc
+# SERVER làm việc này — KHÔNG có khoá bí mật
+tong_ma_hoa = sum(luong_ma_hoa)                # cộng được!
+tang_10_pt  = luong_ma_hoa[0] * 1.1            # nhân với hằng số cũng được
 
-# CLIENT giai ma
+# CLIENT giải mã
 print(f"Tong luong  : {khoa_bi_mat.decrypt(tong_ma_hoa):,}")
 print(f"Luong +10%  : {khoa_bi_mat.decrypt(tang_10_pt):,.0f}")
 ```
@@ -174,10 +174,10 @@ Luong +10%  : 16,500,000
 
 ```text
    PAILLIER LAM DUOC:
-     ✔ E(a) + E(b)        → cong hai gia tri ma hoa
-     ✔ E(a) × hang_so     → nhan voi so RO
+     ✔ E(a) + E(b)        → cộng hai giá trị mã hoá
+     ✔ E(a) × hằng_số     → nhân với số RÕ
    PAILLIER KHONG LAM DUOC:
-     ✘ E(a) × E(b)        → nhan hai gia tri ma hoa
+     ✘ E(a) × E(b)        → nhân hai giá trị mã hoá
      ✘ E(a) > E(b)        → SO SANH
 ```
 
@@ -188,35 +188,35 @@ Dòng cuối là hạn chế quan trọng nhất: **không so sánh được** n
 Đột phá của Gentry năm 2009 dựa trên một ý tưởng gọi là **bootstrapping**:
 
 ```text
-   VAN DE: moi phep toan them "nhieu" (noise) vao ban ma.
-           Nhieu tich tu qua nguong → giai ma ra RAC.
+   VẤN ĐỀ: mỗi phép toán thêm "nhiễu" (noise) vào bản mã.
+           Nhiễu tích tụ quá ngưỡng → giải mã ra RÁC.
 
    GIAI PHAP CUA GENTRY:
-     Dinh ky chay chinh THUAT TOAN GIAI MA — nhung o dang DA MA HOA.
-     → duoc mot ban ma "sach" voi cung gia tri, nhieu ve muc thap
-     → tu do tinh toan tiep VO HAN
+     Định kỳ chạy chính THUẬT TOÁN GIẢI MÃ — nhưng ở dạng ĐÃ MÃ HOÁ.
+     → được một bản mã "sạch" với cùng giá trị, nhiễu về mức thấp
+     → từ đó tính toán tiếp VÔ HẠN
 ```
 
 Nghe rất đẹp. Vấn đề nằm ở con số:
 
 ```text
-   TOC DO (so voi tinh toan tren du lieu RO)
+   TỐC ĐỘ (so với tính toán trên dữ liệu RÕ)
 
-   Ban dau (2009)     :  ~1.000.000.000 lan cham hon
-   Cai tien (2013)    :  ~1.000.000     lan cham hon
-   Hien nay (2024-26) :  ~1.000-100.000 lan cham hon (tuy phep toan)
+   Ban đầu (2009)     :  ~1.000.000.000 lần chậm hơn
+   Cải tiến (2013)    :  ~1.000.000     lần chậm hơn
+   Hiện nay (2024-26) :  ~1.000-100.000 lần chậm hơn (tuỳ phép toán)
 
    KICH THUOC BAN MA
-   Mot so nguyen 32 bit  →  ban ma tu 1 KB toi vai MB
+   Một số nguyên 32 bit  →  bản mã từ 1 KB tới vài MB
                             → PHINH 250 - 100.000 LAN
 ```
 
 ```text
-   Vi du cu the:
-     Cong hai so tren du lieu ro       :  ~1 nanogiay
-     Cong hai so bang FHE              :  ~1 mili-giay      → 1.000.000× cham
-     Nhan hai so bang FHE              :  ~10-100 mili-giay
-     So sanh hai so bang FHE           :  ~1 giay           ← rat dat
+   Ví dụ cụ thể:
+     Cộng hai số trên dữ liệu rõ       :  ~1 nano-giây
+     Cộng hai số bằng FHE              :  ~1 mili-giây      → 1.000.000× chậm
+     Nhân hai số bằng FHE              :  ~10-100 mili-giây
+     So sánh hai số bằng FHE           :  ~1 giây           ← rất đắt
 ```
 
 Dòng cuối giải thích vì sao FHE khó dùng cho database: **so sánh là phép toán cơ bản nhất của mọi truy vấn**, và nó lại là phép đắt nhất trong FHE.
@@ -238,8 +238,8 @@ Ba lược đồ chính và bài toán của chúng:
 
 ```text
    BFV / BGV  →  SO NGUYEN chinh xac      (dem, tong tien)
-   CKKS       →  SO THUC XAP XI           (hoc may, thong ke)
-   TFHE       →  PHEP TOAN BOOLEAN nhanh  (so sanh, dieu kien)
+   CKKS       →  SỐ THỰC XẤP XỈ           (học máy, thống kê)
+   TFHE       →  PHÉP TOÁN BOOLEAN nhanh  (so sánh, điều kiện)
 ```
 
 `CKKS` đáng chú ý: nó chấp nhận **sai số xấp xỉ** để đổi lấy tốc độ, và điều đó **hoàn toàn phù hợp** với học máy — nơi kết quả vốn đã là xấp xỉ.
@@ -253,47 +253,47 @@ FHE toàn phần chưa dùng được cho database thông thường. Nhưng có 
 ### 1. Tổng hợp thống kê riêng tư
 
 ```text
-   Nhieu benh vien muon biet trung binh mot chi so tren TOAN BO
-   benh nhan cua tat ca, nhung KHONG duoc chia se du lieu benh nhan.
+   Nhiều bệnh viện muốn biết trung bình một chỉ số trên TOÀN BỘ
+   bệnh nhân của tất cả, nhưng KHÔNG được chia sẻ dữ liệu bệnh nhân.
 
-   → Moi ben ma hoa du lieu cua minh
-   → May chu trung gian CONG cac ban ma (Paillier — nhanh, du dung)
-   → Chi ket qua tong hop duoc giai ma
+   → Mỗi bên mã hoá dữ liệu của mình
+   → Máy chủ trung gian CỘNG các bản mã (Paillier — nhanh, đủ dùng)
+   → Chỉ kết quả tổng hợp được giải mã
 
-   → Da duoc trien khai trong nghien cuu y te
+   → Đã được triển khai trong nghiên cứu y tế
 ```
 
 ### 2. Học máy bảo mật riêng tư
 
 ```text
-   Mo hinh nam o may chu, du lieu nam o client.
-   Client KHONG muon lo du lieu; may chu KHONG muon lo mo hinh.
+   Mô hình nằm ở máy chủ, dữ liệu nằm ở client.
+   Client KHÔNG muốn lộ dữ liệu; máy chủ KHÔNG muốn lộ mô hình.
 
-   → Client ma hoa dau vao, gui len
-   → May chu suy luan tren ban ma (CKKS)
-   → Client giai ma ket qua
+   → Client mã hoá đầu vào, gửi lên
+   → Máy chủ suy luận trên bản mã (CKKS)
+   → Client giải mã kết quả
 
-   → Da co san pham thuong mai, do tre tinh bang giay
+   → Đã có sản phẩm thương mại, độ trễ tính bằng giây
 ```
 
 ### 3. Giao nhau tập riêng tư (PSI)
 
 ```text
    Hai ben muon biet HO CO CHUNG NHUNG KHACH HANG NAO,
-   ma khong ai lo danh sach day du cua minh.
+   mà không ai lộ danh sách đầy đủ của mình.
 
-   → Duoc dung trong do luong quang cao
-   → Signal dung ky thuat tuong tu cho tinh nang "tim ban be"
+   → Được dùng trong đo lường quảng cáo
+   → Signal dùng kỹ thuật tương tự cho tính năng "tìm bạn bè"
 ```
 
 ### 4. Bỏ phiếu điện tử
 
 ```text
-   Moi la phieu duoc ma hoa.
-   Cong cac la phieu ma hoa → duoc TONG da ma hoa.
-   Chi giai ma TONG, khong bao gio giai ma tung la phieu.
+   Mỗi lá phiếu được mã hoá.
+   Cộng các lá phiếu mã hoá → được TỔNG đã mã hoá.
+   Chỉ giải mã TỔNG, không bao giờ giải mã từng lá phiếu.
 
-   → Paillier rat hop, va da duoc dung trong he thong bau cu that
+   → Paillier rất hợp, và đã được dùng trong hệ thống bầu cử thật
 ```
 
 Điểm chung của bốn ứng dụng: chúng đều cần **rất ít phép toán** (chủ yếu là cộng), và **không cần so sánh hay sắp xếp**.
@@ -318,13 +318,13 @@ Nếu bài toán là "bảo vệ dữ liệu khi đang xử lý", FHE không ph�
 ```text
    Intel SGX, AMD SEV, ARM CVE, AWS Nitro Enclaves
 
-   Du lieu duoc giai ma va xu ly BEN TRONG mot vung
-   ma HE DIEU HANH VA NHA CUNG CAP DAM MAY KHONG DOC DUOC.
+   Dữ liệu được giải mã và xử lý BÊN TRONG một vùng
+   mà HỆ ĐIỀU HÀNH VÀ NHÀ CUNG CẤP ĐÁM MÂY KHÔNG ĐỌC ĐƯỢC.
 
-   ✔ Nhanh gan bang xu ly binh thuong (~5-15% chi phi)
-   ✔ Chay duoc PHAN MEM CO SAN, khong phai viet lai
-   ✘ Phai TIN vao nha san xuat chip
-   ✘ Da co nhieu lo hong duoc cong bo (Foreshadow, SGAxe, Plundervolt...)
+   ✔ Nhanh gần bằng xử lý bình thường (~5-15% chi phí)
+   ✔ Chạy được PHẦN MỀM CÓ SẴN, không phải viết lại
+   ✘ Phải TIN vào nhà sản xuất chip
+   ✘ Đã có nhiều lỗ hổng được công bố (Foreshadow, SGAxe, Plundervolt...)
 ```
 
 Đây là hướng đang được triển khai thật: Azure Confidential Computing, AWS Nitro Enclaves, Google Confidential Space đều dựa trên TEE chứ không dựa trên FHE.
@@ -334,12 +334,12 @@ Nếu bài toán là "bảo vệ dữ liệu khi đang xử lý", FHE không ph�
 Nghe rất hấp dẫn: mã hoá mà vẫn `ORDER BY` được. Nhưng:
 
 ```text
-   Neu ban ma GIU THU TU cua ban ro thi ke tan cong biet thu tu.
-   Voi du lieu co phan bo doan duoc (tuoi, luong, ngay sinh),
-   biet thu tu gan nhu la biet gia tri.
+   Nếu bản mã GIỮ THỨ TỰ của bản rõ thì kẻ tấn công biết thứ tự.
+   Với dữ liệu có phân bố đoán được (tuổi, lương, ngày sinh),
+   biết thứ tự gần như là biết giá trị.
 
-   Nghien cuu tren du lieu benh vien da ma hoa bang OPE:
-     → khoi phuc duoc phan lon gia tri chi bang phan tich thong ke
+   Nghiên cứu trên dữ liệu bệnh viện đã mã hoá bằng OPE:
+     → khôi phục được phần lớn giá trị chỉ bằng phân tích thống kê
 ```
 
 Bài học: **mọi lược đồ cho phép truy vấn đều rò rỉ thông tin**. Câu hỏi không phải "có rò rỉ không" mà là "rò rỉ bao nhiêu, và có chấp nhận được không".
@@ -349,15 +349,15 @@ Bài học: **mọi lược đồ cho phép truy vấn đều rò rỉ thông ti
 ## Khi nào nên quan tâm tới HE
 
 ```text
-   ✔ CO LY DO PHAP LY hoac HOP DONG khong duoc de nha cung cap
-     dam may nhin thay du lieu
-   ✔ Bai toan la TONG HOP tren nhieu ben khong tin nhau
-   ✔ So phep toan RAT IT (chu yeu la cong)
-   ✔ Chap nhan duoc do tre tinh bang giay hoac phut
+   ✔ CÓ LÝ DO PHÁP LÝ hoặc HỢP ĐỒNG không được để nhà cung cấp
+     đám mây nhìn thấy dữ liệu
+   ✔ Bài toán là TỔNG HỢP trên nhiều bên không tin nhau
+   ✔ Số phép toán RẤT ÍT (chủ yếu là cộng)
+   ✔ Chấp nhận được độ trễ tính bằng giây hoặc phút
 
-   ✘ Database nghiep vu thong thuong  → dung TLS + ma hoa dia + phan quyen
+   ✘ Database nghiệp vụ thông thường  → dùng TLS + mã hoá đĩa + phân quyền
    ✘ Can WHERE, ORDER BY, JOIN thuong xuyen
-   ✘ Can do tre mili-giay
+   ✘ Cần độ trễ mili-giây
    ✘ Chi vi "nghe hay"
 ```
 

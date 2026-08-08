@@ -13,7 +13,7 @@ pip install phe psycopg2-binary
 ```sql
 CREATE TABLE luong_ma_hoa (
     id       BIGSERIAL PRIMARY KEY,
-    ten      TEXT   NOT NULL,          -- ro (khong nhay cam)
+    ten      TEXT   NOT NULL,          -- rõ (không nhạy cảm)
     phong    TEXT   NOT NULL,          -- ro (can loc theo)
     luong_ma TEXT   NOT NULL           -- MA HOA
 );
@@ -66,13 +66,13 @@ def tai_ban_ma(chuoi):
     d = json.loads(chuoi)
     return paillier.EncryptedNumber(khoa_cong, int(d["c"]), d["e"])
 
-# BUOC NAY MO PHONG VIEC SERVER LAM — khong dung khoa bi mat
+# BƯỚC NÀY MÔ PHỎNG VIỆC SERVER LÀM — không dùng khoá bí mật
 cur.execute("SELECT luong_ma FROM luong_ma_hoa WHERE phong = 'ky_thuat'")
 cac_ban_ma = [tai_ban_ma(r[0]) for r in cur.fetchall()]
 
 tong_ma_hoa = sum(cac_ban_ma)          # ← CONG TREN BAN MA
 
-# CHI CLIENT giai ma
+# CHỈ CLIENT giải mã
 print(f"Tong luong ky thuat: {khoa_bi_mat.decrypt(tong_ma_hoa):,}")
 ```
 
@@ -87,7 +87,7 @@ Tong luong ky thuat: 97,000,000
 ```python
 cur.execute("SELECT id, luong_ma FROM luong_ma_hoa WHERE phong = 'ky_thuat'")
 for row_id, chuoi in cur.fetchall():
-    moi = tai_ban_ma(chuoi) * 1.15                    # nhan voi hang so RO
+    moi = tai_ban_ma(chuoi) * 1.15                    # nhân với hằng số RÕ
     cur.execute("UPDATE luong_ma_hoa SET luong_ma = %s WHERE id = %s",
                 (json.dumps({"c": str(moi.ciphertext()), "e": moi.exponent}), row_id))
 conn.commit()
@@ -98,18 +98,18 @@ Máy chủ vừa tăng lương cho ba người mà không biết lương cũ hay
 ### Chỗ nó gãy
 
 ```python
-# ✘ KHONG the loc theo dieu kien tren gia tri ma hoa
+# ✘ KHÔNG thể lọc theo điều kiện trên giá trị mã hoá
 cur.execute("SELECT * FROM luong_ma_hoa WHERE luong_ma > 25000000")
-# → so sanh CHUOI ban ma — vo nghia hoan toan
+# → so sánh CHUỖI bản mã — vô nghĩa hoàn toàn
 
-# ✘ KHONG the sap xep
+# ✘ KHÔNG thể sắp xếp
 cur.execute("SELECT * FROM luong_ma_hoa ORDER BY luong_ma")
-# → sap xep theo thu tu tu dien cua ban ma — ngau nhien
+# → sắp xếp theo thứ tự từ điển của bản mã — ngẫu nhiên
 
-# ✘ KHONG the tinh MAX, MIN, AVG (AVG can chia cho so dong — chia thi duoc,
-#   nhung MAX/MIN can SO SANH)
+# ✘ KHÔNG thể tính MAX, MIN, AVG (AVG cần chia cho số dòng — chia thì được,
+#   nhưng MAX/MIN cần SO SÁNH)
 
-# ✘ KHONG the nhan hai gia tri ma hoa voi nhau
+# ✘ KHÔNG thể nhân hai giá trị mã hoá với nhau
 try:
     x = cac_ban_ma[0] * cac_ban_ma[1]
 except Exception as e:
@@ -122,7 +122,7 @@ Loi: unsupported operand type(s)
 
 ```text
    PAILLIER CHO PHEP:   E(a)+E(b),  E(a)+hang_so,  E(a)×hang_so
-   PAILLIER KHONG CHO:  E(a)×E(b),  so sanh,  sap xep,  MAX/MIN
+   PAILLIER KHÔNG CHO:  E(a)×E(b),  so sánh,  sắp xếp,  MAX/MIN
 ```
 
 ---
@@ -141,61 +141,61 @@ N = 1000
 # ─── SINH KHOA ───
 t = time.time()
 paillier.generate_paillier_keypair(n_length=2048)
-print(f"Sinh khoa 2048-bit  : {time.time()-t:.2f}s")
+print(f"Sinh khoá 2048-bit  : {time.time()-t:.2f}s")
 
 # ─── MA HOA ───
 t = time.time()
 cac_ban_ma = [khoa_cong.encrypt(i) for i in range(N)]
 t_ma = time.time() - t
-print(f"Ma hoa {N} so       : {t_ma:.2f}s  ({t_ma/N*1000:.2f} ms/so)")
+print(f"Mã hoá {N} số       : {t_ma:.2f}s  ({t_ma/N*1000:.2f} ms/số)")
 
 # ─── CONG TREN BAN MA ───
 t = time.time()
 tong = sum(cac_ban_ma)
 t_cong = time.time() - t
-print(f"Cong {N} ban ma     : {t_cong:.3f}s ({t_cong/N*1000:.3f} ms/phep)")
+print(f"Cộng {N} bản mã     : {t_cong:.3f}s ({t_cong/N*1000:.3f} ms/phép)")
 
 # ─── GIAI MA ───
 t = time.time()
 khoa_bi_mat.decrypt(tong)
-print(f"Giai ma 1 ket qua   : {(time.time()-t)*1000:.2f} ms")
+print(f"Giải mã 1 kết quả   : {(time.time()-t)*1000:.2f} ms")
 
 # ─── SO SANH: CONG TREN DU LIEU RO ───
 t = time.time()
 sum(range(N))
 t_ro = time.time() - t
-print(f"Cong {N} so RO      : {t_ro*1000:.4f} ms")
-print(f"→ HE cham hon       : {t_cong/max(t_ro,1e-9):,.0f} lan")
+print(f"Cộng {N} số RÕ      : {t_ro*1000:.4f} ms")
+print(f"→ HE chậm hơn       : {t_cong/max(t_ro,1e-9):,.0f} lần")
 
 # ─── KICH THUOC ───
 print(f"So nguyen RO        : 8 byte")
-print(f"Ban ma Paillier     : {len(str(cac_ban_ma[0].ciphertext()))} byte")
+print(f"Bản mã Paillier     : {len(str(cac_ban_ma[0].ciphertext()))} byte")
 ```
 
 ```text
-Sinh khoa 2048-bit  : 1.84s
-Ma hoa 1000 so      : 6.12s  (6.12 ms/so)
-Cong 1000 ban ma    : 0.041s (0.041 ms/phep)
-Giai ma 1 ket qua   : 4.88 ms
-Cong 1000 so RO     : 0.0089 ms
-→ HE cham hon       : 4,607 lan
+Sinh khoá 2048-bit  : 1.84s
+Mã hoá 1000 số      : 6.12s  (6.12 ms/số)
+Cộng 1000 bản mã    : 0.041s (0.041 ms/phép)
+Giải mã 1 kết quả   : 4.88 ms
+Cộng 1000 số RÕ     : 0.0089 ms
+→ HE chậm hơn       : 4,607 lần
 So nguyen RO        : 8 byte
-Ban ma Paillier     : 617 byte
+Bản mã Paillier     : 617 byte
 ```
 
 Đọc bảng này thành lời:
 
 ```text
-   MA HOA la buoc dat nhat: 6,12 ms MOI SO
-     → ma hoa 1 trieu ban ghi = 102 PHUT
-     → chi cho viec ma hoa, chua tinh toan gi
+   MÃ HOÁ là bước đắt nhất: 6,12 ms MỖI SỐ
+     → mã hoá 1 triệu bản ghi = 102 PHÚT
+     → chỉ cho việc mã hoá, chưa tính toán gì
 
-   CONG thi re: 0,041 ms
-     → van cham hon 4.607 lan so voi cong so ro,
-       nhung o quy mo nho thi chap nhan duoc
+   CỘNG thì rẻ: 0,041 ms
+     → vẫn chậm hơn 4.607 lần so với cộng số rõ,
+       nhưng ở quy mô nhỏ thì chấp nhận được
 
    BAN MA PHINH 77 LAN: 8 byte → 617 byte
-     → bang 1 trieu dong: 8 MB → 617 MB
+     → bảng 1 triệu dòng: 8 MB → 617 MB
 ```
 
 ### So sánh với FHE thật
@@ -207,7 +207,7 @@ pip install tenseal
 ```python
 import tenseal as ts, time
 
-# CKKS — so thuc xap xi
+# CKKS — số thực xấp xỉ
 ctx = ts.context(ts.SCHEME_TYPE.CKKS,
                  poly_modulus_degree=8192,
                  coeff_mod_bit_sizes=[60, 40, 40, 60])
@@ -219,30 +219,30 @@ v2 = ts.ckks_vector(ctx, [5.0, 6.0, 7.0, 8.0])
 
 t = time.time(); tong  = v1 + v2;      print(f"Cong  : {(time.time()-t)*1000:.2f} ms")
 t = time.time(); tich  = v1 * v2;      print(f"Nhan  : {(time.time()-t)*1000:.2f} ms")
-t = time.time(); cham  = v1.dot(v2);   print(f"Tich vo huong: {(time.time()-t)*1000:.2f} ms")
+t = time.time(); cham  = v1.dot(v2);   print(f"Tích vô hướng: {(time.time()-t)*1000:.2f} ms")
 
-print(f"Ket qua cong : {[round(x,2) for x in tong.decrypt()]}")
-print(f"Ket qua nhan : {[round(x,2) for x in tich.decrypt()]}")
-print(f"Kich thuoc   : {len(tong.serialize()):,} byte cho 4 so thuc")
+print(f"Kết quả cộng : {[round(x,2) for x in tong.decrypt()]}")
+print(f"Kết quả nhân : {[round(x,2) for x in tich.decrypt()]}")
+print(f"Kích thước   : {len(tong.serialize()):,} byte cho 4 số thực")
 ```
 
 ```text
 Cong  : 0.31 ms
 Nhan  : 12.44 ms
 Tich vo huong: 18.72 ms
-Ket qua cong : [6.0, 8.0, 10.0, 12.0]
-Ket qua nhan : [5.0, 12.0, 21.0, 32.0]
-Kich thuoc   : 262,242 byte cho 4 so thuc
+Kết quả cộng : [6.0, 8.0, 10.0, 12.0]
+Kết quả nhân : [5.0, 12.0, 21.0, 32.0]
+Kích thước   : 262,242 byte cho 4 số thực
 ```
 
 Hai con số đáng chú ý:
 
 ```text
-   NHAN cham hon CONG 40 LAN (0,31 ms → 12,44 ms)
-     → moi phep nhan them nhieu, va giam "ngan sach" phep toan con lai
+   NHÂN chậm hơn CỘNG 40 LẦN (0,31 ms → 12,44 ms)
+     → mỗi phép nhân thêm nhiễu, và giảm "ngân sách" phép toán còn lại
 
    262 KB CHO 4 SO THUC
-     → 4 so × 8 byte = 32 byte o dang ro
+     → 4 số × 8 byte = 32 byte ở dạng rõ
      → PHINH 8.195 LAN
 ```
 
@@ -251,22 +251,22 @@ Nhưng chú ý điểm mạnh của CKKS: nó thao tác trên **vector**, không
 ```python
 import numpy as np
 v_lon = ts.ckks_vector(ctx, list(np.random.rand(4096)))
-t = time.time(); r = v_lon + v_lon; print(f"Cong 4096 so: {(time.time()-t)*1000:.2f} ms")
-print(f"Kich thuoc  : {len(r.serialize()):,} byte")
+t = time.time(); r = v_lon + v_lon; print(f"Cộng 4096 số: {(time.time()-t)*1000:.2f} ms")
+print(f"Kích thước  : {len(r.serialize()):,} byte")
 ```
 
 ```text
-Cong 4096 so: 0.42 ms
+Cộng 4096 số: 0.42 ms
 Kich thuoc  : 262,242 byte
 ```
 
 ```text
-   → CUNG kich thuoc ban ma, nhung chua 4.096 so thay vi 4
-   → Chi phi moi so: 262.242 / 4.096 = 64 byte  (thay vi 65.560 byte)
-   → PHINH chi con 8 LAN
+   → CÙNG kích thước bản mã, nhưng chứa 4.096 số thay vì 4
+   → Chi phí mỗi số: 262.242 / 4.096 = 64 byte  (thay vì 65.560 byte)
+   → PHÌNH chỉ còn 8 LẦN
 
-   BAI HOC: FHE chi hieu qua khi TAN DUNG DUOC TINH VECTOR (SIMD).
-            Ma hoa tung gia tri le la lang phi khung khiep.
+   BÀI HỌC: FHE chỉ hiệu quả khi TẬN DỤNG ĐƯỢC TÍNH VECTOR (SIMD).
+            Mã hoá từng giá trị lẻ là lãng phí khủng khiếp.
 ```
 
 Đây là chi tiết quyết định khi thiết kế hệ thống dùng FHE: phải **gói dữ liệu thành vector**, không mã hoá từng ô một.
@@ -286,34 +286,34 @@ Từng bước cần gì:
 ```text
    ┌──────────────────────────────────────────────────────────────┐
    │ WHERE luong > 20000000                                       │
-   │   → SO SANH tren ban ma                                      │
-   │   → TFHE lam duoc, ~1 GIAY moi phep so sanh                  │
-   │   → 1 trieu dong = 1.000.000 giay = 11,5 NGAY                │
+   │   → SO SÁNH trên bản mã                                      │
+   │   → TFHE làm được, ~1 GIÂY mỗi phép so sánh                  │
+   │   → 1 triệu dòng = 1.000.000 giây = 11,5 NGÀY                │
    ├──────────────────────────────────────────────────────────────┤
    │ GROUP BY phong                                               │
-   │   → phai so sanh de nhom → lai la so sanh                    │
-   │   → hoac de `phong` o dang RO (lo thong tin)                 │
+   │   → phải so sánh để nhóm → lại là so sánh                    │
+   │   → hoặc để `phong` ở dạng RÕ (lộ thông tin)                 │
    ├──────────────────────────────────────────────────────────────┤
    │ AVG(luong)                                                   │
-   │   → SUM lam duoc (re)                                        │
-   │   → chia cho COUNT: COUNT phu thuoc ket qua WHERE            │
-   │     → ma ket qua WHERE cung la BAN MA                        │
-   │     → chia hai ban ma: RAT dat                               │
+   │   → SUM làm được (rẻ)                                        │
+   │   → chia cho COUNT: COUNT phụ thuộc kết quả WHERE            │
+   │     → mà kết quả WHERE cũng là BẢN MÃ                        │
+   │     → chia hai bản mã: RẤT đắt                               │
    └──────────────────────────────────────────────────────────────┘
 
-   → MOT truy van don gian tren 1 trieu dong:  TINH BANG NGAY
-   → Cung truy van tren du lieu ro:            ~200 mili-giay
+   → MỘT truy vấn đơn giản trên 1 triệu dòng:  TÍNH BẰNG NGÀY
+   → Cùng truy vấn trên dữ liệu rõ:            ~200 mili-giây
 ```
 
 ### Và vấn đề sâu hơn: index không hoạt động
 
 ```text
-   Index B+Tree hoat dong nho SAP XEP.
-   Ban ma FHE (dung nghia) KHONG GIU THU TU — do la yeu cau an toan.
+   Index B+Tree hoạt động nhờ SẮP XẾP.
+   Bản mã FHE (đúng nghĩa) KHÔNG GIỮ THỨ TỰ — đó là yêu cầu an toàn.
 
-   → KHONG danh index duoc
-   → MOI truy van la QUET TOAN BANG
-   → 1 trieu dong × 1 giay/so sanh = 11,5 ngay
+   → KHÔNG đánh index được
+   → MỌI truy vấn là QUÉT TOÀN BẢNG
+   → 1 triệu dòng × 1 giây/so sánh = 11,5 ngày
 ```
 
 Đây là lý do cấu trúc, không phải lý do hiệu năng: **muốn index thì phải giữ thứ tự, mà giữ thứ tự thì rò rỉ thông tin**. Hai yêu cầu mâu thuẫn trực tiếp.
@@ -324,25 +324,25 @@ Không ai chạy `WHERE` trên FHE. Mẫu thực tế:
 
 ```text
    ┌──────────────────────────────────────────────────────────────┐
-   │ 1. Cot LOC de o dang RO hoac ma hoa xac dinh                 │
-   │      phong, ngay_tao, trang_thai  → ro, danh index duoc      │
-   │ 2. Cot NHAY CAM de ma hoa dong cau                           │
-   │      luong, so_du, chi_so_y_te   → chi CONG duoc             │
-   │ 3. Truy van: LOC bang cot ro, TONG HOP bang cot ma hoa       │
+   │ 1. Cột LỌC để ở dạng RÕ hoặc mã hoá xác định                 │
+   │      phong, ngay_tao, trang_thai  → rõ, đánh index được      │
+   │ 2. Cột NHẠY CẢM để mã hoá đồng cấu                           │
+   │      luong, so_du, chi_so_y_te   → chỉ CỘNG được             │
+   │ 3. Truy vấn: LỌC bằng cột rõ, TỔNG HỢP bằng cột mã hoá       │
    └──────────────────────────────────────────────────────────────┘
 ```
 
 ```sql
--- LOC bang cot ro (nhanh, dung index)
+-- LỌC bằng cột rõ (nhanh, dùng index)
 SELECT luong_ma FROM luong_ma_hoa
  WHERE phong = 'ky_thuat' AND ngay_vao > '2024-01-01';
--- roi CONG cac ban ma o tang ung dung
+-- rồi CỘNG các bản mã ở tầng ứng dụng
 ```
 
 ```text
-   ✔ Thuc te dung duoc
-   ✘ Lo thong tin qua cot ro:
-       "phong ky thuat co 3 nguoi" — co the la thong tin nhay cam
+   ✔ Thực tế dùng được
+   ✘ Lộ thông tin qua cột rõ:
+       "phòng kỹ thuật có 3 người" — có thể là thông tin nhạy cảm
 ```
 
 Đây chính là điều [bài 1](01-homomorphic-encryption.md) nói: **mọi lược đồ cho phép truy vấn đều rò rỉ**. Việc thiết kế là chọn **rò rỉ cái gì**.
@@ -364,14 +364,14 @@ SELECT luong_ma FROM luong_ma_hoa
 Bảng này là câu trả lời đầy đủ cho câu hỏi "có nên dùng HE không":
 
 ```text
-   Neu mo hinh de doa cua ban KHONG bao gom "nha cung cap dam may
-   hoac quan tri vien la ke tan cong":
-     → TLS + ma hoa dia + phan quyen la DU
-     → HE chi them chi phi khong dem lai gi
+   Nếu mô hình đe doạ của bạn KHÔNG bao gồm "nhà cung cấp đám mây
+   hoặc quản trị viên là kẻ tấn công":
+     → TLS + mã hoá đĩa + phân quyền là ĐỦ
+     → HE chỉ thêm chi phí không đem lại gì
 
    Neu CO bao gom:
-     → TEE la lua chon thuc dung nhat hom nay
-     → HE cho cac bai toan HEP: tong hop nhieu ben, hoc may
+     → TEE là lựa chọn thực dụng nhất hôm nay
+     → HE cho các bài toán HẸP: tổng hợp nhiều bên, học máy
 ```
 
 ---
@@ -380,17 +380,17 @@ Bảng này là câu trả lời đầy đủ cho câu hỏi "có nên dùng HE 
 
 ```text
    1. TANG TOC BANG PHAN CUNG
-      Intel, Samsung, DARPA dang lam chip chuyen dung cho FHE.
-      Muc tieu: rut khoang cach tu ~10.000 lan xuong ~100 lan.
-      Neu dat duoc → doi cuoc choi hoan toan.
+      Intel, Samsung, DARPA đang làm chip chuyên dụng cho FHE.
+      Mục tiêu: rút khoảng cách từ ~10.000 lần xuống ~100 lần.
+      Nếu đạt được → đổi cuộc chơi hoàn toàn.
 
    2. LUOC DO MOI VA TOI UU
-      TFHE-rs, CKKS bootstrapping nhanh hon, ky thuat "dong goi"
-      tot hon → moi nam nhanh len vai lan.
+      TFHE-rs, CKKS bootstrapping nhanh hơn, kỹ thuật "đóng gói"
+      tốt hơn → mỗi năm nhanh lên vài lần.
 
    3. CHUAN HOA
-      ISO/IEC va NIST dang chuan hoa FHE.
-      Chuan hoa thuong la dau hieu cong nghe sap ra khoi phong thi nghiem.
+      ISO/IEC và NIST đang chuẩn hoá FHE.
+      Chuẩn hoá thường là dấu hiệu công nghệ sắp ra khỏi phòng thí nghiệm.
    ```
 
 Điều đáng học vượt ra ngoài FHE: **theo dõi khoảng cách giữa "khả thi về lý thuyết" và "khả thi về kinh tế"**. Rất nhiều công nghệ nằm ở vùng thứ nhất hàng chục năm trước khi vào vùng thứ hai — và mã hoá khoá công khai từng ở đúng vị trí đó vào thập niên 1970.
@@ -398,16 +398,16 @@ Bảng này là câu trả lời đầy đủ cho câu hỏi "có nên dùng HE 
 ## Danh sách kiểm tra trước khi dùng HE
 
 ```text
-   □ Mo hinh de doa co THAT SU bao gom nha cung cap ha tang khong?
-   □ Da can nhac TEE chua? (nhanh hon HANG NGHIN lan)
-   □ Bai toan co chi can CONG khong? (→ Paillier, du dung)
-   □ Co can WHERE / ORDER BY tren cot ma hoa khong? (→ HE bo tay)
-   □ Chap nhan duoc do tre giay/phut khong?
-   □ Da tinh chi phi ma hoa BAN DAU chua? (6 ms/gia tri × so ban ghi)
-   □ Da tinh dung luong PHINH chua? (77× voi Paillier)
-   □ Du lieu co GOI THANH VECTOR duoc khong? (bat buoc voi CKKS)
-   □ Khoa bi mat luu o dau, ai giu?
-   □ Doi co du chuyen mon toan/mat ma khong?
+   □ Mô hình đe doạ có THẬT SỰ bao gồm nhà cung cấp hạ tầng không?
+   □ Đã cân nhắc TEE chưa? (nhanh hơn HÀNG NGHÌN lần)
+   □ Bài toán có chỉ cần CỘNG không? (→ Paillier, đủ dùng)
+   □ Có cần WHERE / ORDER BY trên cột mã hoá không? (→ HE bó tay)
+   □ Chấp nhận được độ trễ giây/phút không?
+   □ Đã tính chi phí mã hoá BAN ĐẦU chưa? (6 ms/giá trị × số bản ghi)
+   □ Đã tính dung lượng PHÌNH chưa? (77× với Paillier)
+   □ Dữ liệu có GÓI THÀNH VECTOR được không? (bắt buộc với CKKS)
+   □ Khoá bí mật lưu ở đâu, ai giữ?
+   □ Đội có đủ chuyên môn toán/mật mã không?
 ```
 
 Nếu có bất kỳ câu "không" nào ở ba dòng đầu, gần như chắc chắn bạn chưa cần HE.
