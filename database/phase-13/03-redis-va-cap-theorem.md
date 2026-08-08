@@ -10,21 +10,21 @@ Bốn lý do, và lý do thứ tư là lý do phản trực giác nhất:
 
 ```text
    1. TOAN BO DU LIEU TRONG RAM
-      → khong bao gio cham dia trong duong doc/ghi
+      → không bao giờ chạm đĩa trong đường đọc/ghi
       → ~100 nanogiay thay vi ~100 microgiay
 
    2. CAU TRUC DU LIEU TOI UU SAN
-      → khong phai phan tich SQL, khong lap ke hoach, khong toi uu
-      → GET la mot lan tra bang bam: O(1)
+      → không phải phân tích SQL, không lập kế hoạch, không tối ưu
+      → GET là một lần tra bảng băm: O(1)
 
    3. GIAO THUC RESP CUC GON
-      → phan tich rat nhanh, khong co dong goi nang ne
+      → phân tích rất nhanh, không có đóng gói nặng nề
 
-   4. MOT LUONG CHO LENH   ← phan truc giac
-      → khong co khoa
-      → khong co chuyen ngu canh
-      → khong co dieu kien tranh chap
-      → moi lenh la NGUYEN TU MIEN PHI
+   4. MỘT LUỒNG CHO LỆNH   ← phản trực giác
+      → không có khoá
+      → không có chuyển ngữ cảnh
+      → không có điều kiện tranh chấp
+      → mỗi lệnh là NGUYÊN TỬ MIỄN PHÍ
 ```
 
 Điểm 4 xứng đáng nói kỹ. Trực giác nói "nhiều luồng thì nhanh hơn", nhưng với thao tác chỉ mất **vài trăm nanogiây**, chi phí lấy khoá và chuyển ngữ cảnh **lớn hơn chính công việc**.
@@ -32,8 +32,8 @@ Bốn lý do, và lý do thứ tư là lý do phản trực giác nhất:
 ```text
    THAO TAC MAT 200 ns
    ═══════════════════
-   Lay/tra khoa mutex   : ~20-100 ns    → 10-50% chi phi thuan tuy
-   Chuyen ngu canh      : ~1.000-3.000 ns → GAP 5-15 LAN cong viec
+   Lấy/trả khoá mutex   : ~20-100 ns    → 10-50% chi phí thuần tuý
+   Chuyển ngữ cảnh      : ~1.000-3.000 ns → GẤP 5-15 LẦN công việc
 
    → Voi thao tac cuc ngan, MOT LUONG THANG.
 ```
@@ -49,20 +49,20 @@ Từ Redis 6.0 có **I/O đa luồng** — nhưng chỉ cho việc **đọc/ghi 
    Script Lua vòng lặp dài                 →  bao lâu tuỳ script
 
    → TRONG SUOT THOI GIAN DO, MOI CLIENT KHAC BI CHAN.
-   → Do tre p99 tang vot, va khong co canh bao nao truoc.
+   → Độ trễ p99 tăng vọt, và không có cảnh báo nào trước.
 ```
 
 Đây là nguyên nhân sự cố Redis phổ biến nhất. Cách phòng:
 
 ```bash
-# Vo hieu hoa cac lenh nguy hiem trong san pham that
+# Vô hiệu hoá các lệnh nguy hiểm trong sản phẩm thật
 rename-command KEYS ""
 rename-command FLUSHALL ""
 rename-command FLUSHDB ""
 ```
 
 ```bash
-# Theo doi lenh cham
+# Theo dõi lệnh chậm
 redis-cli CONFIG SET slowlog-log-slower-than 10000    # 10 ms
 redis-cli SLOWLOG GET 10
 ```
@@ -71,7 +71,7 @@ Và luôn dùng `SCAN` thay `KEYS`:
 
 ```text
    KEYS pattern   →  O(n), CHAN toan bo server
-   SCAN cursor    →  lap dan, moi lan tra ve mot phan, KHONG chan
+   SCAN cursor    →  lặp dần, mỗi lần trả về một phần, KHÔNG chặn
 ```
 
 ---
@@ -84,9 +84,9 @@ Và luôn dùng `SCAN` thay `KEYS`:
    MOT KIEU DU LIEU (vi du: Hash) CO NHIEU MA HOA BEN TRONG
 
    Nho  →  listpack   : mang phang, quet tuyen tinh O(n)
-                        → RAT gon, tot voi it phan tu
-   Lon  →  hashtable  : bang bam that, O(1)
-                        → ton hon nhieu, nhung nhanh voi nhieu phan tu
+                        → RẤT gọn, tốt với ít phần tử
+   Lớn →  hashtable  : bảng băm thật, O(1)
+                        → tốn hơn nhiều, nhưng nhanh với nhiều phần tử
 ```
 
 Ngưỡng chuyển đổi:
@@ -97,8 +97,8 @@ redis-cli CONFIG GET hash-max-listpack-value      # 64
 ```
 
 ```text
-   Hash co <= 128 truong VA moi gia tri <= 64 byte  →  listpack
-   Vuot MOT trong hai nguong                        →  hashtable
+   Hash có <= 128 trường VÀ mọi giá trị <= 64 byte  →  listpack
+   Vượt MỘT trong hai ngưỡng                        →  hashtable
 ```
 
 Kiểm tra mã hoá thật:
@@ -126,7 +126,7 @@ redis-cli OBJECT ENCODING h1
 Đây là chi tiết rất quan trọng và rất hay bị bỏ sót:
 
 ```bash
-redis-cli HDEL h1 f3                    # xoa truong dai di
+redis-cli HDEL h1 f3                    # xoá trường dài đi
 redis-cli OBJECT ENCODING h1
 ```
 
@@ -135,20 +135,20 @@ redis-cli OBJECT ENCODING h1
 ```
 
 ```text
-   → Chi MOT lan vuot nguong la ma hoa doi VINH VIEN
-   → Bo nho khong bao gio quay lai muc cu
-   → Muon quay ve: phai XOA khoa va tao lai
+   → Chỉ MỘT lần vượt ngưỡng là mã hoá đổi VĨNH VIỄN
+   → Bộ nhớ không bao giờ quay lại mức cũ
+   → Muốn quay về: phải XOÁ khoá và tạo lại
 ```
 
 Tác động thực tế có thể rất lớn:
 
 ```text
-   1 TRIEU hash, moi cai 10 truong nho
+   1 TRIỆU hash, mỗi cái 10 trường nhỏ
      listpack  :  ~104 byte/hash  →  104 MB
      hashtable :  ~400 byte/hash  →  400 MB
 
-   → Chi vi MOT truong vuot 64 byte trong moi hash,
-     bo nho tang GAP 4 LAN.
+   → Chỉ vì MỘT trường vượt 64 byte trong mỗi hash,
+     bộ nhớ tăng GẤP 4 LẦN.
 ```
 
 Bảng ngưỡng cho các kiểu:
@@ -167,9 +167,9 @@ Ngưỡng 44 byte của `embstr` cũng đáng nhớ: chuỗi ≤ 44 byte đượ
 ### Điều tra bộ nhớ
 
 ```bash
-redis-cli --bigkeys          # tim khoa lon nhat moi kieu
-redis-cli --memkeys          # tim khoa ton bo nho nhat
-redis-cli MEMORY USAGE khoa  # bo nho THAT cua mot khoa
+redis-cli --bigkeys          # tìm khoá lớn nhất mỗi kiểu
+redis-cli --memkeys          # tìm khoá tốn bộ nhớ nhất
+redis-cli MEMORY USAGE khoa  # bộ nhớ THẬT của một khoá
 redis-cli MEMORY DOCTOR      # goi y tu Redis
 redis-cli INFO memory
 ```
@@ -177,9 +177,9 @@ redis-cli INFO memory
 Chú ý phân biệt hai lệnh hay bị nhầm:
 
 ```text
-   OBJECT ENCODING khoa   →  tra ve TEN MA HOA ("listpack", "hashtable")
-   MEMORY USAGE khoa      →  tra ve SO BYTE
-                             (co tuy chon SAMPLES n de lay mau)
+   OBJECT ENCODING khoa   →  trả về TÊN MÃ HOÁ ("listpack", "hashtable")
+   MEMORY USAGE khoa      →  trả về SỐ BYTE
+                             (có tuỳ chọn SAMPLES n để lấy mẫu)
 ```
 
 ---
@@ -189,20 +189,20 @@ Chú ý phân biệt hai lệnh hay bị nhầm:
 Redis **không** phải cache thuần tuý; nó lưu xuống đĩa được, và cho bạn chọn mức đảm bảo:
 
 ```text
-   RDB (anh chup)                     AOF (nhat ky nhung lenh ghi)
+   RDB (ảnh chụp)                     AOF (nhật ký những lệnh ghi)
    ═════════════                      ════════════════════════════
-   Dinh ky luu toan bo trang thai     Ghi lai MOI lenh thay doi du lieu
-   → file nho, khoi phuc nhanh        → file lon, khoi phuc cham hon
-   → MAT du lieu giua hai lan chup    → mat toi da theo appendfsync
-   → fork() tao ban sao → dung        → ghi lai dinh ky de gon lai
-     bo nho tam thoi tang vot
+   Định kỳ lưu toàn bộ trạng thái     Ghi lại MỌI lệnh thay đổi dữ liệu
+   → file nhỏ, khôi phục nhanh        → file lớn, khôi phục chậm hơn
+   → MẤT dữ liệu giữa hai lần chụp    → mất tối đa theo appendfsync
+   → fork() tạo bản sao → dung        → ghi lại định kỳ để gọn lại
+     bộ nhớ tạm thời tăng vọt
 ```
 
 ```bash
-# appendfsync — nut van do ben
-appendfsync always     # fsync moi lenh — khong mat gi, cham nhat
-appendfsync everysec   # fsync moi giay — mat toi da 1 giay  (MAC DINH)
-appendfsync no         # de he dieu hanh quyet — co the mat ~30 giay
+# appendfsync — nút vặn độ bền
+appendfsync always     # fsync mỗi lệnh — không mất gì, chậm nhất
+appendfsync everysec   # fsync mỗi giây — mất tối đa 1 giây  (MẶC ĐỊNH)
+appendfsync no         # để hệ điều hành quyết — có thể mất ~30 giây
 ```
 
 Đây là ví dụ đẹp cho nguyên tắc ở [phase-2 bài 2](../phase-2/02-atomicity-va-durability.md): **độ bền là nút vặn, không phải công tắc**. Redis công khai điều đó thay vì giấu đi.
@@ -210,19 +210,19 @@ appendfsync no         # de he dieu hanh quyet — co the mat ~30 giay
 ### Cái bẫy của `fork()`
 
 ```text
-   Ca RDB lan viec ghi lai AOF deu dung fork().
+   Cả RDB lẫn việc ghi lại AOF đều dùng fork().
 
-   Linh vuc copy-on-write: ban sao ban dau khong ton bo nho.
-   NHUNG neu ung dung dang ghi nhieu trong luc fork chay:
-     → cac page bi sua phai duoc SAO CHEP THAT
-     → bo nho co the tang toi GAP DOI trong thoi gian ngan
-     → neu may khong du RAM → OOM killer giet Redis
+   Lĩnh vực copy-on-write: bản sao ban đầu không tốn bộ nhớ.
+   NHƯNG nếu ứng dụng đang ghi nhiều trong lúc fork chạy:
+     → các page bị sửa phải được SAO CHÉP THẬT
+     → bộ nhớ có thể tăng tới GẤP ĐÔI trong thời gian ngắn
+     → nếu máy không đủ RAM → OOM killer giết Redis
 ```
 
 Phòng thủ:
 
 ```bash
-# Cho phep cap phat vuot muc — BAT BUOC voi Redis
+# Cho phép cấp phát vượt mức — BẮT BUỘC với Redis
 sysctl vm.overcommit_memory=1
 ```
 
@@ -233,9 +233,9 @@ Không đặt tham số này là nguyên nhân số một khiến Redis bị gi�
 ## Redis Cluster
 
 ```text
-   16.384 KHE BAM (hash slot) chia cho cac nut
+   16.384 KHE BĂM (hash slot) chia cho các nút
 
-   slot = CRC16(khoa) mod 16384
+   slot = CRC16(khoá) mod 16384
 
    Nut A: khe     0 - 5460
    Nut B: khe  5461 - 10922
@@ -261,8 +261,8 @@ redis-cli -c MSET "user:{42}:name" An "user:{42}:email" an@x.com
 ```
 
 ```text
-   Ca hai khoa deu bam theo "42"
-   → cung mot khe → cung mot nut → thao tac nhieu khoa CHAY DUOC
+   Cả hai khoá đều băm theo "42"
+   → cùng một khe → cùng một nút → thao tác nhiều khoá CHẠY ĐƯỢC
 ```
 
 Đây chính là kỹ thuật **nhóm cùng vị trí** ở [phase-7 bài 1](../phase-7/01-database-sharding-la-gi.md), áp cho Redis.
@@ -270,18 +270,18 @@ redis-cli -c MSET "user:{42}:name" An "user:{42}:email" an@x.com
 ### Cluster không đảm bảo nhất quán mạnh
 
 ```text
-   Redis Cluster dung nhan ban BAT DONG BO.
+   Redis Cluster dùng nhân bản BẤT ĐỒNG BỘ.
 
-   1. Client ghi vao primary → primary tra ve OK NGAY
-   2. Primary chet TRUOC KHI kip nhan ban
-   3. Replica duoc thang cap
+   1. Client ghi vào primary → primary trả về OK NGAY
+   2. Primary chết TRƯỚC KHI kịp nhân bản
+   3. Replica được thăng cấp
    → LENH GHI DO BIEN MAT
 ```
 
 Redis ghi rõ điều này trong tài liệu. Nếu cần đảm bảo mạnh hơn:
 
 ```bash
-WAIT 1 1000     # cho it nhat 1 replica xac nhan, toi da 1000 ms
+WAIT 1 1000     # chờ ít nhất 1 replica xác nhận, tối đa 1000 ms
 ```
 
 Nhưng `WAIT` **không phải** commit hai pha — nó chỉ giảm cửa sổ mất dữ liệu, không loại bỏ hoàn toàn.
@@ -293,15 +293,15 @@ Nhưng `WAIT` **không phải** commit hai pha — nó chỉ giảm cửa sổ m
 Bây giờ tới khung tư duy tổng quát cho **mọi** hệ phân tán.
 
 ```text
-   Trong mot he PHAN TAN, khi mang bi CHIA CAT (partition),
-   ban phai chon giua:
+   Trong một hệ PHÂN TÁN, khi mạng bị CHIA CẮT (partition),
+   bạn phải chọn giữa:
 
-        C — Consistency  (nhat quan): moi nut tra ve du lieu MOI NHAT
-        A — Availability (kha dung) : moi yeu cau deu duoc tra loi
-        P — Partition tolerance     : he van chay khi mang dut
+        C — Consistency  (nhất quán): mọi nút trả về dữ liệu MỚI NHẤT
+        A — Availability (khả dụng) : mọi yêu cầu đều được trả lời
+        P — Partition tolerance     : hệ vẫn chạy khi mạng đứt
 
    → P KHONG PHAI LUA CHON. Mang SE dut.
-   → Nen thuc te chi la: chon C hay chon A khi P xay ra.
+   → Nên thực tế chỉ là: chọn C hay chọn A khi P xảy ra.
 ```
 
 ### Diễn bằng ví dụ
@@ -314,14 +314,14 @@ Bây giờ tới khung tư duy tổng quát cho **mọi** hệ phân tán.
    │ x=5  │        │ x=5  │            │ x=5  │      │ x=5  │
    └─────┘        └─────┘             └─────┘      └─────┘
                                           ▲            ▲
-                                     ghi x=9      doc x = ?
+                                     ghi x=9      đọc x = ?
 
    CHON C (nhat quan):  nut B TU CHOI tra loi
-                        → "toi khong chac minh co du lieu moi nhat"
-                        → he KHONG KHA DUNG voi B
+                        → "tôi không chắc mình có dữ liệu mới nhất"
+                        → hệ KHÔNG KHẢ DỤNG với B
 
-   CHON A (kha dung) :  nut B tra ve x=5 (du lieu CU)
-                        → he van chay, nhung KHONG NHAT QUAN
+   CHỌN A (khả dụng) :  nút B trả về x=5 (dữ liệu CŨ)
+                        → hệ vẫn chạy, nhưng KHÔNG NHẤT QUÁN
 ```
 
 ### Bản đồ các hệ
@@ -346,15 +346,15 @@ Dòng đầu tiên đáng chú ý: **CAP chỉ áp dụng cho hệ phân tán**.
 CAP chỉ nói về lúc mạng đứt. Nhưng mạng đứt là chuyện **hiếm**. PACELC bổ sung phần còn lại:
 
 ```text
-   NEU (P) mang dut  →  chon giua (A) kha dung va (C) nhat quan
-   NGUOC LAI (E)     →  chon giua (L) do tre thap va (C) nhat quan
+   NẾU (P) mạng đứt  →  chọn giữa (A) khả dụng và (C) nhất quán
+   NGƯỢC LẠI (E)     →  chọn giữa (L) độ trễ thấp và (C) nhất quán
 ```
 
 ```text
    Vi du:
-     PostgreSQL dong bo : PC / EC   — luon uu tien nhat quan
-     Cassandra          : PA / EL   — luon uu tien kha dung va do tre
-     MongoDB            : PC / EC   — nhung dieu chinh duoc
+     PostgreSQL đồng bộ : PC / EC   — luôn ưu tiên nhất quán
+     Cassandra          : PA / EL   — luôn ưu tiên khả dụng và độ trễ
+     MongoDB            : PC / EC   — nhưng điều chỉnh được
      DynamoDB           : PA / EL   — mac dinh
 ```
 
@@ -365,17 +365,17 @@ PACELC hữu dụng hơn CAP trong thực tế, vì phần "EL" — đánh đổ
 ### Ba hiểu lầm phổ biến về CAP
 
 ```text
-   ❌ "Chon 2 trong 3"
-   ✔  P khong phai lua chon. Chi chon C hay A KHI P xay ra.
+   ❌ "Chọn 2 trong 3"
+   ✔  P không phải lựa chọn. Chỉ chọn C hay A KHI P xảy ra.
 
-   ❌ "NoSQL la AP, SQL la CP"
-   ✔  Phu thuoc CAU HINH, khong phu thuoc loai san pham.
-      PostgreSQL bat dong bo la AP. MongoDB w:majority la CP.
+   ❌ "NoSQL là AP, SQL là CP"
+   ✔  Phụ thuộc CẤU HÌNH, không phụ thuộc loại sản phẩm.
+      PostgreSQL bất đồng bộ là AP. MongoDB w:majority là CP.
 
-   ❌ "He AP thi khong dang tin"
-   ✔  Rat nhieu nghiep vu chap nhan duoc du lieu tre vai tram ms.
-      Dem luot thich, goi y san pham, thong ke — deu on voi AP.
-      Chi tien bac, ton kho, cho ngoi moi thuc su can C.
+   ❌ "Hệ AP thì không đáng tin"
+   ✔  Rất nhiều nghiệp vụ chấp nhận được dữ liệu trễ vài trăm ms.
+      Đếm lượt thích, gợi ý sản phẩm, thống kê — đều ổn với AP.
+      Chỉ tiền bạc, tồn kho, chỗ ngồi mới thực sự cần C.
 ```
 
 ---
