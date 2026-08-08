@@ -2,9 +2,9 @@
 
 > Kafka với Spring — từ topic đầu tiên tới hệ thống streaming production.
 
-69 bài về Kafka trong hệ sinh thái Java/Spring: nền tảng Kafka (topic, partition, key, offset, rebalancing), Spring Cloud Stream cho producer và consumer, consumer group và scaling, event routing, cụm Kafka và replication, xử lý theo lô, xử lý song song, độ tin cậy và ack, xử lý lỗi và retry, transaction và exactly-once, testing, bảo mật, phần mổ xẻ nội bộ Kafka (ZooKeeper, KRaft/Raft, ISR, high watermark, failover có số đo), và các chủ đề bổ sung (ưu tiên message, offset commit toàn tập, partitioner tuỳ chỉnh, TLS từ gốc).
+69 bài về Kafka trong hệ sinh thái Java/Spring: nền tảng Kafka (topic, partition, key, offset, rebalancing), Spring Cloud Stream cho producer và consumer, consumer group và scaling, event routing, cụm Kafka và replication, xử lý theo lô, xử lý song song, độ tin cậy và ack, xử lý lỗi và retry, transaction và exactly-once, testing, bảo mật, phần mổ xẻ nội bộ Kafka (ZooKeeper, KRaft/Raft, ISR, high watermark, failover có số đo), các chủ đề bổ sung (ưu tiên message, offset commit toàn tập, partitioner tuỳ chỉnh, TLS từ gốc), và Kafka Streams từ đầu tới vận hành production.
 
-**76 bài** trong 20 phần.
+**84 bài** trong 21 phần.
 
 ## Mục lục
 
@@ -188,6 +188,21 @@
 | [06](phase-21-chu-de-tu-tai-lieu/06-ssl-tls-cho-kafka-tu-goc.md) | Bài 6: SSL/TLS cho Kafka từ gốc — CA, keystore, truststore |
 | [07](phase-21-chu-de-tu-tai-lieu/07-ba-tang-test-cho-kafka.md) | Bài 7: Ba tầng test cho Kafka — Test Binder, EmbeddedKafka, Testcontainers |
 
+### Phase 22 — kafka streams
+
+> Xử lý luồng **có trạng thái** — phần mà consumer thường làm được nhưng làm rất tệ. Từ KStream/KTable tới cửa sổ thời gian, join, state store, và vận hành trên Kubernetes.
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-22-kafka-streams/01-kafka-streams-la-gi.md) | Bài 1: Kafka Streams là gì — và vì sao nó không cần cụm xử lý riêng |
+| [02](phase-22-kafka-streams/02-kstream-ktable-globalktable.md) | Bài 2: KStream, KTable, GlobalKTable — ba trừu tượng cốt lõi |
+| [03](phase-22-kafka-streams/03-phep-bien-doi-khong-trang-thai.md) | Bài 3: Phép biến đổi không trạng thái — và bẫy repartition ẩn |
+| [04](phase-22-kafka-streams/04-trang-thai-state-store-va-changelog.md) | Bài 4: Trạng thái — state store, RocksDB và changelog topic |
+| [05](phase-22-kafka-streams/05-cua-so-thoi-gian-windowing.md) | Bài 5: Cửa sổ thời gian — tumbling, hopping, sliding, session |
+| [06](phase-22-kafka-streams/06-join-trong-kafka-streams.md) | Bài 6: Join trong Kafka Streams — bốn kiểu và yêu cầu đồng phân vùng |
+| [07](phase-22-kafka-streams/07-topology-task-thread-va-van-hanh.md) | Bài 7: Topology, task, thread và vận hành ứng dụng Streams |
+| [08](phase-22-kafka-streams/08-ksqldb-va-khi-nao-khong-dung.md) | Bài 8: ksqlDB và khi nào không nên dùng Kafka Streams |
+
 ## Nên bắt đầu từ đâu
 
 | Bạn đang ở tình huống | Đọc từ |
@@ -202,6 +217,8 @@
 | Cần ưu tiên message (VIP xử lý trước) | phase-21 bài 2 — ba mẫu và giới hạn thật của Kafka |
 | Hay bị trùng hoặc mất message | phase-21 bài 3 — offset commit toàn tập |
 | Phải tự tạo chứng chỉ TLS | phase-21 bài 6 — CA, keystore, truststore từ gốc |
+| Cần đếm/gộp/join theo cửa sổ thời gian | phase-22 — Kafka Streams từ đầu |
+| Đang cân nhắc Kafka Streams vs Flink vs ksqlDB | phase-22 bài 1 và bài 8 |
 
 ---
 
