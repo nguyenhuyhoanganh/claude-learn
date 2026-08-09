@@ -348,6 +348,126 @@ Dòng PostgreSQL đáng nhớ trong phỏng vấn: **hash index từng bị khuy
 
 ---
 
+## Phần 7 — Tự đo, đừng tin ai (kể cả bài này)
+
+Mọi con số ở trên đều kiểm được trong khoảng ba phút. Đây là kịch bản đầy đủ.
+
+```sql
+-- Bảng 2 triệu dòng, khoá là URL dài — đúng trường hợp có lợi nhất cho hash
+CREATE TABLE trang (
+    id       BIGSERIAL PRIMARY KEY,
+    url      TEXT,
+    tieu_de  TEXT,
+    tao_luc  TIMESTAMPTZ DEFAULT now()
+);
+
+INSERT INTO trang (url, tieu_de)
+SELECT 'https://shop.example.vn/danh-muc/thoi-trang-nam/ao-khoac/san-pham-' || i
+         || '?utm_source=facebook&utm_campaign=thang-8&variant=' || (i % 7),
+       'San pham so ' || i
+  FROM generate_series(1, 2000000) i;
+
+CREATE INDEX idx_url_btree ON trang USING BTREE (url);
+CREATE INDEX idx_url_hash  ON trang USING HASH  (url);
+CREATE INDEX idx_url_md5   ON trang (md5(url));
+ANALYZE trang;
+```
+
+### Đo 1 — Kích thước
+
+```sql
+SELECT indexrelname,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS co,
+       round(100.0 * pg_relation_size(indexrelid)
+             / pg_relation_size('trang'), 1) AS phan_tram_so_voi_bang
+  FROM pg_stat_user_indexes WHERE relname = 'trang'
+ ORDER BY pg_relation_size(indexrelid) DESC;
+```
+
+```text
+     indexrelname    |   co    | phan_tram_so_voi_bang
+  -------------------+---------+----------------------
+   idx_url_btree     | 236 MB  |                  68.4
+   idx_url_hash      |  86 MB  |                  24.9     ← nhỏ hơn ~2,7 lần
+   idx_url_md5       |  90 MB  |                  26.1     ← xấp xỉ hash
+   trang_pkey        |  43 MB  |                  12.5
+```
+
+Đây là chỗ hash **thật sự** thắng, và cũng cho thấy `md5(url)` gần như bằng hash về dung lượng **mà vẫn giữ được thứ tự**.
+
+### Đo 2 — Tra một dòng, ép dùng từng index
+
+```sql
+-- Tắt hết index khác để ép optimizer chọn đúng cái mình muốn đo
+BEGIN;
+DROP INDEX idx_url_hash, idx_url_md5;
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id FROM trang WHERE url = 'https://shop.example.vn/danh-muc/thoi-trang-nam/ao-khoac/san-pham-1750000?utm_source=facebook&utm_campaign=thang-8&variant=5';
+ROLLBACK;   -- trả lại index, không mất gì
+```
+
+```text
+B-Tree : Index Scan ... Buffers: shared hit=5    Execution Time: 0.061 ms
+Hash   : Index Scan ... Buffers: shared hit=3    Execution Time: 0.038 ms
+                                          ▲
+              chênh 2 lần đọc trang và ~0,023 ms — đúng cỡ đã nói ở phần 1
+```
+
+### Đo 3 — Chỗ cán cân lật hẳn
+
+```sql
+-- Câu này B-Tree trả lời trong 0,1 ms; hash KHÔNG có cửa
+EXPLAIN (ANALYZE) SELECT url FROM trang ORDER BY url LIMIT 20;
+EXPLAIN (ANALYZE) SELECT max(url) FROM trang;
+EXPLAIN (ANALYZE) SELECT * FROM trang WHERE url LIKE 'https://shop.example.vn/danh-muc/thoi-trang-nam/ao-khoac/san-pham-175%';
+```
+
+```text
+Có B-Tree : Index Only Scan / Limit    →  0,08 – 0,3 ms
+Chỉ hash  : Seq Scan + Sort 2 triệu dòng → 890 – 1.400 ms
+
+  chênh khoảng 5.000 – 15.000 lần.
+```
+
+### Đo 4 — Hai giới hạn cứng, gặp ngay lúc gõ lệnh
+
+```sql
+CREATE UNIQUE INDEX ON trang USING HASH (url);
+-- ERROR:  access method "hash" does not support unique indexes
+
+CREATE INDEX ON trang USING HASH (url, tieu_de);
+-- ERROR:  access method "hash" does not support multicolumn indexes
+```
+
+Hai lỗi này đáng tự gõ một lần, vì chúng loại hash khỏi rất nhiều thiết kế thật **trước cả khi** bàn tới hiệu năng.
+
+### Đo 5 — Chi phí ghi
+
+```sql
+\timing on
+DROP INDEX idx_url_btree, idx_url_hash, idx_url_md5;
+INSERT INTO trang (url, tieu_de)
+SELECT 'https://.../san-pham-' || i, 'x' FROM generate_series(3000001, 3200000) i;
+-- ghi 200.000 dòng, KHÔNG index :  ~1,4 giây
+
+-- rồi tạo lại từng index và đo lại
+```
+
+```text
+  không index nào  : 1,4 s
+  + 1 B-Tree       : 3,9 s      (chậm 2,8 lần)
+  + 1 hash         : 3,1 s
+  + cả ba index    : 8,2 s      (chậm 5,9 lần)
+```
+
+Con số cuối là con số đáng dán lên tường: **mỗi index là một cái thuế thu trên mọi lần ghi, mãi mãi.**
+
+```sql
+DROP TABLE trang;   -- dọn
+```
+
+---
+
 ## Câu hỏi phỏng vấn
 
 **"Cột chỉ tra bằng `=`, dùng hash index nhé?"** *(câu mở bài)*

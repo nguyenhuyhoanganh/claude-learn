@@ -246,6 +246,147 @@ Câu lệnh dài thêm đúng hai chữ, và cái `Seq Scan` biến mất.
 
 > **Đính chính nguồn.** Bản gốc nói *"Postgres, MySQL, cả 3 đều vậy"* — chỉ kể tên hai hệ, con số "3" là chỗ nói vấp. Quan trọng hơn: câu *"máy luôn chọn B-Tree"* **không đúng tuyệt đối**. MySQL engine `MEMORY` mặc định là HASH; Oracle có `CREATE BITMAP INDEX` là câu lệnh riêng. Điều đúng ở mọi hệ là: **mặc định của bảng nghiệp vụ thông thường luôn là B-Tree, và không hệ nào hỏi bạn cả.**
 
+### SP-GiST: loại ít người biết nhất trong sáu loại
+
+Năm loại kia sẽ có bài riêng. Riêng SP-GiST thì không, nên nói gọn ở đây.
+
+**SP** = *Space-Partitioned* — cây **phân hoạch không gian** và **không cân bằng**. Khác biệt cốt lõi với GiST:
+
+```text
+GiST   : các ô con ĐƯỢC PHÉP chồng lấn nhau
+         → một điểm có thể nằm trong nhiều ô → phải mở nhiều nhánh
+
+SP-GiST: các ô con KHÔNG chồng lấn, phủ kín và rời nhau
+         → một điểm nằm trong ĐÚNG MỘT ô → đi thẳng một nhánh
+         → đổi lại: cây có thể rất lệch nếu dữ liệu dồn cục
+```
+
+Ba dạng dùng thật:
+
+```sql
+-- 1. Điểm trong không gian: quadtree/k-d tree, nhanh hơn GiST khi dữ liệu phân bố lệch
+CREATE INDEX ON quan_an USING SPGIST (vi_tri);
+
+-- 2. Tiền tố văn bản: radix tree (cây tiền tố) — index NHỎ hơn btree rất nhiều
+--    vì các chuỗi chung tiền tố dùng chung nhánh
+CREATE INDEX ON urls USING SPGIST (duong_dan text_ops);
+SELECT * FROM urls WHERE duong_dan LIKE 'https://shop.vn/danh-muc/%';
+
+-- 3. Địa chỉ mạng: cực hợp vì IP vốn là cây tiền tố nhị phân
+CREATE INDEX ON nhat_ky USING SPGIST (dia_chi_ip inet_ops);
+SELECT * FROM nhat_ky WHERE dia_chi_ip << '10.0.0.0/8';
+```
+
+Dòng thứ hai đáng nhớ: với cột URL hoặc đường dẫn (rất nhiều chuỗi chung tiền tố), **SP-GiST radix tree thường nhỏ hơn B-Tree 2-5 lần** và trả lời tiền tố nhanh hơn. Rất ít người biết, và nó đúng cái hình dạng dữ liệu của mọi bảng log web.
+
+Cái giá: SP-GiST **không hỗ trợ index nhiều cột**, và với dữ liệu phân bố đều thì nó thua GiST.
+
+## Phòng thí nghiệm: dựng lại đúng đêm đó trên máy bạn
+
+Đọc xong mà không gõ lại thì chỉ nhớ được vài ngày. Đoạn này dựng đủ dữ liệu để **tự nhìn thấy** cả bốn câu lệnh, chạy trong khoảng hai phút.
+
+```sql
+-- 1. Dựng bảng 3 triệu dòng (đủ để optimizer bỏ index, không cần tới 12 triệu)
+CREATE TABLE bai_viet (
+    id          BIGSERIAL PRIMARY KEY,
+    khach_id    INT,
+    tieu_de     TEXT,
+    noi_dung    TEXT,
+    vi_do       DOUBLE PRECISION,
+    kinh_do     DOUBLE PRECISION,
+    tao_luc     TIMESTAMPTZ
+);
+
+INSERT INTO bai_viet (khach_id, tieu_de, noi_dung, vi_do, kinh_do, tao_luc)
+SELECT (random()*100000)::int,
+       'Bai viet so ' || i,
+       CASE WHEN i % 250 = 0
+            THEN 'Chinh sach doi tra va bao hanh 12 thang chinh hang cho san pham'
+            ELSE 'Noi dung mau khong chua tu khoa can tim, dai vua du de giong that'
+       END,
+       20.5 + random()*2,
+       105.0 + random()*2,
+       now() - (random()*365) * interval '1 day'
+  FROM generate_series(1, 3000000) i;
+
+-- 2. Đánh index đúng như đêm đó: cột nào cũng có index, đều là mặc định
+CREATE INDEX ON bai_viet (khach_id);
+CREATE INDEX ON bai_viet (noi_dung);      -- đây là cái sẽ KHÔNG cứu được câu 1
+CREATE INDEX ON bai_viet (vi_do);         -- và cái này KHÔNG cứu được câu 2
+CREATE INDEX ON bai_viet (tao_luc);
+ANALYZE bai_viet;
+```
+
+Giờ chạy bốn câu và đọc plan:
+
+```sql
+-- CÂU 4 — có thứ tự → dùng index ngọt
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM bai_viet WHERE khach_id = 42;
+```
+
+```text
+Bitmap Heap Scan on bai_viet  (actual time=0.089..0.152 rows=31 loops=1)
+  Recheck Cond: (khach_id = 42)
+  Buffers: shared hit=34                       ← chạm 34 trang
+  ->  Bitmap Index Scan on bai_viet_khach_id_idx  (actual time=0.061..0.061 rows=31)
+Execution Time: 0.203 ms
+```
+
+```sql
+-- CÂU 1 — chuỗi nằm GIỮA → index trên noi_dung vô dụng
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM bai_viet WHERE noi_dung LIKE '%bao hanh%';
+```
+
+```text
+Gather  (actual time=1.9..2841 rows=12000 loops=1)
+  ->  Parallel Seq Scan on bai_viet  (actual time=... rows=4000 loops=3)
+        Filter: (noi_dung ~~ '%bao hanh%')
+        Rows Removed by Filter: 996000
+  Buffers: shared hit=112 read=71428            ← chạm 71.540 trang, gấp 2.100 lần
+Execution Time: 2853 ms
+```
+
+Hai plan này cạnh nhau là toàn bộ bài học: **cùng một bảng, cùng có index, chênh nhau 14.000 lần** — không phải vì dữ liệu, mà vì **hình dạng câu hỏi**.
+
+```sql
+-- Đổi hình dạng câu hỏi: TIỀN TỐ thay vì chuỗi giữa
+EXPLAIN (ANALYZE) SELECT * FROM bai_viet WHERE noi_dung LIKE 'Chinh sach%';
+--  → Index Scan, dưới 1 ms. Cùng cột, cùng index, chỉ đổi vị trí dấu %.
+
+-- Rồi gọi tên đúng cấu trúc cho câu hỏi "chứa chuỗi"
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX ON bai_viet USING GIN (noi_dung gin_trgm_ops);
+EXPLAIN (ANALYZE) SELECT * FROM bai_viet WHERE noi_dung LIKE '%bao hanh%';
+--  → Bitmap Heap Scan qua index GIN, ~15 ms thay vì 2.853 ms.
+```
+
+```sql
+-- CÂU 2 — "gần" trong hai chiều: btree trên vi_do không giữ được khoảng cách
+EXPLAIN (ANALYZE)
+SELECT * FROM bai_viet
+ ORDER BY point(kinh_do, vi_do) <-> point(105.83, 21.02)
+ LIMIT 20;
+--  → Seq Scan + Sort trên 3 triệu dòng, dù vi_do đã có index.
+
+CREATE INDEX ON bai_viet USING GIST (point(kinh_do, vi_do));
+--  → giờ Index Scan kNN, dưới 1 ms.
+```
+
+Ba dòng cần rút ra khi đọc plan:
+
+| Đọc dòng nào | Nó nói gì |
+|---|---|
+| `Seq Scan` / `Index Scan` / `Bitmap Heap Scan` | Máy **chọn đường nào** |
+| `Buffers: shared hit=... read=...` | **Số trang thật sự phải đọc** — đây mới là chi phí, không phải mili giây |
+| `Rows Removed by Filter` | Số dòng đọc lên rồi **vứt đi**. Con số này lớn nghĩa là index không lọc giúp được gì |
+
+Dòng `Buffers` là dòng quý nhất và ít người bật nhất. Mili giây phụ thuộc máy đang bận hay rảnh; **số trang thì không nói dối**.
+
+```sql
+-- Dọn phòng thí nghiệm
+DROP TABLE bai_viet;
+```
+
 ## Vì sao gần như không ai biết chuyện này?
 
 Sáu loại index nằm ngay trong máy, tài liệu công khai và miễn phí, vậy mà phần lớn dev đi hết sự nghiệp chỉ dùng **một loại**. Vì sao?

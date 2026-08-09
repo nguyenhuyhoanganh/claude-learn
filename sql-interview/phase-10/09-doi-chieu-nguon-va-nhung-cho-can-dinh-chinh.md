@@ -325,6 +325,29 @@ SELECT relname, n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables;
 
 Tám lệnh, chạy trong dưới một phút, và chúng kiểm được **năm trong chín** chỗ đính chính ở trên.
 
+### Tự kiểm luôn cả những gì phase này **thêm vào**
+
+Công bằng thì bài này cũng phải soi chính nó. Ngoài nội dung nguồn, phase 10 thêm khá nhiều khẳng định — và mỗi cái đều **kèm số phiên bản** để bạn kiểm, đúng theo câu hỏi số 1 ở dưới.
+
+| Khẳng định phase này thêm | Có từ phiên bản | Lệnh tự kiểm |
+|---|---|---|
+| Cắt đuôi khoá dẫn đường (suffix truncation) | PostgreSQL 12 | `SELECT version();` rồi so cỡ index cột chuỗi dài trước/sau khi nâng cấp |
+| Khử trùng lặp trong B-Tree | PostgreSQL 13 | `SELECT reloptions FROM pg_class WHERE relname='ten_index';` → `deduplicate_items` |
+| Fastpath chèn ở lá phải cùng | PostgreSQL 11 | Đo thời gian chèn 1 triệu dòng khoá tăng dần vs khoá ngẫu nhiên |
+| `REINDEX ... CONCURRENTLY` | PostgreSQL 12 | Gõ thử; bản cũ báo lỗi cú pháp |
+| `minmax_multi_ops`, `bloom` cho BRIN | PostgreSQL 14 | `SELECT opcname FROM pg_opclass JOIN pg_am ON ... WHERE amname='brin';` |
+| `INCLUDE` cho GiST / SP-GiST | PG 12 / PG 14 | Gõ thử `CREATE INDEX ... USING gist (a) INCLUDE (b);` |
+| `phraseto_tsquery` và toán tử `<->` | PostgreSQL 9.6 | `SELECT phraseto_tsquery('simple','Hà Nội');` |
+| `hnsw.iterative_scan` | pgvector 0.8 | `SHOW hnsw.iterative_scan;` — bản cũ báo lỗi tham số lạ |
+| `halfvec` | pgvector 0.7 | `SELECT '[1,2,3]'::halfvec;` |
+| SP-GiST radix tree nhỏ hơn B-Tree trên cột URL | mọi bản | Tạo cả hai trên cùng cột rồi so `pg_relation_size` |
+| `DROP INDEX` khoá cả đọc | mọi bản | Chạy `DROP INDEX` trong một transaction chưa commit, rồi `SELECT` từ phiên khác |
+| LSM-tree khuếch đại ghi thấp hơn B-Tree | — (kiến trúc) | Không kiểm được bằng một lệnh; đây là khẳng định **có điều kiện**, xem ghi chú dưới |
+
+**Ghi chú về dòng cuối** — và đây là loại khẳng định cần thận trọng nhất trong cả phase. So sánh B-Tree với LSM-tree **không có một con số đúng duy nhất**: nó phụ thuộc tỷ lệ đọc/ghi, kiểu compaction (leveled hay size-tiered), cỡ khoá, và mức nén. Con số "10-30 lần" cho khuếch đại ghi của compaction là **khoảng thường gặp trong tài liệu RocksDB**, không phải hằng số. Cách nói an toàn và vẫn đúng: *"LSM dời chi phí từ lúc ghi sang lúc đọc và lúc compaction"* — nêu **hướng của đánh đổi** thay vì nêu một tỷ số.
+
+Nguyên tắc chung rút ra: **khẳng định kèm số phiên bản thì kiểm được bằng một lệnh; khẳng định về kiến trúc thì chỉ nêu được hướng, không nêu được tỷ số.** Trộn hai loại đó với nhau là cách nhanh nhất để nói sai mà nghe rất chắc.
+
 ### Ba câu hỏi nên đặt cho mọi nguồn kỹ thuật
 
 1. **"Con số này của phiên bản nào?"** — Hash index của PostgreSQL 9.6 và của PostgreSQL 10 là hai câu chuyện khác nhau. `minmax_multi` chỉ có từ PG 14. Một khẳng định không kèm phiên bản là một khẳng định chưa hoàn chỉnh.
@@ -340,6 +363,7 @@ Tám lệnh, chạy trong dưới một phút, và chúng kiểm được **năm
 - Không chỗ nào làm hỏng bài học. Bảy kết luận lớn đều đứng vững — chỉ cần nói chính xác hơn ở đúng những chỗ người phỏng vấn giỏi sẽ hỏi vặn.
 - Bốn loại phát biểu, bốn cách kiểm: **con số lịch sử** → tra nguồn gốc; **phép tính** → tự bấm lại; **hành vi của hệ** → chạy thử; **khẳng định tuyệt đối** → tìm một phản ví dụ.
 - Chữ **"không bao giờ"** và **"luôn luôn"** trong tài liệu kỹ thuật gần như luôn là chỗ đáng đào — riêng nguyên tắc này bắt được ba trong chín chỗ trên.
+- Phase này cũng tự soi chính nó: mọi khẳng định **thêm vào ngoài nguồn** đều kèm **số phiên bản** và **lệnh tự kiểm**. Riêng khẳng định về **kiến trúc** (B-Tree vs LSM) thì chỉ nêu được **hướng của đánh đổi**, không nêu được tỷ số — trộn hai loại đó là cách nhanh nhất để nói sai mà nghe rất chắc.
 - Ba câu hỏi cho mọi nguồn: **"phiên bản nào?"**, **"cách LƯU hay cách CHẠY?"**, **"điều kiện ngầm là gì?"**.
 
 **Quay lại** → [Mục lục series](../README.md) · **Xem lại bản đồ** → [Bài 8](08-ban-do-chon-index-theo-hinh-dang-cau-hoi.md)

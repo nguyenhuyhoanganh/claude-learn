@@ -269,7 +269,107 @@ Với livestream bán hàng, câu trả lời thường là **LL-HLS** — đủ
 
 ---
 
-## Phần 6 — Định luật rút ra: bộ đệm là quả cân
+## Phần 6 — LL-HLS bên trong: rút 18 giây mà vẫn giữ được cây CDN
+
+Phần 5 nói *"cắt mẩu ngắn lại và rút bể chứa"*. Nghe thì đơn giản, nhưng nếu chỉ làm đúng vậy thì bạn sẽ đâm vào hai bức tường. LL-HLS giải quyết chúng bằng ba cơ chế đáng học, vì **cùng ba ý tưởng đó dùng được cho mọi API gần thời gian thực**.
+
+### Bức tường 1 — Hỏi liên tục để biết có mẩu mới
+
+Với HLS thường, trình phát **hỏi thăm** (poll) playlist vài giây một lần. Mẩu càng ngắn thì phải hỏi càng dày:
+
+```text
+  mẩu 4 giây   → hỏi playlist mỗi ~2 giây
+  mẩu 0,3 giây → hỏi playlist mỗi ~0,15 giây
+
+  × 2.100.000 người = 14.000.000 lượt hỏi playlist mỗi giây
+                      → và phần lớn trả về "chưa có gì mới"
+```
+
+**Cách LL-HLS chữa: playlist chặn (blocking playlist reload).**
+
+```text
+Trình phát hỏi:  GET /live.m3u8?_HLS_msn=1043&_HLS_part=2
+                 "cho tôi playlist KHI nào có mẩu con 1043.2"
+
+Máy chủ KHÔNG trả lời ngay. Nó GIỮ request lại tới khi mẩu đó ra đời.
+
+  → 1 request phục vụ đúng 1 lần cập nhật, không có lượt hỏi rỗng nào
+  → tỷ lệ dùng lại giữ nguyên, vì mọi người chờ CÙNG một câu trả lời
+    (và máy biên gộp chúng lại đúng như case 1)
+```
+
+Đây chính là **long polling** — cùng kỹ thuật với **purgatory** của Kafka và `fetch.max.wait.ms`, cùng ý tưởng với `LISTEN/NOTIFY` của PostgreSQL. Nguyên tắc chung đáng mang đi:
+
+> **Khi dữ liệu tới thưa hơn nhịp bạn hỏi, đừng hỏi dày hơn — hãy giữ request lại và để máy chủ trả lời khi có.**
+
+### Bức tường 2 — Mẩu chưa đóng xong thì chưa tải được
+
+Với HLS thường, một mẩu chỉ tồn tại **sau khi đóng file**. LL-HLS tách nó ra:
+
+```text
+  seg-1043.ts  =  part-1043.0  +  part-1043.1  +  ...  +  part-1043.9
+                  (0,3 giây)      (0,3 giây)           (0,3 giây)
+
+  Mẩu con được phát đi NGAY khi đóng, không đợi mẩu đầy đủ.
+  Khi đủ 10 mẩu con, máy chủ công bố luôn tệp đầy đủ seg-1043.ts
+  → người xem mạng yếu vẫn tải bản 4 giây như cũ, KHÔNG cần đổi gì.
+```
+
+```text
+#EXT-X-PART-INF:PART-TARGET=0.334
+#EXT-X-PART:DURATION=0.334,URI="part-1043.0.mp4"
+#EXT-X-PART:DURATION=0.334,URI="part-1043.1.mp4"
+#EXT-X-PRELOAD-HINT:TYPE=PART,URI="part-1043.2.mp4"
+                    ▲
+      "mẩu con tiếp theo sẽ tên thế này" — trình phát xin TRƯỚC khi nó tồn tại,
+      máy chủ giữ request lại rồi đẩy ngay khi có → tiết kiệm trọn 1 vòng RTT
+```
+
+Hai thứ đáng mang đi: **phát dần từng phần** (giống HTTP chunked / streaming response) và **gợi ý nạp trước** (giống `Link: rel=preload`, HTTP/2 push, prefetch của trình duyệt).
+
+### Cái giá thật của LL-HLS
+
+| Vấn đề | HLS thường | LL-HLS |
+|---|---|---|
+| Số lượt hỏi tệp | 525.000/giây | **~1,7 triệu/giây** (mẩu con nhiều hơn) |
+| Số kết nối **đang mở** ở máy biên | Ngắn, đóng ngay | **Giữ lâu** → mỗi máy biên phải ôm hàng trăm nghìn kết nối chờ |
+| Yêu cầu với CDN | CDN nào cũng chạy | Phải hỗ trợ blocking reload + phát dần; **không phải CDN nào cũng có** |
+| Bộ đệm người xem | 12 giây | 1-2 giây → nhạy với mạng hụt |
+| Chi phí máy biên | Chuẩn | Cao hơn ~2-4 lần |
+
+Dòng thứ hai là chỗ hay bị bỏ sót: **giữ request lại** nghĩa là mỗi máy biên phải ôm hàng trăm nghìn kết nối đang chờ. Đó là bài toán C10K/C1M — cùng họ với [phase-6 case 3](../phase-6-runtime-ha-tang/03-case-can-port-fd.md) về cạn file descriptor. Bạn không xoá được chi phí, **bạn chuyển nó từ "nhiều lượt hỏi ngắn" sang "ít lượt hỏi nhưng giữ lâu"**.
+
+### Đo cái gì để biết mình đặt quả cân đúng chỗ
+
+Đây là bốn chỉ số của ngành video, và cả bốn đều có bản tương đương ở backend:
+
+| Chỉ số | Nghĩa | Ngưỡng thường dùng | Bản tương đương ở backend |
+|---|---|---|---|
+| **Rebuffering ratio** | % thời gian xem bị đứng khung | < 0,5% là tốt, > 2% là hỏng | Tỷ lệ lỗi / timeout |
+| **Startup time** | Từ lúc bấm play tới khung hình đầu | < 2 giây | p50 độ trễ |
+| **Glass-to-glass latency** | Từ ống kính tới màn hình người xem | tuỳ mục tiêu | Độ trễ đầu-cuối |
+| **Exit-before-start** | % người bỏ đi trước khi hình lên | < 3% | Tỷ lệ bỏ giỏ hàng |
+
+```text
+Nguyên tắc đọc bốn chỉ số này:
+
+  Hạ độ trễ mà rebuffering ratio TĂNG  → bạn vừa dời chi phí sang người mạng yếu
+  Hạ độ trễ mà rebuffering ratio GIỮ   → bạn vừa cải thiện thật
+
+  Chỉ đo cột thứ ba mà không đo cột thứ nhất = tự lừa mình.
+```
+
+Và cách làm đúng của các nền tảng lớn không phải chọn một con số cho tất cả, mà là **để quả cân trượt theo từng người xem**:
+
+```text
+  mạng khoẻ, ổn định  →  bộ đệm mỏng, độ trễ 2-3 giây
+  mạng yếu, hay hụt   →  bộ đệm dày, độ trễ 10-20 giây
+
+  Cùng một phiên live, hai người xem, hai chỗ đặt quả cân khác nhau.
+  Đây là ABR (adaptive bitrate) áp dụng cho ĐỘ TRỄ, không chỉ cho chất lượng hình.
+```
+
+## Phần 7 — Định luật rút ra: bộ đệm là quả cân
 
 Mượt (*smoothness*) và tức thì (*low latency*) **không phải hai mục tiêu cùng tiến**. Chúng là **hai đầu của cùng một cái cân**, và **bộ đệm chính là quả cân**.
 
@@ -302,7 +402,7 @@ Nhìn bảng này rồi quay lại câu hỏi mở đầu: **cứ chỗ nào có
 
 ---
 
-## Phần 7 — Áp dụng ngay: bốn thứ đo được tuần này
+## Phần 8 — Áp dụng ngay: bốn thứ đo được tuần này
 
 **1. Liệt kê mọi bộ đệm trong hệ thống của bạn, kèm giá trị hiện tại.**
 
@@ -356,6 +456,8 @@ Phần lớn các con số này chưa bao giờ được ai chọn — chúng l�
 - Cắt mẩu ngắn 4 lần thì **số lượt hỏi tăng 4 lần — nhân với số người xem**. Cái giá của độ trễ thấp không nằm ở một máy.
 - Bình luận nhanh gấp 100 lần vì nó xoá cả ba khoản nợ: **đã trọn vẹn lúc bấm gửi**, **không cần bể chống giật**, và **đi bằng kết nối đã mở sẵn** (tiết kiệm ~80 ms bắt tay TCP+TLS mỗi lượt).
 - Hạ 20 giây xuống 2 giây **làm được**, bằng LL-HLS/WebRTC — nhưng đó là **tháo mất bể chống giật**. Với 2,1 triệu người, 1% mạng yếu là **21.000 người bị đứng khung**.
+- LL-HLS làm được nhờ ba cơ chế dùng lại được ở mọi API gần thời gian thực: **playlist chặn** (long polling — máy chủ giữ request tới khi có dữ liệu), **phát dần từng mẩu con**, và **gợi ý nạp trước**. Chi phí không mất đi — nó **chuyển từ "nhiều lượt hỏi ngắn" sang "ít lượt hỏi nhưng giữ kết nối lâu"**, tức bài toán ôm hàng trăm nghìn kết nối chờ.
+- Bốn chỉ số phải đo cùng lúc: **rebuffering ratio**, startup time, glass-to-glass latency, exit-before-start. **Hạ độ trễ mà rebuffering tăng là dời chi phí sang người mạng yếu, không phải cải thiện.**
 - **Mượt và tức thì là hai đầu của cùng một cái cân, và bộ đệm chính là quả cân.** Không có cấu hình nào cho cả hai — chỉ có lựa chọn đặt quả cân ở đâu.
 - Cái cân đó có ở khắp backend: `linger.ms`, độ sâu hàng đợi, TTL cache, Nagle, batch ghi, buffer log, backoff. **Phần lớn đang để mặc định — tức là ai đó khác đã chọn hộ bạn.**
 - Lần sau gặp độ trễ, đừng hỏi *"ai đang chậm?"*. Hãy hỏi **"bộ đệm đang dày bao nhiêu, và ai chọn con số đó?"**.

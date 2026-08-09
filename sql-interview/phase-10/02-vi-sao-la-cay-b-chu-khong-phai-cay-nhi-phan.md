@@ -307,6 +307,182 @@ B+Tree:
 
 Chữ "+" chính là thứ khiến `BETWEEN`, `>`, `ORDER BY ... LIMIT 20` gần như miễn phí: nhảy tới lá đầu tiên rồi **đi ngang theo dây chuyền**, không quay lên cây lần nào. Đó cũng là lý do bài 3 sẽ cho thấy hash index mất trắng nhóm truy vấn này.
 
+## Bốn thứ PostgreSQL đã thêm vào cây B mà bạn đang hưởng miễn phí
+
+Cây B năm 1970 và cây B trong máy bạn không giống hệt nhau. Bốn cải tiến sau đều **âm thầm**, đều đo được, và đều là câu trả lời tốt cho *"bạn có đọc release note không?"*.
+
+### 1. Tách trang chệch phải (rightmost split) — từ rất sớm
+
+Tách nút "công bằng" là chia 50/50. Nhưng khi khoá **tăng dần** (`BIGSERIAL`, `created_at`), mọi lần chèn đều rơi vào lá ngoài cùng bên phải. Chia 50/50 ở đó là lãng phí: nửa trái sẽ **không bao giờ** nhận thêm dòng nào nữa.
+
+```text
+Chia 50/50 ở lá phải cùng:        Chia chệch (90/10):
+  [400][400]                        [720][80]
+   ▲ nửa này chết cứng ở 50%         ▲ lấp gần đầy rồi mới bỏ lại
+
+  → index phình gần gấp đôi          → index gọn, ít trang hơn ~40%
+```
+
+Đây là một lý do nữa (ngoài lý do "bẩn nhiều trang" ở phần trước) khiến **khoá tăng dần thắng khoá ngẫu nhiên**.
+
+### 2. Cắt đuôi khoá dẫn đường (suffix truncation) — PostgreSQL 12
+
+Nút trong **không cần khoá đầy đủ**, nó chỉ cần đủ để **phân biệt hai nhánh**.
+
+```text
+Hai lá cạnh nhau:
+   lá trái  cuối cùng: 'nguyen_van_an_hanoi_2024'
+   lá phải  đầu tiên : 'nguyen_van_binh_hue_2023'
+
+Khoá dẫn đường ở nút cha:
+   TRƯỚC PG12: 'nguyen_van_binh_hue_2023'   (24 byte, chép nguyên)
+   TỪ  PG12  : 'nguyen_van_b'               (12 byte, cắt ngay khi đủ phân biệt)
+
+  → khoá dẫn đường hẹp đi → FANOUT CAO HƠN → cây thấp hơn
+```
+
+Với index trên cột chuỗi dài, cải tiến này một mình đã giảm cỡ index **10-30%**.
+
+### 3. Khử trùng lặp (deduplication) — PostgreSQL 13
+
+Cột có nhiều giá trị lặp — `trang_thai`, `khach_id` trên bảng đơn hàng — thì lá cũ lưu giá trị đó **lặp đi lặp lại**:
+
+```text
+TRƯỚC PG13:  ('paid', ctid1) ('paid', ctid2) ('paid', ctid3) ... × 20.000
+TỪ  PG13  :  ('paid', [ctid1, ctid2, ctid3, ... ])   ← một mục, danh sách ctid nén
+
+  → index trên cột lặp nhiều nhỏ đi 2-5 lần.
+```
+
+```sql
+-- Bật/tắt cho từng index (mặc định BẬT với btree không unique)
+CREATE INDEX ... WITH (deduplicate_items = on);
+```
+
+Đây cũng là lý do lời khuyên *"đừng index cột ít giá trị"* đã **mềm đi** so với mười năm trước: index đó giờ rẻ hơn nhiều về dung lượng — dù vấn đề độ chọn lọc ở [bài 4](04-bitmap-index-va-cot-it-gia-tri.md) thì vẫn nguyên.
+
+### 4. Đường tắt chèn cuối (fastpath) — PostgreSQL 11
+
+Khi khoá tăng dần, PostgreSQL **nhớ lá ngoài cùng bên phải** và chèn thẳng vào đó, bỏ qua việc đi cây từ gốc.
+
+```text
+Chèn thường  : gốc → tầng 2 → tầng 3 → lá     (4 lần đọc trang)
+Chèn fastpath: → lá đã ghim sẵn               (1 lần đọc trang)
+```
+
+Nghĩa là **khoá tăng dần rẻ hơn khoá ngẫu nhiên ở cả ba mặt**: ít trang bẩn hơn, tách trang gọn hơn, và ít lần đọc trang hơn khi chèn. Ba lý do độc lập cho cùng một lời khuyên.
+
+---
+
+## Phần mở rộng: khi phần cứng đổi câu hỏi thì câu trả lời cũng đổi — LSM-tree
+
+Bài này khép lại bằng một câu: *"ràng buộc nào trong quyết định bạn viết hôm nay sẽ hết hiệu lực trước?"*. Có một câu trả lời rất cụ thể cho chính cây B — và nó đã xảy ra rồi.
+
+Cây B tối ưu cho một giả định: **đọc và ghi đắt như nhau**. Đúng với đĩa quay, vì cả hai đều là một lần dịch cần gạt.
+
+Với SSD, giả định đó **vỡ**:
+
+```text
+SSD (NAND flash):
+  đọc  một trang 4 KB   :  ~100 µs
+  ghi  một trang 4 KB   :  ~300 µs  (chậm hơn 3 lần)
+  XOÁ  một khối 256 KB  : ~2.000 µs (phải xoá CẢ KHỐI mới ghi đè được)
+
+  → GHI NGẪU NHIÊN đắt hơn ĐỌC ngẫu nhiên rất nhiều,
+    và mỗi ô nhớ chỉ chịu được vài nghìn lần ghi rồi hỏng.
+```
+
+Dưới ràng buộc mới đó, cây B lộ ra một cái giá mà năm 1970 không ai quan tâm: **khuếch đại ghi (write amplification)**.
+
+```text
+Ghi MỘT dòng 100 byte vào bảng có cây B:
+
+  1. sửa lá của index          → làm bẩn cả trang 8 KB
+  2. có thể tách trang         → làm bẩn thêm 2-3 trang nữa
+  3. WAL ghi "full page write" → chép NGUYÊN trang 8 KB vào WAL
+                                  (bắt buộc, để chống rách trang khi mất điện)
+  4. checkpoint ghi trang đó xuống đĩa
+
+  100 byte dữ liệu  →  16-40 KB thật sự ghi xuống đĩa
+                       khuếch đại ~200-400 lần
+```
+
+### LSM-tree: đổi hẳn chiến lược
+
+**LSM-tree** (*Log-Structured Merge-tree*) trả lời câu hỏi ngược lại: *"nếu ghi ngẫu nhiên đắt, thì đừng ghi ngẫu nhiên nữa."*
+
+```text
+1. GHI vào bảng trong RAM (memtable — thường là skip list)     ← 0 lần chạm đĩa
+   kèm một dòng nối vào WAL để không mất khi cúp điện           ← ghi TUẦN TỰ
+
+2. Memtable đầy → đổ nguyên khối xuống đĩa thành một tệp
+   ĐÃ SẮP SẴN, CHỈ ĐỌC, không bao giờ sửa lại (SSTable)         ← ghi TUẦN TỰ
+
+3. Các tệp tích lại nhiều thì trộn dần thành tệp lớn hơn
+   (compaction) — chạy nền, cũng ghi tuần tự
+
+   ┌──────────────┐
+   │ memtable RAM │
+   └──────┬───────┘  đổ xuống
+   L0     ├── [ss] [ss] [ss] [ss]      ← nhiều tệp nhỏ, khoảng khoá chồng nhau
+   L1     ├── [────ss────][────ss────] ← đã trộn, khoảng khoá rời nhau
+   L2     ├── [──────────ss──────────]
+   L3     └── ...                       mỗi tầng to gấp ~10 tầng trên
+```
+
+**Ghi thì rẻ tuyệt đối.** Nhưng **đọc thì phải trả tiền**:
+
+```text
+Tìm khoá X: có thể nằm ở memtable, hoặc bất kỳ tệp nào trong L0..L6
+  → phải hỏi lần lượt từ mới nhất tới cũ nhất
+  → "khuếch đại đọc" (read amplification)
+
+Cứu bằng BỘ LỌC BLOOM: mỗi tệp mang một bộ lọc trả lời
+  "khoá này CHẮC CHẮN KHÔNG có" hoặc "CÓ THỂ có"
+  → bỏ qua ~99% số tệp mà không mở tệp nào.
+  (Cùng ý tưởng với BRIN bloom opclass ở bài 5 — và cũng chấp nhận sai dương.)
+```
+
+### Bảng đối chiếu — và đây mới là phần đáng thuộc
+
+| | B-Tree | LSM-Tree |
+|---|---|---|
+| Ghi | Sửa **tại chỗ**, ngẫu nhiên | **Chỉ nối thêm**, tuần tự |
+| Khuếch đại ghi | Cao (~200-400× ở mức trang) | Thấp lúc ghi, nhưng compaction ghi lại 10-30× tổng cộng |
+| Đọc một khoá | **3-4 lần đọc trang, ổn định** | Nhiều tệp phải hỏi; bloom filter cứu phần lớn |
+| Đọc theo khoảng | **Rất tốt** (lá nối đôi) | Kém hơn: phải trộn kết quả từ nhiều tầng |
+| Dung lượng | Có chỗ trống trong trang (~30% lãng phí) | **Nén rất tốt**, tệp chỉ đọc nên nén cả khối |
+| Đỉnh trễ | Đều | **Gai** khi compaction chạy |
+| Xoá | Xoá thật (rồi `VACUUM`) | Ghi một **bia mộ** (tombstone), dọn sau |
+| Ai dùng | PostgreSQL, MySQL, Oracle, SQL Server | RocksDB, Cassandra, ScyllaDB, HBase, LevelDB, TiKV, ClickHouse (một phần) |
+
+### Khi nào cái nào thắng
+
+```text
+  Tỷ lệ ghi/đọc cao, khoá ghi rải khắp không gian   → LSM
+  (log sự kiện, chuỗi thời gian, hàng đợi, đếm lượt)
+
+  Đọc nhiều, cần độ trễ ổn định, nhiều truy vấn khoảng
+  và giao dịch phức tạp                              → B-Tree
+
+  Muốn cả hai?  → PostgreSQL + phân vùng theo thời gian,
+                  hoặc tách phần ghi nặng sang một hệ LSM riêng
+```
+
+Một chi tiết đáng nhớ cho phỏng vấn: **MySQL có thể chạy LSM** bằng engine **MyRocks** (Facebook đưa RocksDB vào MySQL) — họ dùng nó cho tầng lưu trữ chính vì tiết kiệm dung lượng và tuổi thọ SSD, đổi lại đọc theo khoảng chậm hơn InnoDB.
+
+### Và đây là chỗ nối lại với đầu bài
+
+Cây B thắng năm 1970 vì nó **hỏi phần cứng trước khi hỏi lý thuyết**. LSM-tree thắng ở chỗ nó làm **đúng như vậy, với phần cứng khác**.
+
+```text
+1970 : "chạm đĩa 38 ms, đọc và ghi đắt như nhau"   →  cây B
+2010 : "SSD ghi ngẫu nhiên đắt và làm mòn ô nhớ"   →  LSM-tree
+20xx : "ràng buộc nào tiếp theo?"                   →  câu trả lời tiếp theo
+```
+
+Cả hai đều không phải "cấu trúc đúng". Cả hai đều là **câu trả lời đúng cho một bộ ràng buộc**. Khi bộ ràng buộc đổi, câu trả lời phải đổi theo — còn đoạn mã thì thường vẫn nằm đó.
+
 ## Câu hỏi phỏng vấn
 
 **"Vì sao database dùng B-Tree mà không dùng cây nhị phân cân bằng?"**
@@ -320,6 +496,12 @@ Thường không. Vài trăm dòng nằm gọn trong 1-2 trang; quét tuần t�
 
 **"Vì sao khoá chính nên nhỏ?"**
 Hai lý do, nói cả hai mới đủ. (1) Khoá hẹp → fanout cao → cây thấp → ít lần đọc trang. (2) Với InnoDB, **mọi secondary index đều mang theo giá trị khoá chính**, nên khoá chính 36 byte (`UUID` dạng chuỗi) làm phình *tất cả* các index khác của bảng.
+
+**"Cassandra/RocksDB dùng LSM-tree thay vì B-Tree, vì sao?"**
+Vì bộ ràng buộc phần cứng đã đổi: trên SSD, **ghi ngẫu nhiên đắt hơn đọc ngẫu nhiên** và còn làm mòn ô nhớ. B-Tree sửa **tại chỗ** nên mỗi lần ghi 100 byte có thể kéo theo 16-40 KB xuống đĩa (trang bẩn + full page write vào WAL). LSM chỉ **nối thêm** và ghi tuần tự, đổi lại phải hỏi nhiều tệp lúc đọc — cứu bằng bộ lọc Bloom — và có gai độ trễ khi compaction chạy. Nói được câu chốt là ăn điểm: **cả hai đều không phải "cấu trúc đúng", chúng là câu trả lời đúng cho hai bộ ràng buộc khác nhau.**
+
+**"Vì sao khoá tăng dần tốt hơn khoá ngẫu nhiên?"**
+Ba lý do độc lập, nói được cả ba là hiếm: (1) mọi lần chèn rơi vào **một trang đang nóng trong RAM** thay vì rải khắp; (2) PostgreSQL **tách trang chệch phải** (90/10 thay vì 50/50) ở lá ngoài cùng nên index gọn hơn ~40%; (3) từ PG 11 có **fastpath** ghim sẵn lá phải cùng, chèn chỉ tốn 1 lần đọc trang thay vì 4.
 
 ## Bẫy thường gặp
 
@@ -339,7 +521,9 @@ Hai lý do, nói cả hai mới đủ. (1) Khoá hẹp → fanout cao → cây t
 - Quyết định gói trong một dòng: **một nút = một lần đọc đĩa = một trang đầy khoá**. Fanout vài trăm kéo 20 tầng xuống 3 tầng.
 - Hôm nay **hai trong ba ràng buộc đã chết** (đĩa quay, RAM bé). Ràng buộc còn lại — **máy không đọc được 1 byte** — chưa bao giờ mất, chỉ đổi tên từ rãnh sang trang sang dòng đệm 64 byte.
 - Ba hệ quả cho code hôm nay: **khoá hẹp → cây thấp**; **khoá ngẫu nhiên → bẩn nhiều trang**; và nghe "logarit" thì hỏi tiếp **"cơ số mấy, mỗi bậc chạm cái gì"**.
-- Cây B không thắng vì nó thông minh hơn. Nó thắng vì **hỏi phần cứng trước khi hỏi lý thuyết**.
+- Bốn cải tiến âm thầm bạn đang hưởng: **tách chệch phải**, **cắt đuôi khoá dẫn đường** (PG 12), **khử trùng lặp** (PG 13), **fastpath chèn cuối** (PG 11) — ba trong bốn cái đều thưởng cho **khoá tăng dần**.
+- **LSM-tree** là câu trả lời cho cùng câu hỏi với phần cứng khác: SSD làm ghi ngẫu nhiên đắt hơn đọc, nên đổi từ *sửa tại chỗ* sang *chỉ nối thêm*. Trả giá bằng khuếch đại đọc (cứu bằng bloom filter), đọc khoảng kém hơn, và gai độ trễ lúc compaction.
+- Cây B không thắng vì nó thông minh hơn. Nó thắng vì **hỏi phần cứng trước khi hỏi lý thuyết** — và LSM-tree thắng vì làm **đúng như vậy, với bộ ràng buộc mới**.
 
 > Câu để lại: **ràng buộc nào trong quyết định bạn viết hôm nay sẽ hết hiệu lực trước, mà đoạn mã thì vẫn còn đó?**
 
