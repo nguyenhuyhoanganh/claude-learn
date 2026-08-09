@@ -4,7 +4,7 @@
 
 69 bài về Kafka trong hệ sinh thái Java/Spring: nền tảng Kafka (topic, partition, key, offset, rebalancing), Spring Cloud Stream cho producer và consumer, consumer group và scaling, event routing, cụm Kafka và replication, xử lý theo lô, xử lý song song, độ tin cậy và ack, xử lý lỗi và retry, transaction và exactly-once, testing, bảo mật, phần mổ xẻ nội bộ Kafka (ZooKeeper, KRaft/Raft, ISR, high watermark, failover có số đo), các chủ đề bổ sung (ưu tiên message, offset commit toàn tập, partitioner tuỳ chỉnh, TLS từ gốc), và Kafka Streams từ đầu tới vận hành production.
 
-**84 bài** trong 21 phần.
+**85 bài** trong 21 phần.
 
 ## Mục lục
 
@@ -187,6 +187,7 @@
 | [05](phase-21-chu-de-tu-tai-lieu/05-gioi-han-vat-ly-cua-partition.md) | Bài 5: Bao nhiêu partition là đủ — giới hạn vật lý và công thức tính |
 | [06](phase-21-chu-de-tu-tai-lieu/06-ssl-tls-cho-kafka-tu-goc.md) | Bài 6: SSL/TLS cho Kafka từ gốc — CA, keystore, truststore |
 | [07](phase-21-chu-de-tu-tai-lieu/07-ba-tang-test-cho-kafka.md) | Bài 7: Ba tầng test cho Kafka — Test Binder, EmbeddedKafka, Testcontainers |
+| [08](phase-21-chu-de-tu-tai-lieu/08-header-interceptor-va-quota.md) | Bài 8: Header, Interceptor và Quota — ba thứ ít dùng nhưng cứu bạn khi cần |
 
 ### Phase 22 — kafka streams
 

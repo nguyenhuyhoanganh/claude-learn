@@ -380,4 +380,4 @@ Không có bước này, message gửi trước khi consumer sẵn sàng sẽ b�
 - Ba quy tắc chống test vỡ vặt: **không bao giờ `Thread.sleep`** (dùng Awaitility), **luôn `auto.offset.reset=earliest`**, và **chờ consumer được giao partition xong rồi mới gửi** (`ContainerTestUtils.waitForAssignment`).
 - `KafkaTestUtils` là lớp tiện ích cần thuộc: `consumerProps`, `producerProps`, `getSingleRecord`, `getRecords`.
 
-**Quay lại** → [Mục lục khoá Kafka Java](../README.md)
+**Bài kế tiếp** → [Bài 8: Header, Interceptor và Quota — ba thứ ít dùng nhưng cứu bạn khi cần](08-header-interceptor-va-quota.md)
