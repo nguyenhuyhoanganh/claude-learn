@@ -190,4 +190,64 @@ Nhược điểm:
 
 ---
 
+## Bốn khái niệm ECS ánh xạ sang Kubernetes như thế nào
+
+Nếu sau này bạn học Kubernetes (từ phase-11), bảng này giúp chuyển đổi mô hình tư duy mà không phải học lại từ đầu:
+
+| ECS | Kubernetes tương đương | Khác biệt cần lưu ý |
+|---|---|---|
+| **Cluster** | Cluster | Giống nhau về vai trò |
+| **Task Definition** | **Pod template** (trong Deployment) | Đều là "bản mô tả cách chạy container" |
+| **Task** | **Pod** | Một lần chạy thật của bản mô tả |
+| **Service** | **Deployment + Service** | ECS gộp hai việc; Kubernetes tách ra |
+| Target Group | Endpoints | Danh sách đích thật đang khoẻ |
+
+Điểm khác biệt quan trọng nhất về hành vi: **trong một ECS Task, các container gọi nhau qua `localhost`** — giống hệt các container trong một Pod Kubernetes. Đây là lý do bài sau nhấn mạnh "không dùng tên container trong ECS".
+
+Nói cách khác, **Task của ECS chính là Pod của Kubernetes**. Nắm được điều này thì phần lớn kiến thức ECS chuyển thẳng sang Kubernetes.
+
+---
+
+## Bẫy thường gặp
+
+| Bẫy | Triệu chứng | Cách xử lý |
+|---|---|---|
+| Dùng tên container để gọi nhau trong Task | Không phân giải được | Trong cùng Task dùng **`localhost`** |
+| Quên gán IAM role cho Task | Container không gọi được S3/Secrets Manager | Task Role khác Task Execution Role — xem dưới |
+| Nhầm **Task Role** với **Task Execution Role** | Kéo image thất bại, hoặc ứng dụng không gọi được AWS | **Execution Role** để ECS kéo image và ghi log; **Task Role** cho **ứng dụng của bạn** gọi AWS |
+| Cập nhật image nhưng giữ nguyên tag | Task mới vẫn chạy image cũ | Tạo **revision mới** của Task Definition, hoặc ép deploy lại |
+| Không đặt `awslogs` | Không có log để đọc khi container chết | Cấu hình log driver `awslogs` ngay từ đầu |
+| Task dừng ngay không rõ lý do | `Essential container in task exited` | Xem `stoppedReason` trong Console, và log CloudWatch |
+| Quên xoá Service khi dọn | Service tự tạo lại Task → **vẫn tính tiền** | Đặt desired count về 0, xoá Service, rồi xoá Cluster |
+
+Dòng thứ ba là chỗ nhầm phổ biến nhất và đáng làm rõ:
+
+```text
+   TASK EXECUTION ROLE   → ECS DÙNG để chuẩn bị task
+                           kéo image từ ECR, ghi log lên CloudWatch,
+                           đọc secret để truyền vào biến môi trường
+
+   TASK ROLE             → ỨNG DỤNG CỦA BẠN dùng lúc chạy
+                           gọi S3, DynamoDB, SQS, Secrets Manager
+
+   Thiếu Execution Role → task không khởi động được (kéo image lỗi)
+   Thiếu Task Role      → task chạy nhưng ứng dụng nhận AccessDenied
+```
+
+Triệu chứng khác nhau rõ ràng, nên nhớ được cặp này thì chẩn đoán rất nhanh.
+
+---
+
+## Tóm tắt bài 3
+
+- ECS là dịch vụ điều phối container **quản lý sẵn của AWS** — bạn không phải dựng control plane.
+- Bốn khái niệm: **Cluster** (nhóm tài nguyên), **Task Definition** (bản mô tả), **Task** (một lần chạy thật), **Service** (giữ đúng số Task và nối vào Load Balancer).
+- **Task của ECS ≈ Pod của Kubernetes**: container trong cùng Task gọi nhau qua **`localhost`**, không dùng tên container.
+- **Fargate** bỏ luôn việc quản lý máy chủ — trả tiền theo CPU/RAM mà task dùng.
+- Phân biệt hai IAM role: **Execution Role** (ECS dùng để kéo image, ghi log) và **Task Role** (ứng dụng dùng để gọi AWS). Thiếu cái đầu thì task **không khởi động**; thiếu cái sau thì task chạy nhưng nhận **AccessDenied**.
+- Cập nhật image phải tạo **revision mới** của Task Definition — giữ nguyên tag không đủ.
+- Dọn dẹp theo thứ tự: **desired count về 0 → xoá Service → xoá Cluster**, nếu không Service sẽ tự tạo lại Task.
+
+---
+
 **Bài kế tiếp** → [Bài 4: Multi-Container trong ECS — Localhost, EFS, và MongoDB Atlas](04-multi-container-ecs.md)

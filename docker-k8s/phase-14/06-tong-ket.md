@@ -148,4 +148,59 @@ Ví dụ (service: auth-service):
 
 ---
 
+---
+
+## Tự kiểm tra
+
+**1. Vì sao không gọi Pod bằng IP mà phải qua Service?**
+
+<details><summary>Đáp án</summary>
+
+IP của Pod **đổi mỗi lần Pod tạo lại** — mỗi lần deploy, mỗi lần scale, mỗi lần node chết. Service cho **một địa chỉ ổn định đứng trước một tập Pod luôn thay đổi**, và nó chọn Pod **theo nhãn** nên tự cập nhật danh sách. Chi tiết: [bài 1](01-services-va-pod-communication.md).
+</details>
+
+**2. Hai container trong cùng Pod cùng nghe cổng 8080. Chuyện gì xảy ra?**
+
+<details><summary>Đáp án</summary>
+
+Container thứ hai **không khởi động được** — `bind: address already in use`. Vì các container trong một Pod **chung không gian mạng**: cùng IP, cùng dải cổng, giống hệt hai tiến trình trên một máy. Chi tiết: [bài 2](02-pod-internal-communication.md).
+</details>
+
+**3. Container A trong Pod muốn đọc file container B ghi ra. Làm sao?**
+
+<details><summary>Đáp án</summary>
+
+Qua **volume chung** (thường là `emptyDir`), vì **hệ thống file gốc không chung** — mỗi container có image riêng. Lưu ý `mountPath` ở hai container có thể khác nhau, chỉ volume mới là thứ chung.
+</details>
+
+**4. Service trả 503. Lệnh đầu tiên và hai nguyên nhân có thể?**
+
+<details><summary>Đáp án</summary>
+
+`kubectl get endpoints <ten-service>`. Rỗng thì chỉ có hai lý do: **selector của Service lệch nhãn Pod**, hoặc **Pod chưa Ready** (readinessProbe thất bại).
+</details>
+
+**5. Dịch vụ của bạn gọi `https://api.github.com` rất nhiều và CoreDNS quá tải. Vì sao?**
+
+<details><summary>Đáp án</summary>
+
+Do **`ndots:5`** trong `/etc/resolv.conf`. Tên có dưới 5 dấu chấm sẽ được **thử ghép hậu tố cụm trước** — nên mỗi lời gọi tốn **4 lượt truy vấn DNS** thay vì một. Chữa bằng **dấu chấm cuối** (`api.github.com.`) hoặc chỉnh `dnsConfig`. Chi tiết: [bài 4](04-dns-va-env-vars.md).
+</details>
+
+**6. Vì sao nên dùng DNS thay vì biến môi trường tự sinh của Service?**
+
+<details><summary>Đáp án</summary>
+
+Biến môi trường **chỉ tồn tại nếu Service được tạo TRƯỚC Pod**. Tạo Service sau thì Pod đang chạy không bao giờ thấy biến đó. DNS thì phân giải **lúc chạy**, không phụ thuộc thứ tự tạo.
+</details>
+
+**7. `localhost` trong container Kubernetes trỏ tới đâu?**
+
+<details><summary>Đáp án</summary>
+
+Tới **chính Pod đó** (chung cả mạng với các container cùng Pod). Muốn gọi Pod khác thì phải qua **Service**.
+</details>
+
+---
+
 **Phase kế tiếp** → [Bài 1: AWS EKS vs AWS ECS — Chọn Gì?](../phase-15/01-eks-vs-ecs.md)

@@ -147,4 +147,52 @@ kubectl delete service NAME
 
 ---
 
+---
+
+## Tự kiểm tra
+
+**1. Manifest chạy tốt trên minikube. Đưa lên EKS thì Pod báo `ImagePullBackOff`. Vì sao?**
+
+<details><summary>Đáp án</summary>
+
+Image chỉ nằm trên Docker của **máy bạn** (hoặc trong minikube). Node EKS không thấy nó. Phải **đẩy lên registry** (ECR, Docker Hub) trước. Và nếu build trên Mac chip ARM thì thêm `--platform linux/amd64`, nếu không sẽ gặp `exec format error`. Chi tiết: [bài 4](04-deploy-kubernetes-config.md).
+</details>
+
+**2. Service `LoadBalancer` kẹt `<pending>` quá 5 phút trên EKS. Ba nguyên nhân?**
+
+<details><summary>Đáp án</summary>
+
+**Thiếu quyền IAM** cho node group tạo Load Balancer; **subnet chưa gắn nhãn** `kubernetes.io/role/elb`; hoặc **hết hạn mức Load Balancer** của tài khoản. Chi tiết: [bài 2](02-tao-cluster-eks.md).
+</details>
+
+**3. Pod kẹt `Pending` với `Too many pods` nhưng `kubectl top node` cho thấy RAM còn thừa 60%. Vì sao?**
+
+<details><summary>Đáp án</summary>
+
+**Hết địa chỉ IP**, không phải hết tài nguyên. AWS VPC CNI cấp cho mỗi Pod một IP thật trong VPC, và số IP mỗi máy bị giới hạn theo **loại máy** — `t3.medium` chỉ chứa được **17 Pod**. Chữa bằng máy lớn hơn hoặc bật prefix delegation. Chi tiết: [bài 3](03-node-groups.md).
+</details>
+
+**4. Bạn xoá cụm EKS xong nhưng hoá đơn tháng sau vẫn có phí. Chỗ nào?**
+
+<details><summary>Đáp án</summary>
+
+Nhiều khả năng là **Load Balancer** do Service `LoadBalancer` tạo — nó **không bị xoá theo cụm**. Luôn `kubectl delete svc --all` **trước** khi xoá cụm. Ngoài ra kiểm tra node group, EBS volume mồ côi, và NAT Gateway.
+</details>
+
+**5. Vì sao nên dùng một Ingress thay vì mỗi service một `LoadBalancer`?**
+
+<details><summary>Đáp án</summary>
+
+**Mỗi Load Balancer tốn khoảng 16 USD/tháng.** Mười service là 160 USD/tháng chỉ cho phần vào. Một Ingress định tuyến được nhiều service qua **một** Load Balancer.
+</details>
+
+**6. Node đặt ở subnet riêng thì cần thêm gì, và nó tốn bao nhiêu?**
+
+<details><summary>Đáp án</summary>
+
+Cần **NAT Gateway** để node ra được Internet (kéo image, gọi API). Khoảng **32 USD/tháng mỗi cái** cộng phí dữ liệu; ba AZ là ~96 USD/tháng. Giảm mạnh bằng **VPC Endpoint cho ECR và S3** — image không đi qua NAT nữa.
+</details>
+
+---
+
 **Phase kế tiếp** → [Phase 16 — Tổng Kết Khóa Học Docker & Kubernetes](../phase-16/01-tong-ket-khoa-hoc.md)

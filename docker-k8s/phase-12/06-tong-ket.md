@@ -171,4 +171,61 @@ kubectl rollout undo deployment/NAME --to-revision=1
 
 ---
 
+---
+
+## Tự kiểm tra — trả lời được hết thì phase này đã vững
+
+Đọc lại thì dễ gật đầu; tự trả lời mới biết mình hiểu tới đâu. Thử trả lời trước khi xem đáp án.
+
+**1. Xoá một Pod do Deployment tạo ra thì chuyện gì xảy ra? Vì sao?**
+
+<details><summary>Đáp án</summary>
+
+Pod mới hiện lại gần như ngay lập tức. Vì **trạng thái mong muốn** vẫn là 3 bản sao, và **vòng lặp điều hoà** thấy thực tế chỉ còn 2 nên tạo bù. Muốn xoá thật phải đổi ý muốn: `kubectl scale --replicas=0` hoặc xoá Deployment. Chi tiết: [bài 2 phase-11](../phase-11/02-kubernetes-la-gi.md).
+</details>
+
+**2. Pod kẹt ở `Pending`. Bạn đọc log ứng dụng và thấy rỗng. Sai ở đâu?**
+
+<details><summary>Đáp án</summary>
+
+Sai ở chỗ đọc log. `Pending` nghĩa là **scheduler chưa tìm được node** — container còn chưa được tạo nên log **luôn rỗng**. Phải đọc `kubectl describe pod` mục Events, nó nói chính xác vì sao từng node bị loại. Chi tiết: [bài 3 phase-11](../phase-11/03-kien-truc-kubernetes.md).
+</details>
+
+**3. `kubectl apply` khác `kubectl create` chỗ nào?**
+
+<details><summary>Đáp án</summary>
+
+`create` **lỗi** nếu object đã tồn tại. `apply` **tạo mới nếu chưa có, gộp thay đổi nếu đã có** — nên dùng được cùng một lệnh cho cả hai trường hợp, điều kiện để đưa vào CI/CD. Nó nhớ được nhờ chú thích `last-applied-configuration`.
+</details>
+
+**4. Vì sao không nên trộn `kubectl scale` với `kubectl apply`?**
+
+<details><summary>Đáp án</summary>
+
+`apply` quản trường `replicas` (nếu file YAML có khai). Lần apply sau sẽ **ghi đè** con số bạn vừa scale bằng tay — thường vào lúc bất ngờ nhất. Chọn một cách: hoặc tất cả qua YAML, hoặc dùng HPA và **bỏ hẳn `replicas` khỏi file**.
+</details>
+
+**5. `livenessProbe` của bạn gọi `/health`, và endpoint đó có kiểm tra kết nối database. Điều gì xảy ra khi database chậm?**
+
+<details><summary>Đáp án</summary>
+
+**Mọi Pod bị giết cùng lúc**, dù bản thân chúng hoàn toàn khoẻ. Pod còn lại gánh nhiều hơn, chậm hơn, cũng bị giết — sập dây chuyền. `livenessProbe` chỉ được hỏi *"tiến trình này còn chạy không"*; kiểm tra phụ thuộc là việc của `readinessProbe`. Chi tiết: [bài 5](05-configuration-advanced.md) và [Phase 18 bài 2](../phase-18/02-probes-va-bay-liveness.md).
+</details>
+
+**6. Service của bạn trả 503. Lệnh đầu tiên nên gõ là gì?**
+
+<details><summary>Đáp án</summary>
+
+`kubectl get endpoints <ten-service>`. Rỗng thì chỉ có **hai** nguyên nhân: **selector lệch nhãn Pod**, hoặc **Pod chưa Ready**. Chi tiết: [Phase 14 bài 1](../phase-14/01-services-va-pod-communication.md).
+</details>
+
+**7. Vì sao Pod tồn tại thay vì Kubernetes quản container trực tiếp?**
+
+<details><summary>Đáp án</summary>
+
+Vì có những container cần **chung IP, chung dải cổng, chung volume** — mẫu sidecar (thu thập log, proxy mạng). Pod cũng đảm bảo cả nhóm được xếp lên **cùng một node** và cùng sống cùng chết. Chi tiết: [bài 2](02-kubernetes-objects.md).
+</details>
+
+---
+
 **Phase kế tiếp** → [Bài 1: Volumes trong Kubernetes — Lý Thuyết & So Sánh](../phase-13/01-volumes-trong-kubernetes.md)
