@@ -1,5 +1,7 @@
 # Bài 1: Vấn Đề với Manual Deployment
 
+> **Sắp gặp nhiều thuật ngữ mới?** [Từ điển Kubernetes cho người mới](../phase-0/03-tu-dien-thuat-ngu-kubernetes.md) giải nghĩa từng từ kèm bẫy thường gặp — mở song song khi đọc phase này.
+
 ## Nhắc Lại: Docker Deployment Trước Đây
 
 Trong Phase 9, chúng ta đã deploy containers lên EC2 và ECS. Nhưng kể cả với ECS, vẫn còn những vấn đề tiềm ẩn khi scale lên production thực sự.

@@ -1,5 +1,7 @@
 # Bài 1: Docker là gì và tại sao cần dùng?
 
+> **Chưa quen với tiến trình, cổng, biến môi trường hay YAML?** Đọc [Phase 0](../phase-0/01-kien-thuc-nen-truoc-khi-hoc-docker.md) trước — nó giải nghĩa những khái niệm nền mà bài này giả định bạn đã biết.
+
 ## Vấn đề thực tế trong phát triển phần mềm
 
 Hãy tưởng tượng bạn đang phát triển một ứng dụng Node.js trên máy tính cá nhân. Code chạy ngon lành. Nhưng khi deploy lên server sản xuất (production), ứng dụng bị lỗi. Nguyên nhân? Server đang dùng Node.js version 12 còn máy bạn dùng version 14.3 — và tính năng mà code bạn dùng chỉ có từ 14.3 trở lên.

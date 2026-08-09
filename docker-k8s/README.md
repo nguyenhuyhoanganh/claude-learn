@@ -2,11 +2,21 @@
 
 > Container và điều phối container — từ `docker run` tới cụm Kubernetes production.
 
-88 bài đi từ Docker cơ bản (image, layer, volume, network, Compose) sang Kubernetes (pod, workload, service, ingress, config, storage, RBAC) và các chủ đề vận hành thật: workload đầy đủ (StatefulSet, DaemonSet, Job/CronJob), giới hạn tài nguyên và autoscaling, bảo mật image và cụm, quan sát hệ thống và sổ tay chẩn đoán sự cố.
+91 bài đi từ kiến thức nền cho người chưa biết gì, qua Docker cơ bản (image, layer, volume, network, Compose) sang Kubernetes (pod, workload, service, ingress, config, storage, RBAC) và các chủ đề vận hành thật: workload đầy đủ (StatefulSet, DaemonSet, Job/CronJob), giới hạn tài nguyên và autoscaling, bảo mật image và cụm, quan sát hệ thống và sổ tay chẩn đoán sự cố.
 
-**88 bài** trong 20 phần.
+**91 bài** trong 21 phần.
 
 ## Mục lục
+
+### Phase 0 — nền tảng cho người mới hoàn toàn
+
+> Dành cho người **chưa biết gì**. Giải nghĩa các khái niệm mà mọi tài liệu Docker đều giả định bạn đã biết. Đã quen backend/DevOps thì bỏ qua được.
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-0/01-kien-thuc-nen-truoc-khi-hoc-docker.md) | Bài 0.1: Kiến thức nền trước khi học Docker — tiến trình, cổng, đường dẫn, biến môi trường, nhân, YAML |
+| [02](phase-0/02-tu-dien-thuat-ngu-docker.md) | Bài 0.2: Từ điển thuật ngữ Docker cho người mới |
+| [03](phase-0/03-tu-dien-thuat-ngu-kubernetes.md) | Bài 0.3: Từ điển thuật ngữ Kubernetes cho người mới |
 
 ### Phase 1
 
