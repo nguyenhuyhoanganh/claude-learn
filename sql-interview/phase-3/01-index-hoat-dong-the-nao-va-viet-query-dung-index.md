@@ -77,6 +77,8 @@ Index Scan      : 4 lần đọc trang index + 1 heap fetch        → dưới 1
 
 BRIN đáng nhớ vì nó là câu trả lời gây ấn tượng cho *"bảng log 2 tỉ dòng thì index thế nào?"*: BRIN chỉ lưu min/max cho mỗi khối, nên **nhỏ hơn B-Tree hàng nghìn lần**, đổi lại chỉ hiệu quả khi dữ liệu được ghi theo thứ tự tăng dần của cột (đúng với `created_at` của bảng log).
 
+> **Bảng này là bản tóm tắt.** Mỗi dòng trong đó là một cấu trúc riêng, có **cái giá** và **điều kiện ngầm** riêng — và điều kiện ngầm vỡ ra thì *không có dòng lỗi nào*. [Phase 10](../phase-10/01-may-chon-ho-ban-b-tree-va-hinh-dang-cau-hoi.md) dành trọn 9 bài mổ từng loại: vì sao là cây B chứ không phải cây nhị phân, hash bán thiếu món gì, vì sao PostgreSQL **không có** bitmap index, cái đêm BRIN chậm 400 lần mà không ai đụng gì, vì sao tìm "bảo hàn" ra 0 kết quả, và loại index **cố tình trả lời sai**.
+
 ### Một khác biệt cấu trúc hay bị hỏi: clustered index
 
 ```text

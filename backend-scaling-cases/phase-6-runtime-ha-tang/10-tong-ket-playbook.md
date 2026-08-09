@@ -804,4 +804,6 @@ Khoá học này dừng ở mức "hiểu và xử lý được". Ba hướng đ
 
 Nhưng trước khi đi tiếp, hãy làm một việc có giá trị hơn: **lấy hệ thống thật của bạn và chạy qua playbook ở phần 2**. Bạn sẽ tìm thấy ít nhất ba thứ trong khoá học này đang tồn tại ngay lúc này.
 
+**Bài kế tiếp** → [Phase 7 - Case 1: Tỷ lệ dùng lại — 1.000 người làm sập hệ thống, 2.100.000 người thì không](../phase-7-phat-tan-va-do-tre/01-case-ty-le-dung-lai.md)
+
 **Quay lại** → [Mục lục khoá học](../00-gioi-thieu.md) · [Từ điển thuật ngữ](../00-thuat-ngu.md)

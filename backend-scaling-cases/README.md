@@ -2,9 +2,9 @@
 
 > *"Hệ thống chạy tốt suốt sáu tháng. Rồi một chiều thứ Sáu, nó sập."*
 
-**50 case sự cố hiệu năng có thật**, mỗi case một bài: triệu chứng → chẩn đoán → nguyên nhân gốc → cách sửa → cách chặn tái diễn. Phase 1 xây nền lý thuyết (định luật Little, lý thuyết hàng đợi, percentile) để bạn **tính** được thay vì đoán; năm phase sau là các case xếp theo tầng: thread/connection pool, database lock, sập dây chuyền, kiến trúc, runtime và hạ tầng.
+**52 case sự cố hiệu năng có thật**, mỗi case một bài: triệu chứng → chẩn đoán → nguyên nhân gốc → cách sửa → cách chặn tái diễn. Phase 1 xây nền lý thuyết (định luật Little, lý thuyết hàng đợi, percentile) để bạn **tính** được thay vì đoán; sáu phase sau là các case xếp theo tầng: thread/connection pool, database lock, sập dây chuyền, kiến trúc, runtime và hạ tầng, và cuối cùng là phát tán ở quy mô triệu người.
 
-**50 bài** trong 6 phần.
+**52 bài** trong 7 phần.
 
 ## Mục lục
 
@@ -91,6 +91,13 @@
 | [09](phase-6-runtime-ha-tang/09-case-thoi-gian-dong-ho.md) | Case 9: Thời gian — đồng hồ lệch, múi giờ và những lỗi khó tin |
 | [10](phase-6-runtime-ha-tang/10-tong-ket-playbook.md) | Bài tổng kết: Playbook chẩn đoán và cấu hình tham chiếu |
 
+### Phase 7 — phat tan va do tre
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-7-phat-tan-va-do-tre/01-case-ty-le-dung-lai.md) | Case 1: Tỷ lệ dùng lại — 1.000 người làm sập hệ thống, 2.100.000 người thì không |
+| [02](phase-7-phat-tan-va-do-tre/02-case-do-tre-va-bo-dem.md) | Case 2: Độ trễ livestream — mượt và tức thì là hai đầu của cùng một cái cân |
+
 ## Nên bắt đầu từ đâu
 
 | Bạn đang ở tình huống | Đọc từ |
@@ -99,6 +106,7 @@
 | Muốn hiểu nền tảng trước | phase-1, đọc tuần tự 6 bài |
 | Chuẩn bị phỏng vấn system design | phase-4 và phase-5 |
 | Cần playbook chẩn đoán | phase-6 bài 10 |
+| Hệ thống có lượng đọc rất lớn (CDN, cache, live) | phase-7, đọc tuần tự 2 bài |
 
 ---
 

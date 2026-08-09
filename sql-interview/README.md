@@ -110,11 +110,28 @@ Dialect chính: **PostgreSQL 14+**. Chỗ nào MySQL 8 khác biệt đều có g
 | [01](phase-9/01-mo-hinh-4-tang-cua-cau-hoi-phong-van.md) | Định nghĩa → con số → đánh đổi → quy trình; hỏi ngược khi thiếu dữ kiện; cách nói "em chưa đo" |
 | [02](phase-9/02-muoi-hai-cau-hoi-ngan-va-dap-an-30-giay.md) | 12 câu hỏi ngắn nhất kèm bản mẫu 30 giây và bảng tra con số neo |
 
+### Phase 10 — Bảy loại index: chọn cấu trúc theo hình dạng câu hỏi
+
+> `CREATE INDEX` là **câu lệnh duy nhất trong SQL âm thầm chọn hộ bạn một cấu trúc dữ liệu**. Phase này đi qua bảy cấu trúc, mỗi cái kèm **cái giá** và **điều kiện ngầm** của nó — thứ vỡ ra thì không có dòng lỗi nào.
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-10/01-may-chon-ho-ban-b-tree-va-hinh-dang-cau-hoi.md) | 4 câu lệnh trên 1 bảng 12 triệu dòng, 3 câu vẫn `Seq Scan`: B-Tree chỉ giải được câu hỏi bằng **thứ tự**; 3 hình dạng phá vỡ nó; 6 loại index đã nằm sẵn trong máy bạn |
+| [02](phase-10/02-vi-sao-la-cay-b-chu-khong-phai-cay-nhi-phan.md) | Boeing 1970: đĩa 38 ms, rãnh 13.030 byte, RAM bé hơn dữ liệu vài trăm lần. **Hai trong ba ràng buộc đã chết**, cái còn lại giữ cây B sống tới hôm nay. Fanout, B+Tree, khoá hẹp → cây thấp |
+| [03](phase-10/03-hash-index-va-cai-gia-cua-viec-bo-thu-tu.md) | Index B-Tree bán **hai món**, hash vứt mất món thứ hai; va chạm và trang tràn; khi nào hash **thật sự** thắng; phân biệt hash index / hash join / adaptive hash index |
+| [04](phase-10/04-bitmap-index-va-cot-it-gia-tri.md) | Cột 4 giá trị trên bảng 80 triệu dòng: vì sao optimizer bỏ index là **đúng**; dãy bit + RLE/Roaring; `AND` 64 bit/nhịp; **PostgreSQL KHÔNG có bitmap index** — chỉ có Bitmap Index **Scan** (`lossy`, `work_mem`) |
+| [05](phase-10/05-brin-va-dieu-kien-ngam-khong-ai-viet-ra.md) | Vụ án chậm 400 lần qua một đêm: loại 4 nghi phạm bằng phép đo, thủ phạm là **correlation** tụt từ 0,99 xuống 0,07. `CLUSTER`/`pg_repack`, `fillfactor`, `minmax_multi_ops` |
+| [06](phase-10/06-index-dao-va-tim-kiem-toan-van.md) | Tìm 1 từ trong 4 triệu bài mất 8 ms, thiếu 1 chữ cái trả về **0**: posting list, Zipf, `fastupdate`; bộ tách từ + từ điển **đông cứng lúc tạo index**; tiếng Việt, `unaccent`, `<->`, `pg_trgm` |
+| [07](phase-10/07-index-vector-hnsw-va-cau-tra-loi-gan-dung.md) | Lời nguyền số chiều: vì sao **không cây nào loại bớt được** trong 1.536 chiều; HNSW đi cầu thang, recall 95%; đo recall thật, lọc kèm `WHERE`, `halfvec` và rerank |
+| [08](phase-10/08-ban-do-chon-index-theo-hinh-dang-cau-hoi.md) | **Bản đồ tổng hợp**: cây quyết định, bảng tra 1 trang, đối chiếu 7 cấu trúc + 4 hệ quản trị, quy trình 6 bước chạy được ngay, 12 câu hỏi phỏng vấn kèm đáp án 30 giây |
+| [09](phase-10/09-doi-chieu-nguon-va-nhung-cho-can-dinh-chinh.md) | 26 điểm đúng đã kiểm chứng, **9 chỗ cần đính chính** kèm lệnh tự kiểm, và cách kiểm chứng bất kỳ nguồn kỹ thuật nào |
+
 ## Bắt đầu
 
 - Mới học SQL → [Bài 0: Từ điển từ khoá SQL cho người mới](phase-1/00-tu-dien-tu-khoa-sql-cho-nguoi-moi.md)
 - Đã viết SQL thành thạo → [Bài 1: Vì sao 8/10 ứng viên trượt vòng SQL](phase-1/01-vi-sao-8-tren-10-ung-vien-truot-vong-sql.md)
 - Sắp đi phỏng vấn trong tuần này → [Phase 9 bài 2: 12 câu hỏi ngắn và đáp án 30 giây](phase-9/02-muoi-hai-cau-hoi-ngan-va-dap-an-30-giay.md)
+- Đã nắm B-Tree, muốn đi sâu vào **các loại index còn lại** → [Phase 10 bài 1](phase-10/01-may-chon-ho-ban-b-tree-va-hinh-dang-cau-hoi.md)
 
 ## Khoá liên quan
 

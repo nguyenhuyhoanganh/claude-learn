@@ -154,6 +154,58 @@ Các mục xếp theo chủ đề, không theo bảng chữ cái — vì học t
 
 **Write amplification (khuếch đại ghi)** — Một `INSERT` phải ghi vào bảng **và** vào mọi index liên quan. Bảng có 10 index thì mỗi lần chèn là 11 thao tác ghi.
 
+### Các loại index — thuật ngữ chi tiết (phase 10)
+
+**Fanout (hệ số phân nhánh)** — Số con của một nút trong cây B, thường vài trăm vì một nút bằng đúng một trang. Đây là *cơ số* của logarit: fanout 250 thì 12 triệu dòng chỉ cần 3 tầng. Nói "index là logarit" mà không nói cơ số là nói một nửa.
+
+**Page / block (trang)** — Đơn vị đọc/ghi nhỏ nhất: 8 KB ở PostgreSQL, 16 KB ở InnoDB, 4 KB ở hệ điều hành, 64 byte ở dòng đệm CPU. **Máy chưa bao giờ đọc được 1 byte** — đó là ràng buộc sinh ra cây B năm 1970 và vẫn còn nguyên hôm nay.
+
+**Hash index (index băm)** — Lưu mã băm của giá trị trong các *ngăn* (bucket). Tra một phát ra ngay, nhưng **hàm băm cố tình phá huỷ thứ tự**, nên mất `ORDER BY`, `BETWEEN`, `MIN/MAX`, index phủ, `UNIQUE` và index nhiều cột.
+
+**Bucket / overflow page (ngăn / trang tràn)** — Ngăn đầy thì hash index móc thêm trang tràn, và mỗi trang tràn là một lần đọc nữa. Đây là chỗ chữ `O(1)` của hash không còn đúng.
+
+**Adaptive Hash Index (AHI)** — Bộ nhớ đệm băm mà InnoDB **tự dựng trong RAM** trên các tiền tố B-Tree bị tra nhiều. Bạn không tạo, không xoá, không thấy trên đĩa. Khác hẳn hash index.
+
+**Bitmap index** — Mỗi giá trị của cột thành một dãy bit dài bằng số dòng. Nhiều điều kiện thì chồng các dãy lại và lấy `AND` từng bit. **Oracle có; PostgreSQL không có.** Cấm dùng cho bảng ghi nhiều vì sửa một dòng khoá cả cụm nén.
+
+**Bitmap Index Scan / Bitmap Heap Scan** — **Bước chạy** của PostgreSQL, không phải cách lưu: dựng bitmap **tạm trong RAM** từ index B-Tree rồi đọc heap theo thứ tự số trang tăng dần, biến đọc ngẫu nhiên thành gần-tuần-tự. `BitmapAnd`/`BitmapOr` giao/hợp nhiều index.
+
+**Lossy bitmap / Recheck Cond** — Khi `work_mem` không đủ, bitmap tạm hạ độ phân giải từ *"dòng nào khớp"* xuống *"trang nào có dòng khớp"*; những trang đó phải đọc rồi kiểm lại từng dòng. Đọc `Heap Blocks: exact=... lossy=...` trong `EXPLAIN`.
+
+**RLE / WAH / Roaring Bitmap** — Ba cách nén dãy bit. Roaring là chuẩn de-facto hiện nay (Lucene, Druid, ClickHouse): chia thành khối 65.536 bit rồi chọn cách lưu rẻ nhất cho từng khối.
+
+**Correlation (hệ số tương quan vật lý)** — Trong `pg_stats`, đo mức trùng khớp giữa **thứ tự giá trị của cột** và **thứ tự dòng trên đĩa**, chạy từ −1 tới 1. Đây là **điều kiện ngầm của BRIN**: dưới 0,9 là báo động, và khi nó vỡ thì **không có lỗi nào**.
+
+**pages_per_range** — Số trang mỗi dải của BRIN, mặc định 128 (= 1 MB). Nhỏ hơn thì loại bớt mịn hơn nhưng index to hơn.
+
+**minmax_multi_ops** — Opclass BRIN từ PostgreSQL 14, lưu **nhiều khoảng rời rạc** cho mỗi dải thay vì một khoảng duy nhất. Chịu được dữ liệu bị trộn một phần — thuốc chữa cho đúng vụ án ở phase 10 bài 5.
+
+**HOT update** (*Heap-Only Tuple*) — Khi `UPDATE` **không chạm cột nào đang được index** và trang còn chỗ trống, bản mới nằm ngay trong trang cũ. Giữ được correlation. Hạ `fillfactor` xuống 80-90 là cách nuôi HOT update.
+
+**CLUSTER / pg_repack** — `CLUSTER` ghi lại toàn bộ bảng theo thứ tự một index (khoá `ACCESS EXCLUSIVE`, không ai đọc được). `pg_repack` làm cùng việc gần như không khoá. Cả hai **không chạm index** — chúng sửa **bảng**.
+
+**Inverted index (index đảo)** — Đảo ngược quan hệ: thay vì *"bài này chứa từ nào"*, lưu *"từ này nằm trong bài nào"*. Mỗi từ một mục, mỗi mục một **posting list** (danh sách số hiệu bài).
+
+**tsvector / tsquery** — `tsvector` là dạng đã tách từ + cắt gốc + kèm vị trí của một văn bản; `tsquery` là câu hỏi. Toán tử khớp là `@@`. `to_tsvector` **không trả về câu của bạn** — nó trả về bản ghi lại các quyết định về câu đó.
+
+**Parser / dictionary (bộ tách từ / từ điển)** — Hai thành phần quyết định *"thế nào là một từ"*, và **cả hai đông cứng vào lúc `CREATE INDEX`**. Đổi chúng = dựng lại toàn bộ index và mọi kết quả tìm kiếm đổi theo.
+
+**Stop word / stemming (từ dừng / cắt gốc)** — Từ điển vứt bỏ từ vô nghĩa và gộp các biến thể về gốc. Từ bị vứt thì **vĩnh viễn không tìm lại được**; `organization` bị cắt thành `organ`.
+
+**Prefix search `:*` / phrase search `<->`** — `to_tsquery('hàn:*')` tìm theo **tiền tố**; `phraseto_tsquery('Hà Nội')` sinh `'hà' <-> 'nội'` để tìm **cụm từ đứng liền nhau**. Hai công cụ ít người biết, và chúng vá phần lớn nỗi đau tiếng Việt.
+
+**fastupdate / pending list** — GIN gom các mục mới vào một danh sách chờ ghi tuần tự cho nhanh, rồi hợp nhất sau. Cái giá: **truy vấn phải quét cả pending list**, nên nó phình là tìm kiếm chậm.
+
+**Embedding / vector** — Mô hình biến một câu thành một **điểm** trong không gian nhiều chiều (thường 768-3072). Luật duy nhất: **ý gần nhau thì điểm gần nhau**.
+
+**Curse of dimensionality (lời nguyền số chiều)** — Số chiều càng lớn thì khoảng cách xa nhất và gần nhất càng bằng nhau (1.536 chiều: chênh ~5%). Hệ quả: **không cấu trúc cây nào loại bớt được**, buộc phải chuyển sang xấp xỉ.
+
+**ANN / recall** — *Approximate Nearest Neighbor*: chấp nhận trả lời gần đúng để nhanh hơn hàng trăm lần. **Recall** là tỷ lệ kết quả đúng tìm được — 95% nghĩa là cứ 20 kết quả đáng ra phải có thì bỏ sót 1, **và không ai chỉ được ra nó bỏ sót cái nào**.
+
+**HNSW / IVFFlat** — Hai cấu trúc ANN của `pgvector`. HNSW là mạng lưới nhiều tầng, tra nhanh hơn nhưng dựng lâu và tốn RAM; IVFFlat gom cụm k-means, dựng nhanh và nhẹ hơn nhưng phải dựng lại khi dữ liệu đổi nhiều. Núm chỉnh lúc chạy: `hnsw.ef_search` và `ivfflat.probes`.
+
+**halfvec / binary quantization** — Hạ độ chính xác của vector để index vừa RAM: `halfvec` (float16) giảm một nửa gần như miễn phí; nhị phân hoá giảm 32 lần nhưng phải **xếp hạng lại (rerank)** bằng vector gốc.
+
 ## 6. Optimizer và execution plan
 
 **Query optimizer / planner (bộ tối ưu truy vấn)** — Thành phần quyết định **cách** thực hiện câu lệnh: dùng index nào, join theo thuật toán gì, thứ tự bảng ra sao. Bạn không ra lệnh trực tiếp cho nó, chỉ tác động gián tiếp.
