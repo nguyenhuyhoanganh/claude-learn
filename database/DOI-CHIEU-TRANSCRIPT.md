@@ -267,6 +267,16 @@ Bốn bài archived trùng nội dung với Section 02 nên được gộp thàn
 
 Đây là phần bổ sung để đạt độ sâu yêu cầu — mỗi mục đều gắn với một câu hỏi thực tế mà transcript đặt ra nhưng không trả lời:
 
+- **[phase-19 — toàn bộ 9 bài](phase-19/01-mvcc-tuple-header-va-phien-ban.md)** — cơ chế PostgreSQL chuyên sâu. Transcript nhắc tên MVCC, VACUUM và các loại khoá ở hàng chục chỗ nhưng không bao giờ mổ xẻ chúng. Phase này bù lại toàn bộ:
+  - MVCC ở mức byte: bố cục page, header tuple 23 byte, `xmin`/`xmax`/`ctid`/`t_infomask`, xem tận mắt bằng `pageinspect`
+  - Transaction ID, virtual XID, `pg_xact` (2 bit mỗi transaction), **hint bit** và vì sao `SELECT` làm bẩn cả bảng, cấu trúc snapshot ba thành phần, thuật toán `HeapTupleSatisfiesMVCC`, `cmin`/`cmax`, **tràn sub-transaction ở mốc 64**
+  - **Visibility map** (2 bit/page) và `Heap Fetches`, **free space map** (cây 3 tầng), **HOT update** và `fillfactor`
+  - `VACUUM`: sáu nhiệm vụ, ba lượt quét, `maintenance_work_mem` và TidStore (PG17), cost-based delay, `VACUUM FULL` vs `CLUSTER` vs `pg_repack`
+  - Autovacuum: công thức ngưỡng và vì sao 20% sai với bảng lớn, **freeze**, bốn nấc thang **wraparound**, **MultiXact wraparound**, bốn thứ chặn vacuum
+  - Bảy bước của `COMMIT`, `synchronous_commit`, `idle in transaction`, `PREPARE TRANSACTION`, `transaction_timeout` (PG17)
+  - **Năm tầng khoá** (heavyweight / row / predicate / LWLock / spinlock), ma trận xung khắc 8 mode đầy đủ, hàng đợi FIFO, `locktype` `transactionid`/`tuple`/`virtualxid`, fast path, advisory lock, `SKIP LOCKED`
+  - **SSI**: rw-antidependency, cấu trúc nguy hiểm và pivot, `SIReadLock`, leo thang hạt khoá và báo động giả, `READ ONLY DEFERRABLE`
+  - Bảy thí nghiệm tái hiện được + bộ 8 truy vấn giám sát + quy trình chẩn đoán 5 phút
 - [phase-1/00](phase-1/00-tu-dien-thuat-ngu-database-cho-nguoi-moi.md) — từ điển 60+ thuật ngữ và bản đồ "đường đi của một câu `SELECT`"
 - Con số đo được thật (thời gian, dung lượng, tỉ lệ) ở hầu hết các bài
 - Bảng "bẫy thường gặp" và mục "khi nào KHÔNG dùng" ở mọi bài
@@ -288,9 +298,10 @@ Bốn bài archived trùng nội dung với Section 02 nên được gộp thàn
 # Đếm file transcript
 find transcripts/database-engines-crash-course -name '*.txt' | wc -l      # → 153
 
-# Đếm bài học
+# Đếm bài học (56 bài bám transcript + 9 bài phase-19 bổ sung)
 find database -name '*.md' -not -name 'README.md' \
-     -not -name 'DOI-CHIEU-TRANSCRIPT.md' | wc -l                        # → 56
+     -not -name 'DOI-CHIEU-TRANSCRIPT.md' | wc -l                        # → 65
+find database/phase-19 -name '*.md' | wc -l                              # →  9
 
 # Kiểm tra link nội bộ trong database/
 grep -roh '](\.\./\?[^)]*\.md)' database/ | sort -u | wc -l

@@ -1,6 +1,8 @@
 # Phase 18: ACID — Ôn tập và chi tiết triển khai
 
-Bài cuối của khoá. Nó quay lại ACID — nơi mọi thứ bắt đầu — nhưng lần này với toàn bộ kiến thức về page, index, khoá, MVCC, WAL và nhân bản đã tích luỹ. Bốn chữ cái đó bây giờ không còn là định nghĩa nữa; chúng là **bốn cỗ máy** mà bạn đã mổ xẻ từng bộ phận.
+Bài cuối của phần chính. Nó quay lại ACID — nơi mọi thứ bắt đầu — nhưng lần này với toàn bộ kiến thức về page, index, khoá, MVCC, WAL và nhân bản đã tích luỹ. Bốn chữ cái đó bây giờ không còn là định nghĩa nữa; chúng là **bốn cỗ máy** mà bạn đã mổ xẻ từng bộ phận.
+
+> Sau bài này còn **[phase 19](../phase-19/01-mvcc-tuple-header-va-phien-ban.md)** — phần bổ sung mổ xẻ cơ chế PostgreSQL tới tận byte: MVCC, snapshot, visibility map, VACUUM, wraparound và năm tầng khoá.
 
 ## Bản đồ: mỗi chữ được thực thi ở đâu
 
@@ -385,4 +387,6 @@ Nếu phải tóm tắt toàn bộ khoá trong một khung tư duy:
 
 ---
 
-*Hết khoá. Sáu điều trong phần "ba mươi giây tổng kết" là thứ đáng mang theo — phần còn lại tra lại được bất cứ lúc nào.*
+*Hết phần chính. Sáu điều trong phần "ba mươi giây tổng kết" là thứ đáng mang theo — phần còn lại tra lại được bất cứ lúc nào.*
+
+**Đi tiếp** → [Phase 19 — Bài 1: MVCC, dòng dữ liệu không bao giờ bị sửa](../phase-19/01-mvcc-tuple-header-va-phien-ban.md)

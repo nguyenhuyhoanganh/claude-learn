@@ -2,9 +2,9 @@
 
 > Database **thật sự** lưu và tìm dữ liệu thế nào.
 
-Khoá về **nội tại database engine**: page và I/O, B-Tree và B+Tree, indexing, ACID, partitioning, sharding, locking, replication, các storage engine (InnoDB, RocksDB, LevelDB…), cursor, bảo mật kết nối, và cả homomorphic encryption. Xen kẽ là các phiên hỏi đáp và bài system design.
+Khoá về **nội tại database engine**: page và I/O, B-Tree và B+Tree, indexing, ACID, partitioning, sharding, locking, replication, các storage engine (InnoDB, RocksDB, LevelDB…), cursor, bảo mật kết nối, và cả homomorphic encryption. Xen kẽ là các phiên hỏi đáp và bài system design. Khép lại bằng một phần chuyên sâu mổ xẻ **cơ chế bên trong PostgreSQL**: MVCC ở mức byte, snapshot, visibility map, VACUUM, wraparound và năm tầng khoá.
 
-**56 bài** trong 18 phần. Mỗi bài có mô hình tư duy, diễn giải trên dữ liệu thật, con số đo được, bảng bẫy thường gặp và tóm tắt.
+**65 bài** trong 19 phần. Mỗi bài có mô hình tư duy, diễn giải trên dữ liệu thật, con số đo được, bảng bẫy thường gặp và tóm tắt.
 
 ## Mục lục
 
@@ -154,6 +154,22 @@ Khoá về **nội tại database engine**: page và I/O, B-Tree và B+Tree, ind
 |---|---|
 | [01](phase-18/01-acid-review-va-implementation-details.md) | ACID — Ôn tập và chi tiết triển khai |
 
+### Phase 19 — Cơ chế PostgreSQL chuyên sâu
+
+> Phần bổ sung ngoài transcript: mổ xẻ tới tận byte các cơ chế mà 18 phần trước chỉ nhắc tên.
+
+| Bài | Nội dung |
+|---|---|
+| [01](phase-19/01-mvcc-tuple-header-va-phien-ban.md) | MVCC — dòng dữ liệu không bao giờ bị sửa (tuple header, `xmin`/`xmax`/`ctid`) |
+| [02](phase-19/02-transaction-id-snapshot-va-quy-tac-nhin-thay.md) | Transaction ID, Snapshot và quy tắc nhìn thấy (`pg_xact`, hint bit, sub-transaction) |
+| [03](phase-19/03-visibility-map-fsm-va-hot.md) | Visibility Map, Free Space Map và HOT Update |
+| [04](phase-19/04-vacuum-co-che-day-du.md) | VACUUM — mổ xẻ từng pha |
+| [05](phase-19/05-autovacuum-freeze-va-wraparound.md) | Autovacuum, Freeze và Transaction ID Wraparound |
+| [06](phase-19/06-co-che-transaction-ben-trong.md) | Cơ chế Transaction bên trong — bảy bước của `COMMIT` |
+| [07](phase-19/07-ban-do-day-du-cac-loai-khoa.md) | Bản đồ đầy đủ các loại khoá — năm tầng, tám mode, hàng đợi FIFO |
+| [08](phase-19/08-serializable-snapshot-isolation.md) | SERIALIZABLE và Serializable Snapshot Isolation |
+| [09](phase-19/09-phong-thi-nghiem-va-tong-ket.md) | Phòng thí nghiệm, bộ truy vấn giám sát và bảng tra cứu |
+
 ## Nên bắt đầu từ đâu
 
 | Bạn đang ở tình huống | Đọc từ |
@@ -164,9 +180,12 @@ Khoá về **nội tại database engine**: page và I/O, B-Tree và B+Tree, ind
 | Chuẩn bị phỏng vấn database | phase-2 (ACID) → phase-4 (index) → phase-8 (lock) → phase-16 (hỏi đáp) |
 | Đang scale database | phase-7 bài 3 (thang 9 nấc) → phase-6 → phase-9 |
 | Tò mò về engine internals | phase-11 và phase-17 |
+| Bảng phình, `VACUUM` không dọn được, đĩa đầy | [phase-19 bài 5](phase-19/05-autovacuum-freeze-va-wraparound.md) — phần *"Bốn thứ chặn `VACUUM`"* |
+| Truy vấn treo, `ALTER TABLE` làm đứng hệ thống | [phase-19 bài 7](phase-19/07-ban-do-day-du-cac-loai-khoa.md) — phần *"Hàng đợi khoá"* |
+| Đang vận hành PostgreSQL và muốn bộ giám sát | [phase-19 bài 9](phase-19/09-phong-thi-nghiem-va-tong-ket.md) — 8 truy vấn + quy trình chẩn đoán 5 phút |
 | Muốn ôn nhanh toàn bộ | [phase-18](phase-18/01-acid-review-va-implementation-details.md) — phần *"Ba mươi giây tổng kết"* |
 
-## Sáu điều đáng mang theo
+## Bảy điều đáng mang theo
 
 1. **Database đếm page, không đếm dòng.** Mọi câu hỏi hiệu năng quy về "phải đọc bao nhiêu page?"
 2. **Index là bản sao đã sắp xếp — và nó có giá.** Chỉ đáng khi lọc ra dưới ~10% số dòng.
@@ -174,6 +193,7 @@ Khoá về **nội tại database engine**: page và I/O, B-Tree và B+Tree, ind
 4. **Tranh chấp giải bằng thứ tự, không bằng số lượng.** Deadlock sinh từ thứ tự khoá khác nhau.
 5. **Mỗi đặc tính kiến trúc là một đánh đổi** — không cái nào "tốt hơn", chỉ có "hợp hơn với tải của bạn".
 6. **Leo hết chín nấc thang trước khi nghĩ tới sharding.** Chín nấc đầu quay đầu được; nấc thứ mười thì không.
+7. **PostgreSQL đổi công việc dọn dẹp lấy khả năng đọc không bao giờ chặn ghi.** Mọi sự cố nghiêm trọng của nó đều bắt đầu từ chỗ ai đó ngăn không cho nó dọn.
 
 ## Khoá liên quan
 
