@@ -19,27 +19,33 @@ Chromium đã chuyển hết sang mixin, nhưng **Behaviors vẫn còn** trong c
 Polymer 1 ra đời trước khi ES6 class phổ biến, nên nó dùng object thuần:
 
 ```javascript
-// Định nghĩa behavior
-const I18nBehavior = {
+// Định nghĩa behavior — chỉ là một OBJECT thường
+const OpenableBehavior = {
   properties: {
-    locale: {type: String, value: 'en'},
+    opened: {type: Boolean, value: false, reflectToAttribute: true},
   },
 
-  // Lifecycle của Polymer 1 có tên riêng
+  // Lifecycle của Polymer 1 có tên riêng: attached / detached
   attached() {
-    document.addEventListener('language-changed', this._onLang);
+    this.esc_ = (e) => { if (e.key === 'Escape') this.close(); };
+    document.addEventListener('keydown', this.esc_);
   },
   detached() {
-    document.removeEventListener('language-changed', this._onLang);
+    document.removeEventListener('keydown', this.esc_);
   },
 
-  i18n(key) { return loadTimeData.getString(key); },
+  toggle() { this.opened = !this.opened; },
+  open()   { this.opened = true; },
+  close()  { this.opened = false; },
 };
 
 // Dùng
 Polymer({
-  is: 'settings-page',
-  behaviors: [I18nBehavior],
+  is: 'my-panel',
+  behaviors: [OpenableBehavior],
+  properties: {
+    tieuDe: {type: String},
+  },
 });
 ```
 
@@ -57,14 +63,15 @@ Nghĩa là Polymer 1 đã **tự cài lại** thứ mà `super` cho bạn miễn
 
 ```javascript
 Polymer({
-  is: 'my-el',
-  behaviors: [BehaviorA, BehaviorB],
+  is: 'my-panel',
+  behaviors: [OpenableBehavior, DisableableBehavior],
   attached() { console.log('element'); },
 });
-// → A.attached, B.attached, element.attached  (cả 3 đều chạy)
+// Lifecycle → Openable.attached, Disableable.attached, element.attached (cả 3 chạy)
 
-// Nhưng method thường:
-// BehaviorA.foo và BehaviorB.foo → chỉ B.foo tồn tại. A.foo mất im lặng.
+// Nhưng method thường thì KHÔNG:
+// cả hai behavior đều có toggle() → chỉ bản của DisableableBehavior tồn tại.
+// Bản của OpenableBehavior mất im lặng, và không có super để gọi lại nó.
 ```
 
 ### Dùng Behaviors trong Polymer 3
@@ -74,8 +81,8 @@ Polymer 3 vẫn chạy được behaviors cũ qua cầu nối `mixinBehaviors`:
 ```javascript
 import {mixinBehaviors} from '@polymer/polymer/lib/legacy/class.js';
 
-class SettingsPage extends mixinBehaviors([I18nBehavior], PolymerElement) {
-  static get is() { return 'settings-page'; }
+class MyPanel extends mixinBehaviors([OpenableBehavior], PolymerElement) {
+  static get is() { return 'my-panel'; }
 }
 ```
 
@@ -87,51 +94,78 @@ class SettingsPage extends mixinBehaviors([I18nBehavior], PolymerElement) {
 
 ## 3. Mixins — thế hệ hiện tại
 
-Cú pháp chuẩn Polymer 3, kèm convention Chromium (hậu tố `_` cho private):
+Cú pháp chuẩn Polymer 3, kèm convention Chromium (hậu tố `_` cho private, đặt tên cho class bên trong để stack trace đọc được):
 
 ```javascript
 import {dedupingMixin} from 'chrome://resources/polymer/v3_0/polymer/lib/utils/mixin.js';
 
-export const I18nMixin = dedupingMixin((superClass) => {
-  class I18nMixinImpl extends superClass {
+export const OpenableMixin = dedupingMixin((superClass) => {
+  class OpenableMixinImpl extends superClass {
     static get properties() {
       return {
-        locale: {type: String, value: 'en'},
+        opened: {
+          type: Boolean,
+          value: false,
+          reflectToAttribute: true,
+          observer: 'openedChanged_',
+        },
+        nhan: {type: String, computed: 'tinhNhan_(opened)'},
       };
     }
 
-    ready() {
-      super.ready();                         // ← setup: super ĐẦU
-      this.langHandler_ = this.onLangChange_.bind(this);
-      document.addEventListener('language-changed', this.langHandler_);
+    connectedCallback() {
+      super.connectedCallback();             // ← setup: super ĐẦU
+      this.esc_ = (e) => { if (e.key === 'Escape') this.close(); };
+      document.addEventListener('keydown', this.esc_);
     }
 
     disconnectedCallback() {
-      document.removeEventListener('language-changed', this.langHandler_);
+      document.removeEventListener('keydown', this.esc_);
       super.disconnectedCallback();          // ← teardown: super CUỐI
     }
 
-    i18n(key, ...args) {
-      return loadTimeData.getString(key, ...args);
-    }
+    toggle() { this.opened = !this.opened; }
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
 
-    onLangChange_() { /* ... */ }
+    tinhNhan_(opened) { return opened ? 'Đang mở' : 'Đang đóng'; }
+
+    openedChanged_(moi) {
+      this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
+    }
   }
-  return I18nMixinImpl;
+  return OpenableMixinImpl;
 });
 ```
 
 Dùng:
 
 ```javascript
-class SettingsPage extends I18nMixin(PolymerElement) {
-  static get is() { return 'settings-page'; }
+class MyPanel extends OpenableMixin(PolymerElement) {
+  static get is() { return 'my-panel'; }
+
+  static get properties() {
+    return {tieuDe: {type: String, value: 'Bảng'}};
+  }
+
   static get template() {
-    return html`<h1>[[i18n('settingsTitle')]]</h1>`;
+    return html`
+      <style>
+        :host([opened]) .than { display: block; }   /* dùng attribute mixin reflect ra */
+        .than { display: none; }
+      </style>
+      <h3 on-click="toggle">[[tieuDe]] — [[nhan]]</h3>
+      <div class="than"><slot></slot></div>`;
   }
 }
-customElements.define(SettingsPage.is, SettingsPage);
+customElements.define(MyPanel.is, MyPanel);
 ```
+
+Ba chi tiết đáng chú ý trong đoạn trên:
+
+1. Template của element gọi thẳng `toggle` (method của mixin) trong `on-click`, và bind `[[nhan]]` (computed của mixin) — **không phân biệt** với thứ của chính element.
+2. CSS của element dùng `:host([opened])` — attribute do mixin `reflectToAttribute` đẩy ra.
+3. `MyPanel` chỉ khai báo `tieuDe`, phần riêng của nó. Mọi thứ mở/đóng nằm ở mixin.
 
 ## 4. Polymer thêm gì lên trên mixin thuần
 
@@ -140,54 +174,53 @@ Mixin thuần JS chỉ cho bạn method + prototype chain. Polymer bổ sung 3 t
 ### 4.1 `properties` được gộp tự động
 
 ```javascript
-const CounterMixin = dedupingMixin((sc) => class extends sc {
+class MyPanel extends DisableableMixin(OpenableMixin(PolymerElement)) {
   static get properties() {
-    return {count: {type: Number, value: 0}};
-  }
-});
-
-class MyEl extends CounterMixin(PolymerElement) {
-  static get properties() {
-    return {name: {type: String}};      // KHÔNG cần khai báo lại count
+    return {tieuDe: {type: String}};    // KHÔNG cần khai báo lại opened / disabled
   }
 }
+```
 
-// MyEl có cả `count` lẫn `name`
+Kết quả chạy thật — `MyPanel` có đủ property từ cả ba nguồn:
+
+```text
+opened    ← OpenableMixin
+nhan      ← OpenableMixin (computed)
+disabled  ← DisableableMixin
+tieuDe    ← chính MyPanel
 ```
 
 Polymer đi ngược prototype chain, gom tất cả `static get properties()` và merge. Trùng key → **class gần bạn nhất thắng**.
 
 ### 4.2 `observers` và `computed` chạy được trong mixin
 
-Đây là điểm mạnh riêng của Polymer. Mixin có thể mang theo cả hệ thống phản ứng:
+Đây là điểm mạnh riêng của Polymer. Mixin mang theo được cả hệ thống phản ứng — chính là `nhan` và `openedChanged_` ở mục 3:
 
 ```javascript
-const DoublerMixin = dedupingMixin((sc) => class extends sc {
-  static get properties() {
-    return {
-      value:   {type: Number, value: 1},
-      doubled: {type: Number, computed: 'compute_(value)'},
-    };
-  }
-  static get observers() {
-    return ['onValue_(value)'];
-  }
-  compute_(v) { return v * 2; }
-  onValue_(v) { console.log('value đổi thành', v); }
-});
+static get properties() {
+  return {
+    opened: {type: Boolean, value: false, observer: 'openedChanged_'},
+    nhan:   {type: String, computed: 'tinhNhan_(opened)'},
+  };
+}
+tinhNhan_(opened) { return opened ? 'Đang mở' : 'Đang đóng'; }
+openedChanged_(moi) { /* bắn event */ }
 ```
 
-Kết quả thật khi chạy (đã kiểm chứng):
+Kết quả chạy thật:
 
 ```text
-  ObsMixin.observer fired value=1
-Polymer computed từ mixin: doubled=2, render ra "2"
-→ set value = 21
-  ObsMixin.observer fired value=21
-doubled=42, render ra "42"
+panel.opened                 → false
+panel.nhan                   → "Đang đóng"      computed trong mixin
+panel.toggle()
+panel.opened                 → true
+panel.nhan                   → "Đang mở"        computed tự tính lại
+panel.hasAttribute('opened') → true             reflectToAttribute
+event 'opened-changed'       → đã bắn           observer trong mixin
+template render              → "Đang mở" ngay   binding [[nhan]] thấy được
 ```
 
-→ `computed`, `observers`, và data binding trong template **đều thấy** property do mixin khai báo. Mixin Polymer là một "mảnh component" thực thụ, không chỉ là túi method.
+→ `computed`, `observer`, `reflectToAttribute` và data binding trong template **đều thấy** property do mixin khai báo. Mixin Polymer là một "mảnh component" thực thụ, không chỉ là túi method.
 
 ### 4.3 `dedupingMixin` — bắt buộc
 
@@ -200,7 +233,7 @@ export const MyMixin = dedupingMixin((sc) => class extends sc { /* ... */ });
 Kiểm chứng:
 
 ```javascript
-LoggerMixin(LoggerMixin(PolymerElement)) === LoggerMixin(PolymerElement)   // true
+OpenableMixin(OpenableMixin(PolymerElement)) === OpenableMixin(PolymerElement)   // true
 ```
 
 Không bọc → hai bản sao trong chuỗi → listener nhân đôi.
@@ -257,41 +290,48 @@ import type {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polym
 type Constructor<T> = new (...args: any[]) => T;
 
 // 1. Interface mô tả những gì mixin thêm vào — để nơi khác import kiểu
-export interface I18nMixinInterface {
-  i18n(id: string, ...varArgs: Array<string|number>): string;
-  i18nAdvanced(id: string, opts?: I18nAdvancedOpts): TrustedHTML;
-  i18nUpdateLocale(): void;
+export interface OpenableMixinInterface {
+  opened: boolean;
+  toggle(): void;
+  open(): void;
+  close(): void;
 }
 
 // 2. Bản thân mixin
-export const I18nMixin = dedupingMixin(
+export const OpenableMixin = dedupingMixin(
     <T extends Constructor<PolymerElement>>(superClass: T): T &
-    Constructor<I18nMixinInterface> => {
-      class I18nMixinImpl extends superClass implements I18nMixinInterface {
-        i18n(id: string, ...varArgs: Array<string|number>): string {
-          return loadTimeData.getStringF(id, ...varArgs);
+    Constructor<OpenableMixinInterface> => {
+      class OpenableMixinImpl extends superClass implements OpenableMixinInterface {
+        static get properties() {
+          return {
+            opened: {type: Boolean, value: false, reflectToAttribute: true},
+          };
         }
-        i18nAdvanced(id: string, opts?: I18nAdvancedOpts): TrustedHTML { /* ... */ }
-        i18nUpdateLocale(): void { /* ... */ }
+
+        opened: boolean;
+
+        toggle(): void { this.opened = !this.opened; }
+        open(): void   { this.opened = true; }
+        close(): void  { this.opened = false; }
       }
-      return I18nMixinImpl;
+      return OpenableMixinImpl;
     });
 ```
 
 Ba chi tiết đáng chú ý:
 
-1. **Kiểu trả về `T & Constructor<I18nMixinInterface>`** — nói với TypeScript: "class trả về có mọi thứ của `T`, **cộng thêm** những gì trong interface". Thiếu dòng này thì `this.i18n()` báo lỗi biên dịch.
-2. **Class có tên** (`I18nMixinImpl`) — để stack trace đọc được.
+1. **Kiểu trả về `T & Constructor<OpenableMixinInterface>`** — nói với TypeScript: "class trả về có mọi thứ của `T`, **cộng thêm** những gì trong interface". Thiếu dòng này thì `this.toggle()` báo lỗi biên dịch ở component dùng mixin.
+2. **Class có tên** (`OpenableMixinImpl`) — để stack trace đọc được. Class biểu thức ẩn danh sẽ hiện chuỗi rỗng trong DevTools.
 3. **Interface export riêng** — component khác `implements` được, và dùng làm kiểu cho biến.
 
-Khi dùng, tách base ra biến cho dễ đọc:
+Khi dùng, tách base ra biến cho dễ đọc — nhất là khi xếp chồng nhiều mixin:
 
 ```typescript
-const SettingsPageBase = I18nMixin(WebUiListenerMixin(PolymerElement));
+const MyPanelBase = DisableableMixin(OpenableMixin(PolymerElement));
 
-export class SettingsPageElement extends SettingsPageBase {
-  static get is() { return 'settings-page'; }
-  // TypeScript biết this.i18n() và this.addWebUiListener() tồn tại
+export class MyPanelElement extends MyPanelBase {
+  static get is() { return 'my-panel'; }
+  // TypeScript biết this.toggle() và this.disabled tồn tại
 }
 ```
 

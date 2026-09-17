@@ -43,52 +43,56 @@ Trước khi nói khác biệt, cần nói rõ phần **giống nhau**, vì nó 
 
 ### Cùng một mixin, hai cách viết
 
-Mixin quản lý trạng thái loading — bài toán thật, gặp ở mọi page WebUI.
+Lấy đúng `OpenableMixin` xuyên suốt tài liệu, đặt hai bản cạnh nhau.
 
 **Polymer 3**
 
 ```javascript
 import {dedupingMixin} from 'chrome://resources/polymer/v3_0/polymer/lib/utils/mixin.js';
 
-export const LoadableMixin = dedupingMixin((superClass) => {
-  class LoadableMixinImpl extends superClass {
-    static get properties() {
+export const OpenableMixin = dedupingMixin((superClass) => {
+  class OpenableMixinImpl extends superClass {
+    static get properties() {                      // ① static GETTER
       return {
-        isLoading: {
+        opened: {
           type: Boolean,
-          value: false,              // ← giá trị mặc định khai báo tại chỗ
-          readOnly: true,            // ← chỉ mixin được sửa
-          reflectToAttribute: true,  // ← thành attribute để CSS bắt được
+          value: false,                            // ② mặc định khai báo tại chỗ
+          reflectToAttribute: true,                // ③ tên dài
+          observer: 'openedChanged_',              // ④ observer khai báo
         },
-        loadError: {
-          type: String,
-          value: '',
-          readOnly: true,
-        },
+        nhan: {type: String, computed: 'tinhNhan_(opened)'},   // ⑤ computed khai báo
       };
     }
 
-    async withLoading(fn) {
-      this._setIsLoading(true);      // ← setter sinh tự động do readOnly
-      this._setLoadError('');
-      try {
-        return await fn();
-      } catch (e) {
-        this._setLoadError(e.message || 'Lỗi không xác định');
-        throw e;
-      } finally {
-        this._setIsLoading(false);
-      }
+    connectedCallback() {
+      super.connectedCallback();
+      this.esc_ = (e) => { if (e.key === 'Escape') this.close(); };
+      document.addEventListener('keydown', this.esc_);
+    }
+
+    disconnectedCallback() {
+      document.removeEventListener('keydown', this.esc_);
+      super.disconnectedCallback();
+    }
+
+    toggle() { this.opened = !this.opened; }       // ⑥ giống hệt hai bên
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
+
+    tinhNhan_(opened) { return opened ? 'Đang mở' : 'Đang đóng'; }
+
+    openedChanged_(moi) {
+      this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
     }
   }
-  return LoadableMixinImpl;
+  return OpenableMixinImpl;
 });
 ```
 
 **Lit 3**
 
 ```javascript
-// Lit không có dedupingMixin → tự viết (bài 2 mục 5 giải thích vì sao cần cả `marker`)
+// ⓪ Lit không có dedupingMixin → tự viết (bài 2 mục 5 giải thích vì sao cần cả `marker`)
 function dedupeMixin(mixin) {
   const cache = new WeakMap();
   const marker = Symbol('mixin-applied');
@@ -102,46 +106,66 @@ function dedupeMixin(mixin) {
   };
 }
 
-export const LoadableMixin = dedupeMixin((Base) => {
-  class LoadableMixinImpl extends Base {
-    static properties = {
-      isLoading: {type: Boolean, reflect: true},   // ← reflect, không phải reflectToAttribute
-      loadError: {type: String},
-      // không có readOnly → dùng quy ước đặt tên, hoặc getter + field private
+export const OpenableMixin = dedupeMixin((Base) => {
+  class OpenableMixinImpl extends Base {
+    static properties = {                          // ① static FIELD
+      opened: {
+        type: Boolean,
+        reflect: true,                             // ③ tên ngắn
+      },
+      // ④ không có observer, ⑤ không có computed
     };
 
     constructor() {
       super();
-      this.isLoading = false;        // ← giá trị mặc định phải gán ở đây
-      this.loadError = '';
+      this.opened = false;                         // ② mặc định gán ở đây
     }
 
-    async withLoading(fn) {
-      this.isLoading = true;         // ← gán thẳng, không có _setX()
-      this.loadError = '';
-      try {
-        return await fn();
-      } catch (e) {
-        this.loadError = e.message || 'Lỗi không xác định';
-        throw e;
-      } finally {
-        this.isLoading = false;
+    get nhan() {                                   // ⑤ computed → getter thường
+      return this.opened ? 'Đang mở' : 'Đang đóng';
+    }
+
+    connectedCallback() {
+      super.connectedCallback();
+      this.esc_ = (e) => { if (e.key === 'Escape') this.close(); };
+      document.addEventListener('keydown', this.esc_);
+    }
+
+    disconnectedCallback() {
+      document.removeEventListener('keydown', this.esc_);
+      super.disconnectedCallback();
+    }
+
+    toggle() { this.opened = !this.opened; }       // ⑥ giống hệt hai bên
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
+
+    updated(changed) {                             // ④ observer → updated()
+      super.updated(changed);
+      if (changed.has('opened')) {
+        this.dispatchEvent(new CustomEvent('opened-changed',
+            {detail: {value: this.opened}}));
       }
     }
   }
-  return LoadableMixinImpl;
+  return OpenableMixinImpl;
 });
 ```
 
-Khác biệt cụ thể, dòng-đối-dòng:
+Khác biệt, đối chiếu theo số đánh dấu:
 
-| Dòng | Polymer | Lit | Vì sao |
+| # | Polymer | Lit | Vì sao |
 |---|---|---|---|
-| Bọc mixin | `dedupingMixin(...)` có sẵn | tự viết `dedupeMixin` | Lit không cung cấp |
-| `properties` | static **getter** | static **field** | Khác cú pháp, cùng cơ chế gộp |
-| Mặc định | `value: false` | gán trong constructor | Lit không có khái niệm `value:` |
-| Reflect | `reflectToAttribute` | `reflect` | Chỉ khác tên |
-| Chỉ đọc | `readOnly: true` → `this._setX()` | không có | Lit cố ý bỏ, tin vào quy ước |
+| ⓪ | `dedupingMixin()` có sẵn | tự viết `dedupeMixin` | Lit không cung cấp |
+| ① | `static get properties()` | `static properties = {}` | Khác cú pháp, **cùng cơ chế gộp qua chain** |
+| ② | `value: false` tại chỗ | gán trong `constructor` | Lit không có khái niệm `value:` |
+| ③ | `reflectToAttribute` | `reflect` | Chỉ khác tên |
+| ④ | `observer: 'openedChanged_'` | `updated(changed)` + kiểm tra `changed.has()` | Lit không có observer theo property |
+| ⑤ | `computed: 'tinhNhan_(opened)'` | getter thường | Lit không có computed |
+| ⑥ | `toggle/open/close` | **giống hệt** | Phần logic thuần không đổi chút nào |
+| — | `connectedCallback` + `super` | **giống hệt** | Lifecycle hook trùng tên, trùng quy tắc `super` |
+
+> **Đọc bảng này xong là nắm được 80% việc migrate.** Phần khung mixin (`(Base) => class extends Base`), phần method, phần lifecycle — **không đổi gì**. Chỉ phần *khai báo property* và *cách phản ứng khi property đổi* là phải viết lại.
 
 ## 3. So sánh luồng chạy
 
@@ -340,30 +364,37 @@ Lit bỏ two-way binding có chủ đích — luồng dữ liệu một chiều 
 
 ### `readOnly: true` → quy ước
 
+Giả sử `opened` chỉ được đổi qua `toggle()/open()/close()`, không ai gán thẳng.
+
 ```javascript
-// Polymer: sinh ra this._setIsLoading()
-isLoading: {type: Boolean, readOnly: true}
-this._setIsLoading(true);
+// Polymer: readOnly sinh ra this._setOpened()
+opened: {type: Boolean, value: false, readOnly: true}
+
+toggle() { this._setOpened(!this.opened); }   // gán thẳng this.opened = ... sẽ BÁO LỖI
 ```
 
 ```javascript
 // Lit: không có cơ chế tương đương. Hai lựa chọn:
 
 // (a) Quy ước — đơn giản, không ép buộc
-static properties = {isLoading: {type: Boolean}};
-// tài liệu ghi rõ "chỉ mixin được ghi"
+static properties = {opened: {type: Boolean, reflect: true}};
+// tài liệu ghi rõ "chỉ đổi qua toggle/open/close"
 
 // (b) Getter + field private — ép buộc thật sự
-#isLoading = false;
-get isLoading() { return this.#isLoading; }
-_setIsLoading(v) {
-  const old = this.#isLoading;
-  this.#isLoading = v;
-  this.requestUpdate('isLoading', old);
+static properties = {opened: {type: Boolean, reflect: true}};
+#opened = false;
+get opened() { return this.#opened; }
+_setOpened(v) {
+  const cu = this.#opened;
+  this.#opened = v;
+  this.requestUpdate('opened', cu);     // ← phải gọi thủ công
 }
+toggle() { this._setOpened(!this.#opened); }
 ```
 
-Cách (b) giữ đúng ngữ nghĩa Polymer. Lưu ý phải gọi `requestUpdate()` thủ công vì Lit không thấy được thay đổi của field private.
+Cách (b) giữ đúng ngữ nghĩa Polymer. Lưu ý phải gọi `requestUpdate()` thủ công, vì Lit không thấy được thay đổi của field private — nó chỉ theo dõi những property nó tự tạo accessor.
+
+Thực tế đa số code Lit chọn cách (a): đơn giản hơn, và `reflect: true` đã đủ để lộ trạng thái ra ngoài cho CSS.
 
 ## 5. Quy trình migrate — 7 bước
 
@@ -390,48 +421,75 @@ Rồi rà soát 3 bẫy:
 
 ## 6. Ví dụ migrate hoàn chỉnh
 
-Mixin theo dõi vị trí cuộn — có đủ property, lifecycle, giá trị dẫn xuất.
+Migrate `OpenableMixin` cùng với `DisableableMixin` — có đủ property, computed, observer, lifecycle, và `super` giữa hai mixin.
 
 **Trước — Polymer 3**
 
 ```javascript
 import {dedupingMixin} from 'chrome://resources/polymer/v3_0/polymer/lib/utils/mixin.js';
 
-export const ScrollMixin = dedupingMixin((superClass) => {
-  class ScrollMixinImpl extends superClass {
+export const OpenableMixin = dedupingMixin((superClass) => {
+  class OpenableMixinImpl extends superClass {
     static get properties() {
       return {
-        scrollTop_:  {type: Number, value: 0},
-        isScrolled:  {type: Boolean, value: false, reflectToAttribute: true,
-                      computed: 'computeScrolled_(scrollTop_)'},
+        opened:  {type: Boolean, value: false, reflectToAttribute: true,
+                  observer: 'openedChanged_'},
+        nhan:    {type: String, computed: 'tinhNhan_(opened)'},
       };
     }
 
-    static get observers() {
-      return ['onScrolledChanged_(isScrolled)'];
-    }
-
-    ready() {
-      super.ready();
-      this.scrollHandler_ = this.onScroll_.bind(this);
-      window.addEventListener('scroll', this.scrollHandler_, {passive: true});
+    connectedCallback() {
+      super.connectedCallback();
+      this.esc_ = (e) => { if (e.key === 'Escape') this.close(); };
+      document.addEventListener('keydown', this.esc_);
     }
 
     disconnectedCallback() {
-      window.removeEventListener('scroll', this.scrollHandler_);
+      document.removeEventListener('keydown', this.esc_);
       super.disconnectedCallback();
     }
 
-    onScroll_() { this.scrollTop_ = window.scrollY; }
+    toggle() { this.opened = !this.opened; }
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
 
-    computeScrolled_(top) { return top > 10; }
+    tinhNhan_(opened) { return opened ? 'Đang mở' : 'Đang đóng'; }
 
-    onScrolledChanged_(scrolled) {
-      this.dispatchEvent(new CustomEvent('scrolled-changed', {detail: {scrolled}}));
+    openedChanged_(moi) {
+      this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
     }
   }
-  return ScrollMixinImpl;
+  return OpenableMixinImpl;
 });
+
+export const DisableableMixin = dedupingMixin((superClass) => {
+  class DisableableMixinImpl extends superClass {
+    static get properties() {
+      return {disabled: {type: Boolean, value: false, reflectToAttribute: true}};
+    }
+    toggle() {
+      if (this.disabled) return;
+      super.toggle();
+    }
+  }
+  return DisableableMixinImpl;
+});
+
+class MyPanel extends DisableableMixin(OpenableMixin(PolymerElement)) {
+  static get is() { return 'my-panel'; }
+  static get properties() { return {tieuDe: {type: String, value: 'Bảng'}}; }
+  static get template() {
+    return html`
+      <style>
+        :host([opened]) .than { display: block; }
+        :host([disabled]) { opacity: .5; }
+        .than { display: none; }
+      </style>
+      <h3 on-click="toggle">[[tieuDe]] — [[nhan]]</h3>
+      <div class="than"><slot></slot></div>`;
+  }
+}
+customElements.define(MyPanel.is, MyPanel);
 ```
 
 **Sau — Lit 3**
@@ -450,50 +508,77 @@ function dedupeMixin(mixin) {
   };
 }
 
-export const ScrollMixin = dedupeMixin((Base) => {
-  class ScrollMixinImpl extends Base {
+export const OpenableMixin = dedupeMixin((Base) => {
+  class OpenableMixinImpl extends Base {
     static properties = {
-      scrollTop_: {state: true},                        // state: nội bộ, không thành attribute
-      isScrolled: {type: Boolean, reflect: true},       // reflectToAttribute → reflect
+      opened: {type: Boolean, reflect: true},        // ③ reflectToAttribute → reflect
     };
 
     constructor() {
       super();
-      this.scrollTop_ = 0;                              // value: → constructor
-      this.isScrolled = false;
+      this.opened = false;                           // ② value: → constructor
+    }
+
+    get nhan() {                                     // ⑤ computed → getter
+      return this.opened ? 'Đang mở' : 'Đang đóng';
     }
 
     connectedCallback() {
-      super.connectedCallback();                        // ready() → connectedCallback()
-      this.scrollHandler_ = this.onScroll_.bind(this);  // (cần chạy sớm, nên không dùng firstUpdated)
-      window.addEventListener('scroll', this.scrollHandler_, {passive: true});
+      super.connectedCallback();                     // không đổi
+      this.esc_ = (e) => { if (e.key === 'Escape') this.close(); };
+      document.addEventListener('keydown', this.esc_);
     }
 
     disconnectedCallback() {
-      window.removeEventListener('scroll', this.scrollHandler_);
-      super.disconnectedCallback();                     // teardown: super CUỐI
+      document.removeEventListener('keydown', this.esc_);
+      super.disconnectedCallback();                  // teardown: super CUỐI
     }
 
-    willUpdate(changed) {
-      super.willUpdate(changed);
-      if (changed.has('scrollTop_')) {
-        this.isScrolled = this.scrollTop_ > 10;         // computed → willUpdate
-      }
-    }
+    toggle() { this.opened = !this.opened; }         // không đổi
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
 
-    updated(changed) {
+    updated(changed) {                               // ④ observer → updated()
       super.updated(changed);
-      if (changed.has('isScrolled')) {                  // observers → updated
-        this.dispatchEvent(new CustomEvent('scrolled-changed', {
-          detail: {scrolled: this.isScrolled},
-        }));
+      if (changed.has('opened')) {
+        this.dispatchEvent(new CustomEvent('opened-changed',
+            {detail: {value: this.opened}}));
       }
     }
-
-    onScroll_() { this.scrollTop_ = window.scrollY; }
   }
-  return ScrollMixinImpl;
+  return OpenableMixinImpl;
 });
+
+export const DisableableMixin = dedupeMixin((Base) => {
+  class DisableableMixinImpl extends Base {
+    static properties = {disabled: {type: Boolean, reflect: true}};
+    constructor() { super(); this.disabled = false; }
+    toggle() {
+      if (this.disabled) return;
+      super.toggle();                                // ← `super` giữa hai mixin: KHÔNG ĐỔI
+    }
+  }
+  return DisableableMixinImpl;
+});
+
+class MyPanel extends DisableableMixin(OpenableMixin(LitElement)) {
+  static properties = {tieuDe: {type: String}};
+
+  static styles = css`
+    :host([opened]) .than { display: block; }
+    :host([disabled]) { opacity: .5; }
+    .than { display: none; }
+  `;
+
+  constructor() { super(); this.tieuDe = 'Bảng'; }
+
+  render() {
+    return html`
+      <h3 @click=${this.toggle}>${this.tieuDe} — ${this.nhan}</h3>
+      <div class="than"><slot></slot></div>`;
+  }
+}
+customElements.define('my-panel', MyPanel);
 ```
 
 Đối chiếu từng thay đổi:
@@ -502,14 +587,41 @@ export const ScrollMixin = dedupeMixin((Base) => {
 |---|---|---|---|
 | 1 | `dedupingMixin` | `dedupeMixin` tự viết | Lit không có |
 | 2 | `static get properties()` | `static properties =` | Khác cú pháp |
-| 3 | `value: 0` | gán trong constructor | Lit không có `value:` |
+| 3 | `value: false` | gán trong constructor | Lit không có `value:` |
 | 4 | `reflectToAttribute` | `reflect` | Khác tên |
-| 5 | (không có) | `state: true` | Đánh dấu property nội bộ |
-| 6 | `computed:` | `willUpdate()` | Lit không có computed |
-| 7 | `static get observers()` | `updated()` | Lit không có observers |
-| 8 | `ready()` | `connectedCallback()` | Cần chạy sớm, `firstUpdated` quá muộn |
+| 5 | `computed: 'tinhNhan_(opened)'` | `get nhan()` | Lit không có computed |
+| 6 | `observer: 'openedChanged_'` | `updated()` + `changed.has()` | Lit không có observer |
+| 7 | `static get template()` + `[[...]]` | `render()` + `${...}` | Khác cơ chế template |
+| 8 | `on-click="toggle"` | `@click=${this.toggle}` | Khác cú pháp bind event |
+| 9 | CSS trong `<style>` của template | `static styles = css\`` | Lit tách riêng |
+| — | `connectedCallback` + `super` | **giữ nguyên** | Lifecycle trùng tên, trùng quy tắc |
+| — | `toggle/open/close` | **giữ nguyên** | Logic thuần không đổi |
+| — | `super.toggle()` giữa hai mixin | **giữ nguyên** | Cơ chế `super` là của JS, không phải framework |
 
-> Chú ý #8: chọn `connectedCallback()` chứ không phải `firstUpdated()`. Nếu đặt listener ở `firstUpdated()`, element bỏ lỡ mọi sự kiện scroll giữa lúc gắn vào DOM và lúc render xong. Đây đúng là khác biệt đã nói ở mục 3.
+> Ba dòng cuối bảng là điểm quan trọng nhất: **bản thân cơ chế mixin không cần migrate.** Chỉ có phần giao tiếp với framework (khai báo property, phản ứng thay đổi, template) là phải viết lại.
+
+### Đừng quên rà lại chỗ đọc DOM
+
+Bản Polymer có thể có đoạn như thế này ở component dùng mixin:
+
+```javascript
+// Polymer — chạy đúng
+moRoi_() {
+  this.open();
+  this.$.than.scrollIntoView();        // DOM đã cập nhật, .than đã hiện
+}
+```
+
+Bê thẳng sang Lit thì **sai**, vì lúc đó `.than` vẫn còn `display: none`:
+
+```javascript
+// Lit — phải chờ
+async moRoi_() {
+  this.open();
+  await this.updateComplete;           // ← thêm dòng này
+  this.shadowRoot.querySelector('.than').scrollIntoView();
+}
+```
 
 ## 7. Bảng bẫy migrate
 

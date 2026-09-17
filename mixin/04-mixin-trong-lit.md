@@ -6,46 +6,74 @@
 
 Lit không phát minh gì mới về mixin. `LitElement` là một ES6 class, nên mixin ở bài 1–2 áp dụng nguyên xi:
 
+Lấy đúng `OpenableMixin` của bài 3, viết lại bằng Lit:
+
 ```javascript
 import {LitElement, html} from 'lit';
 
-const LoggerMixin = (Base) => class extends Base {
-  connectedCallback() {
-    super.connectedCallback();
-    console.log('gắn vào DOM');
+const OpenableMixin = (Base) => class extends Base {
+  static properties = {
+    opened: {type: Boolean, reflect: true},
+  };
+
+  constructor() {
+    super();
+    this.opened = false;              // Lit không có `value:` → gán ở đây
   }
+
+  get nhan() { return this.opened ? 'Đang mở' : 'Đang đóng'; }
+
+  toggle() { this.opened = !this.opened; }
+  open()   { this.opened = true; }
+  close()  { this.opened = false; }
 };
 
-class MyEl extends LoggerMixin(LitElement) {
-  render() { return html`<p>xin chào</p>`; }
+class MyPanel extends OpenableMixin(LitElement) {
+  static properties = {tieuDe: {type: String}};
+
+  constructor() { super(); this.tieuDe = 'Bảng'; }
+
+  render() {
+    return html`<h3 @click=${this.toggle}>${this.tieuDe} — ${this.nhan}</h3>`;
+  }
 }
-customElements.define('my-el', MyEl);
+customElements.define('my-panel', MyPanel);
 ```
 
-Khác biệt nằm ở 3 chỗ: **cách khai báo property**, **các hook lifecycle**, và **không có deduping sẵn**.
+So với bản Polymer ở bài 3: **dòng `(Base) => class extends Base` giống hệt**, `toggle/open/close` giống hệt. Chỉ phần khai báo property và template là khác.
+
+Khác biệt nằm đúng ở 3 chỗ: **cách khai báo property**, **các hook lifecycle**, và **không có deduping sẵn**. Bài 5 sẽ đối chiếu từng dòng.
 
 ## 2. `static properties` — vẫn gộp tự động
 
 Lit gom `properties` từ toàn bộ prototype chain, giống Polymer:
 
 ```javascript
-const CounterMixin = (Base) => class extends Base {
-  static properties = {count: {type: Number}};
-  constructor() { super(); this.count = 0; }
+const DisableableMixin = (Base) => class extends Base {
+  static properties = {disabled: {type: Boolean, reflect: true}};
+  constructor() { super(); this.disabled = false; }
+  toggle() {
+    if (this.disabled) return;
+    super.toggle();                   // ← bọc quanh toggle() của OpenableMixin
+  }
 };
 
-class MyEl extends CounterMixin(LitElement) {
-  static properties = {name: {type: String}};
-  constructor() { super(); this.name = 'x'; }
-  render() { return html`${this.name}: ${this.count}`; }
+class MyPanel extends DisableableMixin(OpenableMixin(LitElement)) {
+  static properties = {tieuDe: {type: String}};
+  constructor() { super(); this.tieuDe = 'Bảng'; }
 }
 ```
 
-Kiểm chứng thật:
+Kiểm chứng thật — Lit gộp property từ cả hai mixin lẫn element:
 
 ```text
-MyEl.elementProperties có 'count' (từ mixin): true
-MyEl.elementProperties có 'name'  (từ class): true
+MyPanel.elementProperties có 'opened'   (OpenableMixin)    : true
+MyPanel.elementProperties có 'disabled' (DisableableMixin) : true
+MyPanel.elementProperties có 'tieuDe'   (chính element)    : true
+
+panel.toggle()          → opened = true
+panel.disabled = true
+panel.toggle()          → opened VẪN = true   (chặn qua super, y như Polymer)
 ```
 
 → `static properties` là **class field**, không phải static getter như Polymer, nhưng Lit vẫn đi ngược chain để gộp. Cả hai property đều reactive, đều xuất hiện trong `changedProperties`.
@@ -55,11 +83,11 @@ MyEl.elementProperties có 'name'  (từ class): true
 Với decorator (cần TypeScript hoặc Babel):
 
 ```typescript
-const CounterMixin = <T extends Constructor<LitElement>>(Base: T) => {
-  class CounterMixinImpl extends Base {
-    @property({type: Number}) count = 0;
+const OpenableMixin = <T extends Constructor<LitElement>>(Base: T) => {
+  class OpenableMixinImpl extends Base {
+    @property({type: Boolean, reflect: true}) opened = false;
   }
-  return CounterMixinImpl;
+  return OpenableMixinImpl;
 };
 ```
 
@@ -173,32 +201,39 @@ import {property} from 'lit/decorators.js';
 
 type Constructor<T = {}> = new (...args: any[]) => T;
 
-export declare class LoadableMixinInterface {
-  isLoading: boolean;
-  loadError: string;
-  withLoading<T>(fn: () => Promise<T>): Promise<T>;
+export declare class OpenableMixinInterface {
+  opened: boolean;
+  readonly nhan: string;
+  toggle(): void;
+  open(): void;
+  close(): void;
 }
 
-export const LoadableMixin = <T extends Constructor<LitElement>>(Base: T) => {
-  class LoadableMixinImpl extends Base {
-    @property({type: Boolean, reflect: true}) isLoading = false;
-    @property({type: String}) loadError = '';
+export const OpenableMixin = <T extends Constructor<LitElement>>(Base: T) => {
+  class OpenableMixinImpl extends Base {
+    @property({type: Boolean, reflect: true}) opened = false;
 
-    async withLoading<R>(fn: () => Promise<R>): Promise<R> {
-      this.isLoading = true;
-      this.loadError = '';
-      try {
-        return await fn();
-      } catch (e) {
-        this.loadError = (e as Error).message ?? 'Lỗi không xác định';
-        throw e;
-      } finally {
-        this.isLoading = false;
-      }
-    }
+    get nhan(): string { return this.opened ? 'Đang mở' : 'Đang đóng'; }
+
+    toggle(): void { this.opened = !this.opened; }
+    open(): void   { this.opened = true; }
+    close(): void  { this.opened = false; }
   }
-  return LoadableMixinImpl as Constructor<LoadableMixinInterface> & T;
+  return OpenableMixinImpl as Constructor<OpenableMixinInterface> & T;
 };
+```
+
+Dùng:
+
+```typescript
+const MyPanelBase = OpenableMixin(LitElement);
+
+class MyPanel extends MyPanelBase {
+  render() {
+    // TypeScript biết this.toggle() và this.nhan tồn tại
+    return html`<h3 @click=${this.toggle}>${this.nhan}</h3>`;
+  }
+}
 ```
 
 Hai chi tiết TypeScript:
@@ -209,116 +244,156 @@ Hai chi tiết TypeScript:
 Dùng:
 
 ```typescript
-class UserCard extends LoadableMixin(LitElement) {
-  @property({type: Object}) user?: User;
-
-  async firstUpdated() {
-    await this.withLoading(async () => {
-      this.user = await (await fetch('/api/user')).json();
-    });
-  }
+class MyPanel extends OpenableMixin(LitElement) {
+  @property({type: String}) tieuDe = 'Bảng';
 
   render() {
-    if (this.isLoading) return html`<spinner-el></spinner-el>`;
-    if (this.loadError) return html`<p class="err">${this.loadError}</p>`;
-    return html`<h2>${this.user?.name}</h2>`;
+    return html`
+      <h3 @click=${this.toggle}>${this.tieuDe} — ${this.nhan}</h3>
+      ${this.opened ? html`<div><slot></slot></div>` : ''}`;
   }
 }
 ```
 
 ## 6. ReactiveController — cách làm "đúng Lit" hơn
 
-Đây là phần quan trọng nhất của bài. Lit team đưa ra **ReactiveController** và khuyến nghị dùng nó **thay cho mixin trong đa số trường hợp**.
+Đây là phần quan trọng nhất của bài. Lit đưa ra **ReactiveController** và khuyến nghị dùng nó **thay cho mixin trong đa số trường hợp**.
 
-ReactiveController là một **object** gắn vào element, được element gọi lại ở các mốc lifecycle:
+### Controller là gì
+
+Mixin **chèn một mắt xích vào chuỗi kế thừa**. Controller thì không đụng gì tới chuỗi đó — nó chỉ là một **object thường**, gắn vào element và được element gọi lại ở các mốc lifecycle.
+
+Giao thức chỉ có 4 hook, đều không bắt buộc:
+
+| Hook | Gọi khi |
+|---|---|
+| `hostConnected()` | Element vào DOM |
+| `hostDisconnected()` | Element rời DOM |
+| `hostUpdate()` | Trước khi element render |
+| `hostUpdated()` | Sau khi element render xong |
+
+### Ví dụ: đóng panel khi click ra ngoài
+
+Tiếp tục bài toán panel. Ta muốn: đang mở mà click ra ngoài thì tự đóng.
 
 ```javascript
-class LanguageController {
-  constructor(host) {
+class ClickOutsideController {
+  constructor(host, khiRaNgoai) {
     this.host = host;
-    host.addController(this);          // đăng ký
-    this.locale = 'en';
+    this.khiRaNgoai = khiRaNgoai;
+    host.addController(this);           // ← đăng ký với element
   }
 
   hostConnected() {
-    this._h = () => {
-      this.locale = document.documentElement.lang;
-      this.host.requestUpdate();       // chủ động yêu cầu render lại
+    this.xuLy_ = (e) => {
+      // composedPath() xuyên qua được shadow DOM
+      if (!e.composedPath().includes(this.host)) {
+        this.khiRaNgoai();
+      }
     };
-    document.addEventListener('language-changed', this._h);
+    document.addEventListener('click', this.xuLy_);
   }
 
   hostDisconnected() {
-    document.removeEventListener('language-changed', this._h);
+    document.removeEventListener('click', this.xuLy_);   // tự dọn dẹp
   }
-
-  i18n(key) { return loadTimeData.getString(key); }
 }
 ```
 
-Dùng:
+Ghép với `OpenableMixin`:
 
 ```javascript
-class SettingsPage extends LitElement {
-  #lang = new LanguageController(this);
+class MyPanel extends OpenableMixin(LitElement) {
+  ngoai = new ClickOutsideController(this, () => this.close());
 
   render() {
-    return html`<h1>${this.#lang.i18n('settingsTitle')}</h1>`;
+    return html`<h3 @click=${this.toggle}>${this.nhan}</h3>`;
   }
 }
 ```
 
-Các hook của controller: `hostConnected`, `hostDisconnected`, `hostUpdate`, `hostUpdated`.
+Kết quả chạy thật:
 
-### Vì sao controller thường tốt hơn
+```text
+panel.open()                 → opened = true      (method của MIXIN)
+click ra ngoài panel         → opened = false     (CONTROLLER gọi close())
+element rời DOM, click tiếp  → không chạy nữa     (hostDisconnected đã gỡ listener)
+```
+
+Để ý sự phân vai rất rõ:
+
+- **`OpenableMixin`** cung cấp `opened`, `toggle()`, `close()` — thứ **phải nằm trên chính element**, vì template và code bên ngoài gọi `panel.close()`.
+- **`ClickOutsideController`** chỉ cần lifecycle và một callback. Nó **không cần** thêm gì lên element.
+
+### Điều mixin không làm được: nhiều bản cùng lúc
+
+Đây là khác biệt quyết định. Một mixin áp lên một class chỉ cho **một** bản — nó chỉ có một `this.opened`. Controller thì `new` bao nhiêu lần cũng được:
+
+```javascript
+class MyDialog extends LitElement {
+  // Hai vùng theo dõi độc lập, trong CÙNG một element
+  vungA = new ClickOutsideController(this, () => this.dongA());
+  vungB = new ClickOutsideController(this, () => this.dongB());
+}
+```
+
+Kiểm chứng thật: click một lần, **cả hai** controller đều chạy, mỗi bản giữ state riêng. Viết bằng mixin thì bó tay — bạn không thể áp `ClickOutsideMixin` hai lần lên cùng một class (và `dedupeMixin` còn chủ động ngăn điều đó).
+
+### Bảng so sánh
 
 | | Mixin | ReactiveController |
 |---|---|---|
 | Ảnh hưởng prototype chain | Có — chèn mắt xích | **Không** — chỉ là object |
-| Trùng tên | Có thể đè method | **Không thể** — nằm trong namespace riêng (`this.#lang.i18n`) |
-| Cần deduping | Có | **Không** — cứ tạo nhiều instance thoải mái |
-| Dùng nhiều bản cùng lúc | ❌ Không (một mixin, một bản) | ✅ Được (`new Timer(this)` hai lần = hai timer) |
-| Thêm method vào element | ✅ | ❌ (cố ý — truy cập qua object) |
-| Dùng được ngoài Lit | Có (JS thuần) | Cần host implement giao thức |
+| Trùng tên method | Có thể đè nhau | **Không thể** — nằm trong namespace riêng (`this.ngoai.…`) |
+| Cần deduping | Có | **Không** — tạo bao nhiêu bản cũng được |
+| Nhiều bản trong một element | ❌ Không | ✅ Được |
+| Thêm API lên chính element | ✅ | ❌ (cố ý — truy cập qua object) |
+| Truyền tham số lúc tạo | Khó | ✅ Dễ — `new C(this, thamSo)` |
 | Test riêng lẻ | Khó — phải dựng element | **Dễ** — host giả là đủ |
+| Dùng được ngoài Lit | Có (JS thuần) | Cần host cài giao thức |
 
-Điểm quyết định: **controller là composition, mixin là inheritance.** Composition không có vấn đề trùng tên và không có vấn đề deduping — hai bẫy lớn nhất của mixin.
+Điểm cốt lõi: **controller là composition, mixin là inheritance.** Composition không có bẫy trùng tên và không có bẫy deduping — hai bẫy lớn nhất của mixin (bài 2).
 
 ### Chọn cái nào
 
 ```text
-Bạn có cần thêm method/property lên CHÍNH element
-(để template ngoài, hoặc code khác, gọi el.foo() được)?
+Thứ này có cần thêm method/property lên CHÍNH element không?
+(để template, hoặc code bên ngoài, gọi được el.foo())
         │
         ├── CÓ ──────────► Mixin
-        │                  (vd: i18n() dùng trong template, API công khai)
+        │                  vd: opened + toggle() — template bind [[opened]],
+        │                      component cha gọi panel.close()
         │
         └── KHÔNG ───────► ReactiveController
-                           (vd: theo dõi kích thước, timer, fetch state,
-                            nghe sự kiện, kết nối WebSocket)
+                           vd: click ra ngoài, theo dõi kích thước, timer,
+                               fetch state, kết nối WebSocket
 ```
 
-Ví dụ rõ nhất về thứ **phải** là controller: theo dõi kích thước element.
+Câu hỏi phụ giúp chốt nhanh: **"Có khi nào tôi cần hai bản của thứ này trong một element không?"** Nếu có → chắc chắn là controller.
+
+### Một ví dụ nữa: theo dõi kích thước
 
 ```javascript
 class ResizeController {
   constructor(host) {
     this.host = host;
-    host.addController(this);
     this.width = 0;
+    host.addController(this);
   }
   hostConnected() {
-    this._ro = new ResizeObserver(([entry]) => {
+    this.ro_ = new ResizeObserver(([entry]) => {
       this.width = entry.contentRect.width;
-      this.host.requestUpdate();
+      this.host.requestUpdate();        // chủ động yêu cầu render lại
     });
-    this._ro.observe(this.host);
+    this.ro_.observe(this.host);
   }
-  hostDisconnected() { this._ro.disconnect(); }
+  hostDisconnected() { this.ro_.disconnect(); }
 }
 ```
 
-Viết thành mixin cũng được, nhưng khi một element cần theo dõi **hai** phần tử khác nhau thì mixin bó tay — còn controller chỉ cần `new` hai lần.
+`this.host.requestUpdate()` là cách controller kích hoạt render — nó không có property reactive của riêng mình, nên phải báo cho host.
+
+Viết thành mixin cũng được. Nhưng khi một element cần theo dõi **hai** phần tử khác nhau thì mixin bó tay, còn controller chỉ cần `new` hai lần.
 
 ## 7. Bẫy riêng của Lit
 

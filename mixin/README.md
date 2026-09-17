@@ -2,7 +2,9 @@
 
 > Một buổi trình bày ~60–90 phút về **mixin** trong Web Components: định nghĩa, luồng chạy, cách dùng, demo chạy thật, và so sánh chi tiết **Polymer 3 ↔ LitElement**.
 
-Bộ tài liệu đứng độc lập — đọc từ đầu tới cuối không cần biết trước gì về Polymer hay Lit, chỉ cần ES6 class. Nó trả lời hai câu hỏi mà tài liệu thông thường hay bỏ qua: **mixin thực sự chạy như thế nào** (prototype chain, thứ tự `super`, deduping), và **đổi gì khi codebase migrate từ Polymer sang Lit**.
+Tài liệu bám đúng môi trường **Chromium WebUI**: mọi ví dụ viết bằng Polymer 3 hoặc Lit 3, không lùi về JavaScript thuần. Nó trả lời hai câu hỏi mà tài liệu thông thường hay bỏ qua: **mixin thực sự chạy như thế nào** (prototype chain, thứ tự `super`, deduping), và **đổi gì khi codebase nâng từ Polymer lên Lit** — kể cả `ReactiveController`, công cụ Lit đưa ra để thay mixin trong nhiều trường hợp.
+
+Một ví dụ duy nhất xuyên suốt cả 6 bài: **`OpenableMixin`** — khả năng mở/đóng cho panel, dropdown, dialog. Nó chỉ dùng những thứ có sẵn của framework (`properties`, lifecycle, template), không gọi API nào bên ngoài, nhưng đủ để chạm tới mọi tính năng của mixin: property + reflect, computed, observer, lifecycle có `super`, method thêm vào element, và xếp chồng với `DisableableMixin`.
 
 > Nếu bạn đang học WebUI Chromium, [`chromium/phase-3-polymer/07-mixins-behaviors.md`](../chromium/phase-3-polymer/07-mixins-behaviors.md) trong repo này dạy *cách viết mixin theo convention của Chromium*. Bộ này đi sâu vào *cơ chế* bên dưới — hai bên bổ sung cho nhau, không trùng lặp.
 
@@ -16,10 +18,10 @@ Bộ tài liệu đứng độc lập — đọc từ đầu tới cuối không
 
 | # | Bài | Nội dung | Thời lượng |
 |---|-----|----------|-----------|
-| 1 | [Mixin là gì](01-mixin-la-gi.md) | Vấn đề → 4 cấp độ share code → định nghĩa chính xác | 15 phút |
+| 1 | [Mixin là gì](01-mixin-la-gi.md) | Bài toán trong Polymer → Behaviors hỏng ở đâu → mixin → định nghĩa | 15 phút |
 | 2 | [Luồng chạy của mixin](02-luong-chay-cua-mixin.md) | Prototype chain, `super` chain, thứ tự constructor, deduping | 20 phút |
 | 3 | [Mixin trong Polymer](03-mixin-trong-polymer.md) | Behaviors → mixins, `dedupingMixin`, properties/observers merge | 15 phút |
-| 4 | [Mixin trong Lit](04-mixin-trong-lit.md) | `static properties` merge, lifecycle mới, ReactiveController | 15 phút |
+| 4 | [Mixin trong Lit](04-mixin-trong-lit.md) | `static properties` merge, lifecycle mới, **ReactiveController** | 15 phút |
 | 5 | [So sánh chi tiết Polymer ↔ Lit](05-so-sanh-polymer-vs-lit.md) | Syntax, luồng chạy, cùng 1 mixin 2 cách, migration | 20 phút |
 | 6 | [Kịch bản demo](06-kich-ban-demo.md) | Cách chạy demo, timing, câu hỏi thường gặp | — |
 
@@ -65,25 +67,35 @@ Nếu chỉ có 5 phút, đây là toàn bộ nội dung:
 ```text
 Mixin = hàm nhận 1 class, trả về class con mới đã thêm tính năng.
 
-    const Mixin = (Base) => class extends Base { /* thêm gì đó */ };
-    class MyEl extends Mixin(BaseElement) { }
+    const OpenableMixin = (superClass) => class extends superClass { ... };
+    class MyPanel extends OpenableMixin(PolymerElement) { }
 
-Nó KHÔNG copy method sang class bạn. Nó CHÈN một mắt xích mới
-vào prototype chain, nằm GIỮA class bạn và class base:
+Nó KHÔNG copy method sang component bạn. Nó CHÈN một mắt xích mới
+vào chuỗi kế thừa, nằm GIỮA component bạn và class base:
 
-    MyEl  →  Mixin(Base)  →  Base  →  HTMLElement
+    MyPanel  →  OpenableMixin  →  PolymerElement  →  HTMLElement
 
-Vì là mắt xích thật nên `super.method()` hoạt động bình thường
-→ mixin có thể "bọc" lifecycle của base thay vì đè mất nó.
+Vì là mắt xích thật nên `super.toggle()` hoạt động bình thường
+→ một mixin có thể "bọc" method của mixin khác thay vì đè mất nó.
+Đây đúng là thứ Behaviors của Polymer 1 KHÔNG làm được, và là lý do
+Polymer 3 bỏ Behaviors.
 
 Polymer và Lit dùng CHUNG cơ chế này (đều là ES6 class).
 Khác nhau ở phần framework, không phải phần mixin:
 
-  • Polymer: gom `properties` qua static getter, hook vào `ready()`,
-             có sẵn `dedupingMixin()`.
-  • Lit:     gom `properties` qua static field, hook vào `willUpdate()/updated()`,
-             KHÔNG có deduping sẵn — tự viết, hoặc dùng
-             ReactiveController thay cho mixin khi chỉ cần state + lifecycle.
+  • Polymer: `static get properties()`, `value:`, `computed:`, `observer:`,
+             `reflectToAttribute`, hook `ready()`, có sẵn `dedupingMixin()`.
+             Cập nhật DOM ĐỒNG BỘ.
+  • Lit:     `static properties = {}`, mặc định gán trong constructor,
+             computed → getter, observer → `updated()`, `reflect`.
+             KHÔNG có deduping sẵn. Cập nhật DOM BẤT ĐỒNG BỘ
+             → phải `await this.updateComplete` trước khi đọc DOM.
+
+Ở Lit còn có ReactiveController — dùng thay mixin khi KHÔNG cần
+thêm API lên chính element, hoặc khi cần nhiều bản trong một element.
+
+    Cần el.toggle() gọi được từ template?  → Mixin
+    Chỉ cần lifecycle + state riêng?        → ReactiveController
 ```
 
 ## Nguồn tham chiếu

@@ -132,126 +132,140 @@
 <!-- 3 -->
 <section class="slide">
   <h2>Bài toán gốc</h2>
-  <p class="lead">Hai class chẳng liên quan gì nhau. Sếp bảo: đếm xem mỗi thứ được dùng bao nhiêu lần.</p>
-  <pre class="plain">class NutBam {
-  constructor() { <b>this.soLanDung = 0;</b> }              <span class="c">// ①</span>
-  bam() {
-    <b>this.soLanDung++;</b>                                <span class="c">// ②</span>
-    console.log('Nút được bấm');
+  <p class="lead">Hai component WebUI khác nhau, cùng cần khả năng <strong>mở/đóng</strong>.</p>
+  <pre>class MyPanel extends PolymerElement {
+  static get properties() {
+    return {
+      <b>opened: {type: Boolean, value: false,</b>          <span class="c">// ①</span>
+              <b>reflectToAttribute: true,</b>
+              <b>observer: 'openedChanged_'},</b>
+      tieuDe: {type: String},                       <span class="c">// riêng của MyPanel</span>
+    };
   }
-  thongKe() { <b>return `Đã dùng ${this.soLanDung} lần`;</b> } <span class="c">// ③</span>
+  <b>toggle() { this.opened = !this.opened; }</b>           <span class="c">// ②</span>
+  <b>openedChanged_(moi) { /* bắn event */ }</b>            <span class="c">// ③</span>
 }
 
-class OTimKiem {
-  constructor() { <b>this.soLanDung = 0;</b> }              <span class="c">// ① y hệt</span>
-  tim(tuKhoa) {
-    <b>this.soLanDung++;</b>                                <span class="c">// ② y hệt</span>
-    console.log('Đang tìm:', tuKhoa);
+class MyDropdown extends PolymerElement {
+  static get properties() {
+    return {
+      <b>opened: {...}</b>,                                 <span class="c">// ① y hệt</span>
+      danhSach: {type: Array},                      <span class="c">// riêng của MyDropdown</span>
+    };
   }
-  thongKe() { <b>return `Đã dùng ${this.soLanDung} lần`;</b> } <span class="c">// ③ y hệt</span>
+  <b>toggle() { ... }</b>                                   <span class="c">// ② y hệt</span>
+  <b>openedChanged_(moi) { ... }</b>                        <span class="c">// ③ y hệt</span>
 }</pre>
   <div class="box bad">
-    Vấn đề không phải "gõ nhiều". Là <strong>sửa 1 chỗ phải sửa N chỗ</strong>,
-    <strong>sai lệch âm thầm</strong> (class thứ 5 có người quên dòng ②),
-    và <strong>không test riêng được</strong>.
+    Trong <code>chrome://settings</code> có hàng chục thứ mở/đóng được.
+    <strong>Sửa 1 chỗ phải sửa N chỗ</strong>; component thứ 5 có người quên
+    <code>reflectToAttribute</code> thì CSS không ăn mà <strong>không ai báo lỗi</strong>.
   </div>
 </section>
 
 <!-- 4 -->
 <section class="slide">
-  <h2>Bốn cấp độ share code</h2>
-  <p class="lead">Mỗi cấp giải quyết được điều cấp trước không làm nổi.</p>
+  <h2>Ba cách gom code dùng chung</h2>
   <table>
-    <tr><th></th><th>Hàm thuần</th><th>Kế thừa</th><th>Object.assign</th><th>Class mixin</th></tr>
-    <tr><td>State riêng mỗi đối tượng</td><td class="c">✗</td><td>✓</td><td>✓</td><td>✓</td></tr>
-    <tr><td>Gắn nhiều nguồn cùng lúc</td><td>✓</td><td class="c">✗</td><td>✓</td><td>✓</td></tr>
-    <tr><td>Gọi được <code>super</code></td><td class="c">—</td><td>✓</td><td class="c">✗</td><td>✓</td></tr>
-    <tr><td>Ghi đè an toàn (không mất method cũ)</td><td class="c">—</td><td>✓</td><td class="c">✗</td><td>✓</td></tr>
-    <tr><td><strong>Độ phức tạp</strong></td><td>thấp nhất</td><td>thấp</td><td>trung bình</td><td><em>cao nhất</em></td></tr>
+    <tr><th></th><th>Kế thừa</th><th>Behaviors (Polymer 1)</th><th>Mixin (Polymer 3)</th></tr>
+    <tr><td>Property / state riêng mỗi element</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Gắn <strong>nhiều nguồn</strong> cùng lúc</td><td class="c">✗ JS chỉ cho 1 class cha</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Lifecycle</td><td>✓</td><td>✓ Polymer tự gọi hết</td><td>✓</td></tr>
+    <tr><td><strong>Method trùng tên: gọi được bản trước?</strong></td><td>✓ <code>super</code></td><td class="c">✗ <strong>đè mất, im lặng</strong></td><td>✓ <code>super</code></td></tr>
   </table>
-  <div class="box">
-    Class mixin là cột duy nhất không có ✗ nào — nhưng <strong>đắt nhất</strong>.
-    Thứ tự ưu tiên: <strong>hàm thuần → kế thừa → mixin</strong>. Đừng nhảy thẳng tới mixin.
+  <div class="box bad" style="margin-top:14px">
+    Behavior chỉ là <strong>object thường</strong> — nó không nằm trong chuỗi kế thừa nào,
+    nên <strong>không có <code>super</code> để gọi</strong>. Hai behavior cùng có
+    <code>toggle()</code> thì một cái biến mất không dấu vết.
+  </div>
+  <div class="box ok">
+    Đây chính là lý do <strong>Polymer 3 bỏ Behaviors, chuyển sang Mixin</strong>.
   </div>
 </section>
 
 <!-- 5 -->
 <section class="slide">
-  <h2>Bức tường: kế thừa đơn</h2>
+  <h2>Vì sao không dùng kế thừa thường?</h2>
   <div class="cols">
     <div>
       <h3>Kế thừa giải quyết được…</h3>
-      <pre class="plain">class CoDemLuot {
-  constructor() { this.soLanDung = 0; }
-  ghiNhanDung() { this.soLanDung++; }
-  thongKe() { ... }
+      <pre>class CoMoDong extends PolymerElement {
+  static get properties() {
+    return {opened: {...}};
+  }
+  toggle() { ... }
 }
 
-class NutBam   extends CoDemLuot { }
-class OTimKiem extends CoDemLuot { }</pre>
-      <p style="color:var(--ok)">✓ Có state riêng, không lặp dòng nào.</p>
+class MyPanel    extends CoMoDong { }
+class MyDropdown extends CoMoDong { }</pre>
+      <p style="color:var(--ok)">✓ Hết lặp code, có property riêng.</p>
     </div>
     <div>
       <h3>…cho tới khi cần khả năng thứ hai</h3>
-      <pre class="plain"><span class="c">// sếp bảo: cho phép bật/tắt nữa</span>
-class CoBatTat {
-  bat() { this.dangBat = true; }
-  tat() { this.dangBat = false; }
+      <pre><span class="c">// giờ cần thêm: vô hiệu hoá được</span>
+class CoVoHieu extends PolymerElement {
+  static get properties() {
+    return {disabled: {...}};
+  }
 }
 
-class NutBam extends <span class="r">CoDemLuot, CoBatTat</span> { }
+class MyPanel extends <span class="r">CoMoDong, CoVoHieu</span> { }
 <span class="r">// ✗ SyntaxError</span>
-<span class="r">// JS KHÔNG có đa kế thừa</span></pre>
-      <p style="color:var(--err)">Một class chỉ được có <strong>đúng một cha</strong>.</p>
+<span class="r">// JavaScript chỉ cho MỘT class cha</span></pre>
+      <p style="color:var(--err)">Càng thêm khả năng, càng bế tắc.</p>
     </div>
   </div>
-  <div class="box warn">Mixin sinh ra để phá đúng bức tường này.</div>
+  <div class="box warn">Mixin sinh ra để phá đúng bức tường này — mà vẫn giữ được <code>super</code>.</div>
 </section>
 
 <!-- 6 -->
 <section class="slide">
-  <h2><code>Object.assign</code> — mixin "giả"</h2>
-  <p class="lead">Cách cổ điển từ thời jQuery: copy method vào prototype.</p>
-  <pre class="plain">Object.assign(MyEl.prototype, behaviorOne);   <span class="c">// ghi setup()</span>
-Object.assign(MyEl.prototype, behaviorTwo);   <span class="c">// ĐÈ LÊN — one.setup mất luôn</span></pre>
+  <h2>Behaviors hỏng ở đâu</h2>
+  <p class="lead">Polymer 1 gom method vào một <strong>object thường</strong>. Nghe hợp lý, cho tới lúc trùng tên.</p>
+  <pre>const OpenableBehavior   = { toggle() { <span class="c">/* mở/đóng */</span> } };
+const DisableableBehavior = { toggle() { <span class="c">/* kiểm tra disabled rồi mở/đóng */</span> } };
+
+Polymer({
+  is: 'my-panel',
+  behaviors: [OpenableBehavior, DisableableBehavior],
+});
+
+<span class="r">// panel.toggle() → chỉ chạy bản của DisableableBehavior.</span>
+<span class="r">// Bản của OpenableBehavior BIẾN MẤT. Không một lời cảnh báo.</span></pre>
   <div class="cols tight">
     <div class="box bad">
-      <h3>Kết quả đo được</h3>
-      <pre class="plain" style="margin:0"><span class="r">ViaAssign.setup() = "TWO"</span>
-
-✗ behaviorOne.setup bị đè — im lặng
-✗ base.setup cũng mất
-✗ không có super để gọi lại</pre>
+      <h3>Vấn đề gốc</h3>
+      <p><code>DisableableBehavior</code> muốn "kiểm tra <code>disabled</code> rồi
+      <strong>gọi tiếp</strong> bản gốc" — nhưng nó là object thường, không nằm trong
+      chuỗi kế thừa nào, nên <strong>không có <code>super</code> để gọi</strong>.</p>
     </div>
-    <div class="box ok">
-      <h3>Class mixin thì…</h3>
-      <pre class="plain" style="margin:0"><span class="g">ViaMixin.setup() =
-  "TWO(ONE(BASE-ĐÃ-CHẠY))"</span>
-
-✓ cả 3 tầng đều chạy
-✓ lồng nhau đúng thứ tự</pre>
+    <div class="box">
+      <h3>Cùng vấn đề với…</h3>
+      <p><code>Object.assign(MyPanel.prototype, behavior)</code> — cách "mixin cổ điển"
+      thời jQuery. Đó là <strong>ghi đè phẳng</strong>: không có khái niệm
+      "chạy tiếp cái trước đó".</p>
     </div>
   </div>
-  <p style="color:var(--muted)"><code>Object.assign</code> là <strong>ghi đè phẳng</strong>.
-  Không có khái niệm "gọi cái trước đó". → Demo 1, mục 4.</p>
 </section>
 
 <!-- 7 -->
 <section class="slide center" data-toc="Định nghĩa mixin">
   <h3>Định nghĩa</h3>
   <h1 style="font-size:34px;max-width:22ch;line-height:1.35">Mixin là một hàm nhận vào một class và trả về một class con mới của nó, đã được bổ sung tính năng.</h1>
-  <pre class="plain" style="margin-top:26px;text-align:left;display:inline-block">const <b>DemLuotMixin</b> = <b>(Base)</b> =&gt; class <b>extends Base</b> {
-  constructor(...args) { super(...args); this.soLanDung = 0; }
-  ghiNhanDung() { this.soLanDung++; }
-};
+  <pre style="margin-top:26px;text-align:left;display:inline-block">export const <b>OpenableMixin</b> = dedupingMixin(<b>(superClass)</b> =&gt; {
+  class OpenableMixinImpl <b>extends superClass</b> {
+    static get properties() {
+      return {opened: {type: Boolean, value: false,
+                       reflectToAttribute: true}};
+    }
+    toggle() { this.opened = !this.opened; }
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
+  }
+  return OpenableMixinImpl;
+});
 
-const <b>BatTatMixin</b> = <b>(Base)</b> =&gt; class <b>extends Base</b> {
-  bat() { this.dangBat = true; }
-  tat() { this.dangBat = false; }
-};
-
-<span class="c">// xếp chồng bao nhiêu tuỳ thích — không còn bức tường</span>
-class NutBam extends <b>DemLuotMixin(BatTatMixin(Object))</b> { }</pre>
+class MyPanel extends <b>OpenableMixin(PolymerElement)</b> { }</pre>
 </section>
 
 <!-- 8 -->
@@ -455,37 +469,39 @@ Child → Logger#2 → Parent → Logger#1 → Base
   <div class="cols">
     <div>
       <span class="tag p">POLYMER 1/2 — BEHAVIORS</span>
-      <pre>const I18nBehavior = {
-  properties: { locale: {...} },
+      <pre>const OpenableBehavior = {
+  properties: {
+    opened: {type: Boolean, value: false},
+  },
   <b>attached()</b> { ... },      <span class="c">// tên P1</span>
-  i18n(key) { ... },
+  toggle() { ... },
 };
 
 Polymer({
-  is: 'settings-page',
-  <b>behaviors: [I18nBehavior]</b>,
+  is: 'my-panel',
+  <b>behaviors: [OpenableBehavior]</b>,
 });</pre>
       <ul style="font-size:15px">
         <li>Object literal, <strong>không có <code>super</code></strong></li>
-        <li>Lifecycle: Polymer gọi <em>tất cả</em>, theo thứ tự</li>
-        <li>Method thường: <span style="color:var(--err)">đè nhau im lặng</span></li>
+        <li>Lifecycle: Polymer gọi <em>tất cả</em></li>
+        <li>Method trùng tên: <span style="color:var(--err)">đè nhau im lặng</span></li>
       </ul>
     </div>
     <div>
       <span class="tag p">POLYMER 3 — MIXINS</span>
-      <pre>const I18nMixin = <b>dedupingMixin</b>((sc) =&gt; {
-  class I18nMixinImpl extends sc {
-    ready() {
-      <b>super.ready();</b>
+      <pre>const OpenableMixin = <b>dedupingMixin</b>((sc) =&gt; {
+  class OpenableMixinImpl extends sc {
+    connectedCallback() {
+      <b>super.connectedCallback();</b>
       ...
     }
-    i18n(key) { ... }
+    toggle() { this.opened = !this.opened; }
   }
-  return I18nMixinImpl;
+  return OpenableMixinImpl;
 });
 
-class SettingsPage extends
-    <b>I18nMixin(PolymerElement)</b> { }</pre>
+class MyPanel extends
+    <b>OpenableMixin(PolymerElement)</b> { }</pre>
       <ul style="font-size:15px">
         <li>Subclass factory ES6 chuẩn</li>
         <li><code>super</code> thật</li>
@@ -497,38 +513,41 @@ class SettingsPage extends
 
 <!-- 16 -->
 <section class="slide">
-  <h2>Polymer thêm 3 thứ lên trên mixin thuần</h2>
-  <p class="lead">Mixin Polymer không chỉ là túi method — nó là một "mảnh component" đầy đủ.</p>
+  <h2>Mixin Polymer là một <em>mảnh component</em>, không phải túi method</h2>
   <div class="cols tight">
     <div>
-      <pre>const DoublerMixin = dedupingMixin((sc) =&gt;
+      <pre>const OpenableMixin = dedupingMixin((sc) =&gt;
   class extends sc {
-    <b>static get properties()</b> {
+    static get properties() {
       return {
-        value:   {type: Number, value: 1},
-        doubled: {<b>computed</b>: 'compute_(value)'},
+        opened: {type: Boolean, value: false,
+                 <b>reflectToAttribute: true</b>,
+                 <b>observer: 'openedChanged_'</b>},
+        nhan: {<b>computed: 'tinhNhan_(opened)'</b>},
       };
     }
-    <b>static get observers()</b> {
-      return ['onValue_(value)'];
+    <b>connectedCallback()</b> {
+      super.connectedCallback();
+      <span class="c">// nghe phím Escape</span>
     }
-    compute_(v) { return v * 2; }
+    toggle() { this.opened = !this.opened; }
   });</pre>
     </div>
     <div>
       <div class="box ok">
         <h3>Chạy thật</h3>
-        <pre class="plain" style="margin:0"><span class="g">observer của MIXIN chạy → value = 1</span>
-doubled=2, template render "2"
-
-<span class="c">→ set value = 20</span>
-<span class="g">observer của MIXIN chạy → value = 20</span>
-doubled=40, is-big=true</pre>
+        <pre class="plain" style="margin:0">panel.nhan        → <span class="g">"Đang đóng"</span>
+panel.toggle()
+panel.opened      → <span class="g">true</span>
+panel.nhan        → <span class="g">"Đang mở"</span>
+[opened] attribute → <span class="g">có</span>
+event opened-changed → <span class="g">đã bắn</span>
+template render   → <span class="g">"Đang mở"</span></pre>
       </div>
       <ol style="margin-left:20px;font-size:16px">
         <li><code>properties</code> gộp tự động qua chain</li>
-        <li><code>computed</code> + <code>observers</code> chạy được <strong>từ trong mixin</strong></li>
-        <li><code>dedupingMixin</code> có sẵn</li>
+        <li><code>computed</code>, <code>observer</code>, <code>reflectToAttribute</code> chạy <strong>từ trong mixin</strong></li>
+        <li>Template bind <code>[[nhan]]</code> và <code>on-click="toggle"</code> như thường</li>
       </ol>
     </div>
   </div>
@@ -573,41 +592,46 @@ element.connectedCallback
 <!-- 18 -->
 <section class="slide">
   <h2>Lit: cơ chế mixin <em>y hệt</em></h2>
-  <p class="lead"><code>LitElement</code> chỉ là một ES6 class. Khác biệt nằm ở 3 chỗ khác.</p>
+  <p class="lead">Cùng <code>OpenableMixin</code>, hai bản. Khác biệt chỉ ở phần khai báo property.</p>
   <div class="cols">
     <div>
       <span class="tag p">POLYMER</span>
-      <pre>static get properties() {
-  return {
-    count: {
-      type: Number,
-      <b>value: 0</b>,
-      <b>reflectToAttribute: true</b>,
-      <b>readOnly: true</b>,
-      <b>notify: true</b>,
-    },
-  };
-}</pre>
+      <pre>const OpenableMixin = (sc) =&gt; class extends sc {
+  <b>static get properties()</b> {
+    return {
+      opened: {
+        type: Boolean,
+        <b>value: false</b>,
+        <b>reflectToAttribute: true</b>,
+        <b>observer: 'openedChanged_'</b>,
+      },
+      nhan: {<b>computed: 'tinhNhan_(opened)'</b>},
+    };
+  }
+  toggle() { this.opened = !this.opened; }
+};</pre>
     </div>
     <div>
       <span class="tag l">LIT</span>
-      <pre class="lit">static properties = {
-  count: {
-    type: Number,
-    <b>reflect: true</b>,
-  },
-};
+      <pre class="lit">const OpenableMixin = (Base) =&gt; class extends Base {
+  <b>static properties = {</b>
+    opened: {
+      type: Boolean,
+      <b>reflect: true</b>,
+    },
+  <b>};</b>
 
-<b>constructor() {</b>
-  <b>super();</b>
-  <b>this.count = 0;</b>   <span class="c">// mặc định ở đây</span>
-<b>}</b>
-<span class="c">// readOnly, notify: KHÔNG có</span></pre>
+  <b>constructor() { super(); this.opened = false; }</b>
+  <b>get nhan()</b> { return this.opened ? 'Đang mở' : 'Đang đóng'; }
+  <b>updated(ch)</b> { <span class="c">/* thay observer */</span> }
+
+  toggle() { this.opened = !this.opened; }   <span class="c">// giống hệt</span>
+};</pre>
     </div>
   </div>
-  <div class="box bad">
-    Quên gán mặc định trong <code>constructor</code> → render ra <code>undefined</code>.
-    Lỗi hay gặp nhất khi migrate.
+  <div class="box ok">
+    <code>toggle/open/close</code>, <code>connectedCallback</code> + <code>super</code>,
+    và cả khung <code>(Base) =&gt; class extends Base</code> — <strong>không đổi một chữ</strong>.
   </div>
 </section>
 
@@ -621,18 +645,18 @@ element.connectedCallback
 element.constructor
   mixin.connectedCallback
 element.connectedCallback
-  mixin.willUpdate  <b>[isLoading,loadError,result]</b>
+  mixin.willUpdate  <b>[opened,tieuDe]</b>
 element.willUpdate
 element.render()
 element.firstUpdated
-  mixin.updated     <b>[isLoading,loadError,result]</b>
+  mixin.updated     <b>[opened,tieuDe]</b>
 element.updated
 
-<span class="c">── đổi 1 property ──</span>
-  mixin.willUpdate  <b>[result]</b>
+<span class="c">── gọi toggle() ──</span>
+  mixin.willUpdate  <b>[opened]</b>
 element.willUpdate
 element.render()
-  mixin.updated     <b>[result]</b>
+  mixin.updated     <b>[opened]</b>
 element.updated</pre>
     </div>
     <div>
@@ -733,61 +757,66 @@ const text = el.shadowRoot.getElementById('r').textContent;</pre>
   <h2>ReactiveController — cách làm "đúng Lit"</h2>
   <div class="cols">
     <div>
-      <pre class="lit">class TickerController {
-  constructor(host, stepMs) {
+      <pre class="lit">class ClickOutsideController {
+  constructor(host, khiRaNgoai) {
     this.host = host;
-    this.seconds = 0;
+    this.khiRaNgoai = khiRaNgoai;
     <b>host.addController(this);</b>
   }
   <b>hostConnected()</b> {
-    this.t = setInterval(() =&gt; {
-      this.seconds++;
-      <b>this.host.requestUpdate();</b>
-    }, this.stepMs);
+    this.xuLy_ = (e) =&gt; {
+      if (!e.composedPath().includes(this.host))
+        this.khiRaNgoai();
+    };
+    document.addEventListener('click', this.xuLy_);
   }
-  <b>hostDisconnected()</b> { clearInterval(this.t); }
+  <b>hostDisconnected()</b> {
+    document.removeEventListener('click', this.xuLy_);
+  }
 }
 
-class MyEl extends LitElement {
-  slow = new TickerController(this, 1000);
-  fast = new TickerController(this, 300);
+class MyPanel extends <span class="c">OpenableMixin(</span>LitElement<span class="c">)</span> {
+  ngoai = <b>new ClickOutsideController(this, () =&gt; this.close())</b>;
 }</pre>
     </div>
     <div>
+      <div class="box ok">
+        <h3>Phân vai rất rõ</h3>
+        <p><strong>Mixin</strong> cho <code>opened</code>, <code>toggle()</code>, <code>close()</code> —
+        thứ <em>phải nằm trên chính element</em>, vì template và component cha gọi <code>panel.close()</code>.</p>
+        <p style="margin-top:8px"><strong>Controller</strong> chỉ cần lifecycle + một callback.
+        Nó <em>không cần</em> thêm gì lên element.</p>
+      </div>
       <table>
         <tr><th></th><th>Mixin</th><th>Controller</th></tr>
         <tr><td>Đụng prototype chain</td><td style="color:var(--err)">Có</td><td style="color:var(--ok)">Không</td></tr>
-        <tr><td>Trùng tên method</td><td style="color:var(--err)">Có thể đè</td><td style="color:var(--ok)">Không thể</td></tr>
+        <tr><td>Trùng tên method</td><td style="color:var(--err)">Đè nhau</td><td style="color:var(--ok)">Không thể</td></tr>
         <tr><td>Cần deduping</td><td style="color:var(--err)">Có</td><td style="color:var(--ok)">Không</td></tr>
-        <tr><td><strong>Nhiều bản cùng lúc</strong></td><td style="color:var(--err)"><strong>Không</strong></td><td style="color:var(--ok)"><strong>Được</strong></td></tr>
+        <tr><td><strong>Nhiều bản trong 1 element</strong></td><td style="color:var(--err)"><strong>Không</strong></td><td style="color:var(--ok)"><strong>Được</strong></td></tr>
         <tr><td>Thêm API lên element</td><td style="color:var(--ok)">Có</td><td style="color:var(--muted)">Không (cố ý)</td></tr>
-        <tr><td>Test riêng</td><td style="color:var(--err)">Khó</td><td style="color:var(--ok)">Dễ</td></tr>
       </table>
-      <div class="box ok">
-        <strong>Controller là composition, mixin là inheritance.</strong>
-        Composition không có bẫy trùng tên và bẫy deduping.
-      </div>
+      <p style="color:var(--muted);font-size:14px">Controller là <strong>composition</strong>, mixin là <strong>inheritance</strong>.</p>
     </div>
   </div>
-  <p style="color:var(--muted)">→ Demo 3, mục 4: hai bộ đếm nhịp khác nhau trong cùng element — mixin bó tay, controller chạy tốt.</p>
 </section>
 
 <!-- 24 -->
 <section class="slide center" data-toc="Chọn mixin hay controller">
   <h3>Chọn cái nào</h3>
   <pre class="plain" style="text-align:left;display:inline-block;font-size:15px;margin-top:10px">Thứ này có cần thêm method/property lên <b>CHÍNH element</b> không?
-(để template, hoặc code ngoài, gọi được el.foo())
+(để template, hoặc component cha, gọi được el.foo())
 
         │
         ├── CÓ ─────────►  <b>Mixin</b>
-        │                  vd: i18n() dùng trong template, API công khai
+        │                  vd: opened + toggle() — template bind [[opened]],
+        │                      component cha gọi panel.close()
         │
         └── KHÔNG ──────►  <b>ReactiveController</b>
-                           vd: theo dõi kích thước, timer, fetch state,
-                               nghe sự kiện, kết nối WebSocket</pre>
-  <div class="box warn" style="margin-top:24px;max-width:70ch;text-align:left">
-    Và trước cả hai: <strong>hàm thuần có đủ không?</strong>
-    Không state, không lifecycle → <code>export function</code> là xong.
+                           vd: click ra ngoài, theo dõi kích thước, timer,
+                               fetch state, kết nối WebSocket</pre>
+  <div class="box warn" style="margin-top:22px;max-width:72ch;text-align:left">
+    Câu hỏi phụ chốt nhanh: <strong>"Có khi nào tôi cần HAI bản của thứ này trong một element không?"</strong>
+    Nếu có → chắc chắn là controller. Mixin chỉ cho một bản.
   </div>
 </section>
 

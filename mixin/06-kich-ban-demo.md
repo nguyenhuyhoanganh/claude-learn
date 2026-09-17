@@ -69,16 +69,16 @@ Thứ tự bấm: **1 → 2 → 4 → 3 → 5**.
 1. **Mục 1** — bấm "Tạo & gắn element", rồi **"Gắn lại"**.
    > "Lần gắn lại, `connectedCallback` chạy lại nhưng `ready` thì không. Nên listener toàn cục phải đặt ở `connectedCallback`. Đây là bug hay gặp trong code Chromium thật."
 
-2. **Mục 2** — bấm "value += 1" vài lần, rồi "value = 20".
-   > "`observer` và `computed` này khai báo **bên trong mixin**, không phải trong element. Vẫn chạy, vẫn cập nhật template. Mixin Polymer là một mảnh component đầy đủ chứ không chỉ là túi method."
+2. **Mục 2** — bấm "toggle()" vài lần, rồi "close()".
+   > "`observer`, `computed` và `reflectToAttribute` này khai báo **bên trong mixin**, không phải trong element. Vẫn chạy, template vẫn bind được `[[nhan]]`, CSS vẫn bắt được `:host([opened])`. Mixin Polymer là một mảnh component đầy đủ chứ không chỉ là túi method."
 
 3. **Mục 4** — Behaviors.
    > "Cú pháp Polymer 1. Object literal, không có `super`. Còn gặp trong code cũ — đọc hiểu là đủ, đừng viết mới."
 
 4. **Mục 3** — deduping. Nhanh, vì đã nói ở demo 1.
 
-5. **Mục 5** — đồng bộ. **Dừng lại và bảo cả lớp ghi nhớ kết quả `"777"`.**
-   > "Nhớ con số này. 10 phút nữa chúng ta chạy đúng đoạn code này trên Lit."
+5. **Mục 5** — đồng bộ. **Dừng lại và bảo cả lớp ghi nhớ kết quả `"Đang mở"`.**
+   > "Nhớ kết quả này. 10 phút nữa chúng ta chạy đúng đoạn code này trên Lit."
 
 ### Demo 3 — Lit (slide 18–24)
 
@@ -86,27 +86,27 @@ Thứ tự bấm: **1 → 2 → 4 → 3 → 5**.
    > "Vòng đầu có constructor và `firstUpdated`. Vòng hai thì không — chỉ `willUpdate → render → updated`. Và `changed` chỉ chứa property vừa đổi."
 
 2. **Mục 2** — properties.
-   > "`tick` khai báo trong mixin, `label` trong element. Lit gộp cả hai, giống Polymer. Nhưng để ý: không có `value:` — mặc định phải gán trong constructor."
+   > "`opened` khai báo trong mixin, `tieuDe` trong element. Lit gộp cả hai, giống Polymer. Nhưng để ý: không có `value:` — mặc định phải gán trong constructor."
 
 3. **Mục 4** — ReactiveController. **Đây là điểm nhấn của phần Lit.**
    > "Nhìn hai dòng trong khung: `chậm` và `nhanh` nhảy với nhịp khác nhau — **hai controller trong cùng một element**. Mixin không làm được, vì một mixin chỉ cho bạn một `this.seconds`."
 
 4. **Mục 5** — bất đồng bộ.
-   > "Đây rồi. Cùng đoạn code Polymer cho `777`, Lit cho giá trị cũ. Không có lỗi, không có cảnh báo."
+   > "Đây rồi. Cùng đoạn code Polymer cho `Đang mở`, Lit cho giá trị cũ. Không có lỗi, không có cảnh báo."
 
 ### Demo 4 — chốt (slide 25–27)
 
 1. **Mục 1** — mã nguồn đối chiếu. Để cả lớp đọc 30 giây.
-   > "Thân hàm `withLoading` **giống hệt nhau**. Chỉ khác cái vỏ."
+   > "`toggle()`, `open()`, `close()` **giống hệt nhau từng chữ**. Chỉ khác cái vỏ khai báo property và cách phản ứng khi property đổi."
 
 2. **Mục 2** — bấm "Chạy kịch bản trên cả hai".
    > "Phần constructor và connectedCallback giống nhau ở hai cột — đó là phần JS thuần, không đổi. Khác biệt là Polymer có `ready()` chạy một lần, Lit có cả một vòng update lặp lại mỗi lần property đổi."
 
 3. **Mục 3** — bấm "Gán property rồi đọc DOM". Hai cột cạnh nhau.
-   > "`777` và `—`. Cùng một dòng code."
+   > "`Đang mở` và `Đang đóng`. Cùng một dòng code."
 
-4. **Mục 4** — bấm "Gọi withLoading()" 2–3 lần cho thấy cả nhánh thành công lẫn nhánh lỗi.
-   > "Cùng một API, hai bản cài đặt. Từ phía người dùng component, không phân biệt được."
+4. **Mục 4** — bấm "Gọi toggle()" vài lần, hoặc bấm thẳng vào tiêu đề trong hai khung.
+   > "Cùng một API `toggle()`, hai bản cài đặt. CSS `:host([opened])` ăn ở cả hai bên nhờ attribute mà mixin reflect ra. Từ phía người dùng component, không phân biệt được."
 
 ## Câu hỏi hay bị vặn lại
 
@@ -114,7 +114,7 @@ Thứ tự bấm: **1 → 2 → 4 → 3 → 5**.
 Cùng ý tưởng — hàm nhận vào, trả về phiên bản đã tăng cường. Khác ở chỗ HOC bọc *component* và tạo thêm một tầng trong cây render; mixin bọc *class* và chèn vào prototype chain, không thêm tầng DOM nào. Hook của React gần với ReactiveController hơn là gần mixin.
 
 **"Sao không dùng composition luôn cho gọn?"**
-Nên, nếu được — đó chính là ReactiveController. Mixin chỉ thắng ở một điểm: khi bạn cần API xuất hiện **trên chính element**, ví dụ `i18n()` phải gọi được từ trong template, hoặc code bên ngoài phải gọi `el.withLoading()`.
+Nên, nếu được — đó chính là ReactiveController. Mixin chỉ thắng ở một điểm: khi bạn cần API xuất hiện **trên chính element**, ví dụ `toggle()` phải gọi được từ `on-click` trong template, hoặc component cha phải gọi `panel.close()`.
 
 **"Xếp chồng bao nhiêu mixin là quá nhiều?"**
 3–4. Quá đó thì stack trace toàn class ẩn danh, và xác suất trùng tên method tăng nhanh. Nếu đang cần 6 mixin, nhiều khả năng một nửa trong số đó nên là controller hoặc hàm thuần.
@@ -141,7 +141,7 @@ Hai demo đó truyền đạt được hai ý cốt lõi: *mixin là mắt xích
 
 - Chạy demo qua `python3 -m http.server`, không dùng `file://` cho demo 2–4.
 - Kiểm tra dải xanh "✓ Đã tải…" trước khi bắt đầu.
-- Điểm nhấn: **demo 1 mục 3** (super đầu/cuối đảo ngược trace) và **demo 4 mục 3** (`777` vs `—`).
+- Điểm nhấn: **demo 1 mục 3** (super đầu/cuối đảo ngược trace) và **demo 4 mục 3** (`Đang mở` vs `Đang đóng`).
 - Demo 1 chạy offline — luôn có phương án dự phòng khi mất mạng.
 
 **Quay lại** → [README — mục lục](README.md)

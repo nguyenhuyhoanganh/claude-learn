@@ -10,54 +10,52 @@ Nhắc lại: `class B extends A` chỉ làm đúng một việc — đặt `B.p
 
 Mixin cũng y như vậy, chỉ khác là class trung gian không có tên sẵn.
 
-Lấy lại `DemLuotMixin` từ bài 1:
+Lấy lại `OpenableMixin` từ bài 1:
 
 ```javascript
-const DemLuotMixin = (Base) => class extends Base {
-  ghiNhanDung() { this.soLanDung++; }
-};
-
-class NutBam extends DemLuotMixin(Object) { }
+class MyPanel extends OpenableMixin(PolymerElement) { }
 ```
 
-Chuỗi sinh ra chỉ có 3 mắt xích:
+Chuỗi sinh ra:
 
 ```text
-NutBam.prototype
+MyPanel.prototype
       │  __proto__
       ▼
-(class ẩn danh do DemLuotMixin sinh ra).prototype   ← ghiNhanDung() nằm ở đây
+OpenableMixin.prototype        ← toggle(), open(), close() nằm ở đây
       │  __proto__
       ▼
-Object.prototype
+PolymerElement.prototype       ← ready(), connectedCallback()… của framework
+      │  __proto__
+      ▼
+HTMLElement.prototype  →  Element  →  Node  →  EventTarget  →  Object
 ```
 
-Khi bạn gọi `nut.ghiNhanDung()`, JS đi **từ trên xuống**: tìm trong `NutBam.prototype` → không có → tìm tiếp ở class do mixin sinh ra → thấy → chạy.
+Khi bạn gọi `panel.toggle()`, JS đi **từ trên xuống**: tìm trong `MyPanel.prototype` → không có → tìm tiếp ở `OpenableMixin` → thấy → chạy.
 
-Đây là toàn bộ "phép thuật" của mixin. Không có gì hơn.
+Đây là toàn bộ "phép thuật" của mixin. Không có gì hơn. Mixin chỉ chèn thêm **một mắt xích** vào giữa component của bạn và `PolymerElement`.
 
-Đổi `Object` thành `HTMLElement` thì chuỗi dài thêm ở phía dưới, nhưng phần mixin chèn vào **không đổi chút nào**:
-
-```text
-NutBam  →  DemLuotMixin  →  HTMLElement  →  Element  →  Node  →  EventTarget  →  Object
-           └─ mixin chèn ─┘  └────── phần có sẵn của trình duyệt ──────────────────┘
-```
+> Đổi `PolymerElement` thành `LitElement` thì phần dưới chuỗi đổi, nhưng **mắt xích mixin chèn vào không đổi chút nào**. Đây là lý do bài 4 sẽ thấy: cơ chế mixin của Lit giống hệt Polymer.
 
 ### Xếp chồng nhiều mixin
 
 ```javascript
-class MyEl extends A(B(C(HTMLElement))) { }
+class MyPanel extends DisableableMixin(OpenableMixin(PolymerElement)) { }
 ```
 
-Đọc **từ trong ra ngoài**: `C` được áp trước (gần base nhất), rồi `B`, rồi `A` (gần `MyEl` nhất).
+Đọc **từ trong ra ngoài**: `OpenableMixin` được áp trước (gần `PolymerElement` nhất), rồi `DisableableMixin` (gần `MyPanel` nhất).
 
 ```text
-MyEl  →  A  →  B  →  C  →  HTMLElement
- ▲                              ▲
- │                              │
-gần bạn nhất              gần base nhất
-ưu tiên cao nhất          chạy "sâu" nhất
+MyPanel  →  DisableableMixin  →  OpenableMixin  →  PolymerElement
+   ▲               ▲                    ▲
+   │               │                    │
+class của bạn  gần bạn hơn         gần base hơn
+               ưu tiên cao hơn      chạy "sâu" hơn
 ```
+
+Cả hai mixin đều có `toggle()`. `DisableableMixin` nằm gần `MyPanel` hơn nên **thắng** — JS tìm thấy nó trước. Rồi bên trong nó gọi `super.toggle()` để chạy tiếp xuống bản của `OpenableMixin`.
+
+Với ký hiệu tổng quát, `A(B(C(Base)))` đọc là: `C` áp trước, rồi `B`, rồi `A`.
 
 > **Mẹo nhớ:** mixin nằm **gần class của bạn nhất** thì **thắng** khi trùng tên method, vì JS tìm thấy nó trước.
 
@@ -320,7 +318,7 @@ Với `class MyEl extends A(B(Base))`:
 | Quên `super.x()` | Element không render, **không có lỗi** | Luôn viết `super.x()` trước khi viết thân hàm |
 | `super` đặt sai đầu/cuối | Cleanup chạy sau khi DOM đã tháo → lỗi null | Setup: super đầu. Teardown: super cuối |
 | Áp mixin 2 lần | Listener nhân đôi, counter nhân đôi | `dedupingMixin` (Polymer) / WeakMap (Lit) |
-| Hai mixin trùng tên method | Cái ngoài đè cái trong, im lặng | Đặt tên có tiền tố: `i18nUpdateLocale()` |
+| Hai mixin trùng tên method | Cái ngoài đè cái trong, im lặng | Gọi `super.x()` để bọc thay vì đè; hoặc đặt tên có tiền tố |
 | Hai mixin trùng tên property | Framework gộp, giá trị khó đoán | Tiền tố theo mixin |
 | Chuỗi mixin quá dài | Stack trace toàn class ẩn danh | Tối đa 3–4 mixin; gom vào một `const Base = ...` |
 

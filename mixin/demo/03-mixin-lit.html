@@ -56,7 +56,7 @@
   <p class="note">Lit có nhiều hook hơn Polymer. Chú ý <code>willUpdate</code> (thay <code>computed</code>) và <code>updated</code> (thay <code>observers</code>).</p>
   <div class="row">
     <button id="btn-create">Tạo &amp; gắn element</button>
-    <button id="btn-update" class="ghost">Đổi property (xem vòng update thứ 2)</button>
+    <button id="btn-update" class="ghost">Gọi toggle() (xem vòng update thứ 2)</button>
     <button id="btn-detach" class="ghost">Gỡ ra</button>
   </div>
   <div class="stage" id="stage1"></div>
@@ -79,7 +79,7 @@
 
 <section>
   <h2><span class="badge">4</span> Mixin vs ReactiveController — cùng một bài toán</h2>
-  <p class="note">Cùng logic "đếm giây", viết hai cách. Điểm mấu chốt ở cuối: controller <strong>dùng được nhiều bản cùng lúc</strong>, mixin thì không.</p>
+  <p class="note">Cùng bài toán panel, hai công cụ khác nhau. Điểm mấu chốt ở cuối: controller <strong>dùng được nhiều bản cùng lúc</strong>, mixin thì không.</p>
   <div class="row"><button id="btn-controller">Chạy cả hai</button></div>
   <div class="stage" id="stage4"></div>
   <pre class="t-dim" id="tr-controller">— bấm nút để chạy —</pre>
@@ -87,7 +87,7 @@
 
 <section>
   <h2><span class="badge">5</span> Cập nhật <strong>bất đồng bộ</strong> — bẫy migrate số 1</h2>
-  <p class="note">Đúng đoạn code chạy được ở Polymer (demo 2 mục 5) sẽ trả về giá trị cũ ở đây.</p>
+  <p class="note">Gọi <code>toggle()</code> của mixin rồi đọc DOM ngay — đúng đoạn code chạy được ở Polymer (demo 2 mục 5) sẽ trả về giá trị cũ ở đây.</p>
   <div class="row"><button id="btn-async">Gán property rồi đọc DOM</button></div>
   <pre class="t-dim" id="tr-async">— bấm nút để chạy —</pre>
 </section>
@@ -139,43 +139,47 @@ try {
   // ==========================================================================
   // 1. Lifecycle
   // ==========================================================================
-  const LifecycleMixin = dedupeMixin((Base) => {
-    class LifecycleMixinImpl extends Base {
-      static properties = {tick: {type: Number}};
+  const OpenableMixin = dedupeMixin((Base) => {
+    class OpenableMixinImpl extends Base {
+      static properties = {opened: {type: Boolean, reflect: true}};
       constructor() {
         super();
-        this.tick = 0;                                   // Lit: mặc định gán ở đây
-        trace?.log('LifecycleMixin.constructor', 't-in', 1);
+        this.opened = false;                             // Lit: mặc định gán ở đây
+        trace?.log('OpenableMixin.constructor', 't-in', 1);
       }
+      get nhan() { return this.opened ? 'Đang mở' : 'Đang đóng'; }
+      toggle() { this.opened = !this.opened; }
+      open()   { this.opened = true; }
+      close()  { this.opened = false; }
       connectedCallback() {
         super.connectedCallback();
-        trace?.log('LifecycleMixin.connectedCallback — sau super', 't-in', 1);
+        trace?.log('OpenableMixin.connectedCallback — sau super', 't-in', 1);
       }
       shouldUpdate(changed) {
-        trace?.log('LifecycleMixin.shouldUpdate', 't-in', 1);
+        trace?.log('OpenableMixin.shouldUpdate', 't-in', 1);
         return super.shouldUpdate(changed);
       }
       willUpdate(changed) {
         super.willUpdate(changed);
-        trace?.log(`LifecycleMixin.willUpdate  changed=[${[...changed.keys()]}]`, 't-in', 1);
+        trace?.log(`OpenableMixin.willUpdate  changed=[${[...changed.keys()]}]`, 't-in', 1);
       }
       updated(changed) {
         super.updated(changed);
-        trace?.log(`LifecycleMixin.updated     changed=[${[...changed.keys()]}]`, 't-out', 1);
+        trace?.log(`OpenableMixin.updated     changed=[${[...changed.keys()]}]`, 't-out', 1);
       }
       disconnectedCallback() {
-        trace?.log('LifecycleMixin.disconnectedCallback — trước super', 't-out', 1);
+        trace?.log('OpenableMixin.disconnectedCallback — trước super', 't-out', 1);
         super.disconnectedCallback();
       }
     }
-    return LifecycleMixinImpl;
+    return OpenableMixinImpl;
   });
 
-  class LifeDemo extends LifecycleMixin(LitElement) {
-    static properties = {label: {type: String}};
+  class LifeDemo extends OpenableMixin(LitElement) {
+    static properties = {tieuDe: {type: String}};
     constructor() {
       super();
-      this.label = 'xin chào';
+      this.tieuDe = 'Bảng';
       trace?.log('LifeDemo.constructor', 't-in', 0);
     }
     connectedCallback() {
@@ -188,7 +192,7 @@ try {
     }
     render() {
       trace?.log('LifeDemo.render()  ← template chạy LẠI TOÀN BỘ', 't-in', 0);
-      return html`<span style="font:13px ui-monospace,monospace">${this.label} · tick=${this.tick}</span>`;
+      return html`<span style="font:13px ui-monospace,monospace">${this.tieuDe} · ${this.nhan}</span>`;
     }
     firstUpdated() { trace?.log('LifeDemo.firstUpdated  ← CHỈ lần đầu', 't-out', 0); }
     updated(changed) {
@@ -224,13 +228,13 @@ try {
   document.getElementById('btn-update').onclick = async () => {
     if (!liveEl) { tLife.log('(chưa có element)', 't-dim'); return; }
     tLife.reset(); trace = tLife;
-    tLife.log('── liveEl.tick += 1 ──', 't-dim');
-    liveEl.tick += 1;
+    tLife.log('── liveEl.toggle() ──', 't-dim');
+    liveEl.toggle();
     await liveEl.updateComplete;
     trace = null;
     tLife.log('');
     tLife.log('→ Vòng update thứ 2: KHÔNG có constructor, KHÔNG có firstUpdated.', 't-dim');
-    tLife.log('→ changed chỉ chứa "tick" — property nào đổi thì mới có trong đó.', 't-dim');
+    tLife.log('→ changed chỉ chứa "opened" — property nào đổi thì mới có trong đó.', 't-dim');
   };
 
   document.getElementById('btn-detach').onclick = () => {
@@ -251,11 +255,11 @@ try {
     const el = document.createElement('life-demo');
     t.log('LifeDemo.elementProperties — Lit gom từ cả chuỗi prototype:', 't-dim');
     for (const key of LifeDemo.elementProperties.keys()) {
-      const from = key === 'tick' ? 'MIXIN' : 'ELEMENT';
+      const from = key === 'opened' ? 'MIXIN' : 'ELEMENT';
       t.log(`  • ${String(key).padEnd(10)} ← khai báo trong ${from}`, 't-out');
     }
     t.log('');
-    t.log(`Giá trị mặc định (gán trong constructor): tick=${el.tick}, label="${el.label}"`, '');
+    t.log(`Giá trị mặc định (gán trong constructor): opened=${el.opened}, tieuDe="${el.tieuDe}"`, '');
     t.log('');
     t.log('→ Giống Polymer ở chỗ gộp qua chain.', 't-dim');
     t.log('→ Khác Polymer: không có "value:" trong khai báo. Quên gán trong', 't-bad');
@@ -317,51 +321,53 @@ try {
   document.getElementById('btn-controller').onclick = async () => {
     const t = makeTrace('tr-controller'); t.reset();
 
-    // ---- Cách A: MIXIN ----
-    const TickerMixin = dedupeMixin((Base) => class extends Base {
-      static properties = {seconds: {type: Number}};
-      constructor() { super(); this.seconds = 0; }
-      connectedCallback() {
-        super.connectedCallback();
-        this._timer = setInterval(() => { this.seconds++; }, 1000);
-      }
-      disconnectedCallback() {
-        clearInterval(this._timer);
-        super.disconnectedCallback();
-      }
+    // ---- Cách A: MIXIN — thêm API lên chính element ----
+    const PanelMixin = dedupeMixin((Base) => class extends Base {
+      static properties = {opened: {type: Boolean, reflect: true}};
+      constructor() { super(); this.opened = false; }
+      toggle() { this.opened = !this.opened; }
+      close()  { this.opened = false; }
     });
 
-    class ViaMixin extends TickerMixin(LitElement) {
+    class ViaMixin extends PanelMixin(LitElement) {
       render() {
         return html`<span style="font:13px ui-monospace,monospace">
-          mixin → seconds = ${this.seconds}</span>`;
+          mixin → opened = ${this.opened} (bấm nút trên để đóng/mở)</span>`;
       }
     }
 
-    // ---- Cách B: REACTIVE CONTROLLER ----
-    class TickerController {
-      constructor(host, stepMs = 1000) {
+    // ---- Cách B: REACTIVE CONTROLLER — chỉ cần lifecycle, không thêm API ----
+    class ClickOutsideController {
+      constructor(host, ten, khiRaNgoai) {
         this.host = host;
-        this.stepMs = stepMs;
-        this.seconds = 0;
-        host.addController(this);               // đăng ký với host
+        this.ten = ten;
+        this.khiRaNgoai = khiRaNgoai;
+        this.soLan = 0;
+        host.addController(this);              // đăng ký với element
       }
       hostConnected() {
-        this._timer = setInterval(() => {
-          this.seconds++;
-          this.host.requestUpdate();            // chủ động yêu cầu render lại
-        }, this.stepMs);
+        this.xuLy_ = (e) => {
+          if (!e.composedPath().includes(this.host)) {
+            this.soLan++;
+            this.khiRaNgoai();
+            this.host.requestUpdate();         // chủ động yêu cầu render lại
+          }
+        };
+        document.addEventListener('click', this.xuLy_);
       }
-      hostDisconnected() { clearInterval(this._timer); }
+      hostDisconnected() {
+        document.removeEventListener('click', this.xuLy_);   // tự dọn dẹp
+      }
     }
 
     class ViaController extends LitElement {
-      // Hai bộ đếm với nhịp KHÁC NHAU, trong CÙNG một element
-      slow = new TickerController(this, 1000);
-      fast = new TickerController(this, 300);
+      // HAI controller độc lập trong CÙNG một element
+      vungA = new ClickOutsideController(this, 'A', () => {});
+      vungB = new ClickOutsideController(this, 'B', () => {});
       render() {
         return html`<span style="font:13px ui-monospace,monospace">
-          controller → chậm = ${this.slow.seconds} · nhanh = ${this.fast.seconds}</span>`;
+          controller → vùng A đếm ${this.vungA.soLan} · vùng B đếm ${this.vungB.soLan}
+          <br><small>(bấm vào chỗ trống bất kỳ trên trang)</small></span>`;
       }
     }
 
@@ -375,27 +381,28 @@ try {
     stage.append(a, b);
     await a.updateComplete; await b.updateComplete;
 
-    t.log('Cả hai đều chạy — cùng giải quyết một bài toán.', 't-dim');
-    t.log('');
-    t.log('MIXIN:', 't-dim');
-    t.log('  • thêm this.seconds vào CHÍNH element', '');
+    const sau = (K) => { let n = 0, p = K.prototype; while (p) { n++; p = Object.getPrototypeOf(p); } return n; };
+
+    t.log('MIXIN — PanelMixin(LitElement):', 't-dim');
+    t.log('  • thêm this.opened, toggle(), close() vào CHÍNH element', '');
+    t.log('  • template và code ngoài gọi được: el.toggle()', 't-out');
     t.log('  • chèn một mắt xích vào prototype chain', '');
-    t.log(`  • prototype chain sâu ${(() => { let n=0,p=ViaMixin.prototype;
-            while(p){n++;p=Object.getPrototypeOf(p);} return n; })()} tầng`, '');
-    t.log('  • muốn HAI bộ đếm trong cùng element → KHÔNG làm được', 't-bad');
-    t.log('    (một mixin chỉ cho một this.seconds)', 't-bad');
+    t.log(`  • chain sâu ${sau(ViaMixin)} tầng`, '');
+    t.log('  • muốn HAI vùng theo dõi trong cùng element → KHÔNG làm được', 't-bad');
+    t.log('    (một mixin chỉ cho một this.opened)', 't-bad');
     t.log('');
-    t.log('CONTROLLER:', 't-dim');
-    t.log('  • state nằm trong object riêng: this.slow.seconds', '');
+    t.log('CONTROLLER — ClickOutsideController:', 't-dim');
+    t.log('  • state nằm trong object riêng: this.vungA.soLan', '');
     t.log('  • KHÔNG đụng prototype chain', '');
-    t.log(`  • prototype chain sâu ${(() => { let n=0,p=ViaController.prototype;
-            while(p){n++;p=Object.getPrototypeOf(p);} return n; })()} tầng — nông hơn`, 't-out');
-    t.log('  • HAI bộ đếm nhịp khác nhau trong cùng element → CHẠY TỐT', 't-out');
-    t.log('    (xem số "chậm" và "nhanh" nhảy khác nhau ở khung trên)', 't-out');
+    t.log(`  • chain sâu ${sau(ViaController)} tầng — nông hơn`, 't-out');
+    t.log('  • nhận tham số lúc tạo: new ClickOutsideController(this, ten, callback)', 't-out');
+    t.log('  • HAI bản trong cùng element → CHẠY TỐT', 't-out');
+    t.log('    (bấm ra chỗ trống, cả hai số ở khung trên cùng tăng)', 't-out');
+    t.log('  • rời DOM → hostDisconnected tự gỡ listener', 't-out');
     t.log('');
     t.log('→ Không cần deduping, không sợ trùng tên method.', 't-dim');
-    t.log('→ Lit khuyến nghị controller làm lựa chọn mặc định. Chỉ dùng mixin', 't-dim');
-    t.log('  khi cần thêm API lên chính element (vd: i18n() gọi trong template).', 't-dim');
+    t.log('→ Chỉ dùng mixin khi cần thêm API lên chính element', 't-dim');
+    t.log('  (ở đây: toggle() phải gọi được từ template và từ component cha).', 't-dim');
     document.getElementById('btn-controller').disabled = true;
   };
 
@@ -406,9 +413,11 @@ try {
     const t = makeTrace('tr-async'); t.reset();
 
     class SyncDemo extends LitElement {
-      static properties = {value: {type: Number}};
-      constructor() { super(); this.value = 0; }
-      render() { return html`<b id="v">${this.value}</b>`; }
+      static properties = {opened: {type: Boolean}};
+      constructor() { super(); this.opened = false; }
+      get nhan() { return this.opened ? 'Đang mở' : 'Đang đóng'; }
+      toggle() { this.opened = !this.opened; }
+      render() { return html`<b id="v">${this.nhan}</b>`; }
     }
     if (!customElements.get('sync-demo')) customElements.define('sync-demo', SyncDemo);
 
@@ -417,26 +426,26 @@ try {
     document.body.appendChild(el);
     await el.updateComplete;
 
-    el.value = 777;
+    el.toggle();
     const ngay = el.shadowRoot.getElementById('v').textContent;
     await el.updateComplete;
     const sauKhiCho = el.shadowRoot.getElementById('v').textContent;
 
-    t.log('el.value = 777;', 't-dim');
+    t.log('el.toggle();   // method của mixin', 't-dim');
     t.log('const a = el.shadowRoot.getElementById("v").textContent;   // đọc NGAY', 't-dim');
     t.log('await el.updateComplete;', 't-dim');
     t.log('const b = el.shadowRoot.getElementById("v").textContent;   // đọc SAU khi chờ', 't-dim');
     t.log('');
-    t.log(`→ a = "${ngay}"`, ngay === '777' ? 't-out' : 't-bad');
-    t.log(`→ b = "${sauKhiCho}"`, sauKhiCho === '777' ? 't-out' : 't-bad');
+    t.log(`→ a = "${ngay}"`, ngay === 'Đang mở' ? 't-out' : 't-bad');
+    t.log(`→ b = "${sauKhiCho}"`, sauKhiCho === 'Đang mở' ? 't-out' : 't-bad');
     t.log('');
-    if (ngay !== '777') {
+    if (ngay !== 'Đang mở') {
       t.log('✗ Đọc ngay → vẫn là giá trị CŨ. Lit gom thay đổi lại và render ở', 't-bad');
       t.log('  microtask kế tiếp, không cập nhật đồng bộ như Polymer.', 't-bad');
       t.log('✓ Phải await el.updateComplete mới đọc được giá trị mới.', 't-out');
     }
     t.log('');
-    t.log('→ So sánh: demo 2 mục 5 (Polymer) trả về "777" ngay lập tức.', 't-dim');
+    t.log('→ So sánh: demo 2 mục 5 (Polymer) trả về "Đang mở" ngay lập tức.', 't-dim');
     t.log('→ Đây là BẪY MIGRATE SỐ 1: mọi mixin đọc DOM ngay sau khi set', 't-dim');
     t.log('  property đều phải thêm await this.updateComplete.', 't-dim');
     el.remove();

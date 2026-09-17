@@ -52,13 +52,13 @@
 <body>
 <div class="wrap">
 
-<h1>Demo 1 — Mixin thuần JS</h1>
-<p class="sub">Không framework, không build, không internet. Mục tiêu: <strong>nhìn thấy</strong> prototype chain và thứ tự <code>super</code> thay vì tưởng tượng.</p>
+<h1>Demo 1 — Cơ chế mixin: prototype chain &amp; super chain</h1>
+<p class="sub">Chạy offline, không cần framework — vì cơ chế mixin nằm ở tầng JavaScript, <strong>giống hệt nhau</strong> dù base là <code>HTMLElement</code>, <code>PolymerElement</code> hay <code>LitElement</code>. Mục tiêu: <strong>nhìn thấy</strong> prototype chain và thứ tự <code>super</code> thay vì tưởng tượng.</p>
 
 <section>
   <h2><span class="badge">1</span> Prototype chain thật</h2>
-  <p class="note">Ba mixin xếp chồng lên <code>HTMLElement</code>. Bảng dưới in ra chuỗi prototype thật mà JS tạo ra — đọc từ trên xuống chính là thứ tự JS tra cứu method.</p>
-  <pre>class MyBox extends A(B(C(HTMLElement))) { }</pre>
+  <p class="note">Ba mixin xếp chồng lên <code>HTMLElement</code>. Bảng dưới in ra chuỗi prototype thật mà JS tạo ra — đọc từ trên xuống chính là thứ tự JS tra cứu method. Đổi base thành <code>PolymerElement</code> hay <code>LitElement</code> thì phần dưới chuỗi dài thêm, còn <strong>ba mắt xích mixin không đổi chút nào</strong>.</p>
+  <pre>class MyBox extends FocusableMixin(DisableableMixin(OpenableMixin(HTMLElement))) { }</pre>
   <div id="chain"></div>
 </section>
 
@@ -124,46 +124,48 @@ function escapeHtml(s) {
 // ============================================================================
 let trace = null;   // trace đang hoạt động; các mixin ghi vào đây
 
-const MixinC = (Base) => class MixinC extends Base {
-  constructor() { super(); trace?.log('MixinC.constructor (trong cùng)', 't-in', 1); }
+const OpenableMixin = (Base) => class OpenableMixin extends Base {
+  constructor() { super(); this.opened = false;
+    trace?.log('OpenableMixin.constructor (trong cùng)', 't-in', 1); }
   connectedCallback() {
     super.connectedCallback?.();
-    trace?.log('MixinC.connectedCallback  — sau super', 't-in', 3);
+    trace?.log('OpenableMixin.connectedCallback  — sau super', 't-in', 3);
   }
   disconnectedCallback() {
-    trace?.log('MixinC.disconnectedCallback — trước super', 't-out', 3);
+    trace?.log('OpenableMixin.disconnectedCallback — trước super', 't-out', 3);
     super.disconnectedCallback?.();
   }
-  whoAmI() { return 'C'; }
+  toggle() { this.opened = !this.opened; return 'Openable'; }
 };
 
-const MixinB = (Base) => class MixinB extends Base {
-  constructor() { super(); trace?.log('MixinB.constructor', 't-in', 1); }
+const DisableableMixin = (Base) => class DisableableMixin extends Base {
+  constructor() { super(); this.disabled = false;
+    trace?.log('DisableableMixin.constructor', 't-in', 1); }
   connectedCallback() {
     super.connectedCallback?.();
-    trace?.log('MixinB.connectedCallback  — sau super', 't-in', 2);
+    trace?.log('DisableableMixin.connectedCallback  — sau super', 't-in', 2);
   }
   disconnectedCallback() {
-    trace?.log('MixinB.disconnectedCallback — trước super', 't-out', 2);
+    trace?.log('DisableableMixin.disconnectedCallback — trước super', 't-out', 2);
     super.disconnectedCallback?.();
   }
-  whoAmI() { return 'B'; }
+  toggle() { if (this.disabled) return 'bị chặn'; return 'Disableable→' + super.toggle(); }
 };
 
-const MixinA = (Base) => class MixinA extends Base {
-  constructor() { super(); trace?.log('MixinA.constructor (ngoài cùng)', 't-in', 1); }
+const FocusableMixin = (Base) => class FocusableMixin extends Base {
+  constructor() { super(); trace?.log('FocusableMixin.constructor (ngoài cùng)', 't-in', 1); }
   connectedCallback() {
     super.connectedCallback?.();
-    trace?.log('MixinA.connectedCallback  — sau super', 't-in', 1);
+    trace?.log('FocusableMixin.connectedCallback  — sau super', 't-in', 1);
   }
   disconnectedCallback() {
-    trace?.log('MixinA.disconnectedCallback — trước super', 't-out', 1);
+    trace?.log('FocusableMixin.disconnectedCallback — trước super', 't-out', 1);
     super.disconnectedCallback?.();
   }
-  whoAmI() { return 'A'; }
+  toggle() { return 'Focusable→' + super.toggle(); }
 };
 
-class MyBox extends MixinA(MixinB(MixinC(HTMLElement))) {
+class MyBox extends FocusableMixin(DisableableMixin(OpenableMixin(HTMLElement))) {
   constructor() {
     super();
     trace?.log('MyBox.constructor (thân hàm của bạn)', 't-in', 0);
@@ -171,7 +173,8 @@ class MyBox extends MixinA(MixinB(MixinC(HTMLElement))) {
   connectedCallback() {
     super.connectedCallback();
     trace?.log('MyBox.connectedCallback — sau super', 't-in', 0);
-    this.textContent = `whoAmI() → "${this.whoAmI()}"  (MixinA thắng vì gần MyBox nhất)`;
+    this.textContent = `toggle() → "${this.toggle()}"  ` +
+        `(chạy xuyên cả 3 mixin nhờ super)`;
   }
   disconnectedCallback() {
     trace?.log('MyBox.disconnectedCallback — trước super', 't-out', 0);
@@ -206,8 +209,9 @@ customElements.define('my-box', MyBox);
       ${rows.join('')}
     </table>
     <p class="note">JS tra cứu method <strong>từ #0 đi xuống</strong> và dừng ở cái đầu tiên tìm thấy.
-    Cả A, B, C đều có <code>whoAmI()</code> → <code>MixinA</code> (#1) thắng vì nằm gần
-    <code>MyBox</code> nhất.</p>`;
+    Cả ba mixin đều có <code>toggle()</code> → <code>FocusableMixin</code> (#1) thắng vì nằm gần
+    <code>MyBox</code> nhất. Nhưng nó gọi <code>super.toggle()</code> nên cả ba tầng đều chạy —
+    xem chuỗi <code>"Focusable→Disableable→Openable"</code> ở khung dưới.</p>`;
 })();
 
 // ============================================================================
@@ -220,7 +224,7 @@ document.getElementById('btn-ctor').onclick = () => {
   t.log('── gọi document.createElement("my-box") ──', 't-dim');
   document.createElement('my-box');
   t.log('', '');
-  t.log('→ Base-first: MixinC (trong cùng) chạy trước, MyBox chạy cuối.', 't-dim');
+  t.log('→ Base-first: OpenableMixin (trong cùng) chạy trước, MyBox chạy cuối.', 't-dim');
   t.log('→ JS ép buộc thứ tự này: super() phải xong trước khi dùng this.', 't-dim');
   trace = null;
 };
@@ -253,7 +257,7 @@ document.getElementById('btn-disconnect').onclick = () => {
   live.remove();
   live = null;
   tSuper.log('', '');
-  tSuper.log('→ Chạy từ NGOÀI vào TRONG: MyBox → A → B → C — ĐẢO NGƯỢC mục trên.', 't-dim');
+  tSuper.log('→ Chạy từ NGOÀI vào TRONG: MyBox → Focusable → Disableable → Openable — ĐẢO NGƯỢC mục trên.', 't-dim');
   tSuper.log('→ Bạn dọn dẹp trước, base tháo dỡ sau. Đúng thứ tự an toàn.', 't-dim');
   trace = null;
 };

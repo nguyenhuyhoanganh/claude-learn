@@ -77,8 +77,8 @@
   <h2><span class="badge">2</span> Mixin mang theo <code>properties</code>, <code>computed</code>, <code>observers</code></h2>
   <p class="note">Đây là điểm mạnh riêng của Polymer: mixin không chỉ là túi method — nó là một "mảnh component" đầy đủ. Property do mixin khai báo vẫn dùng được trong data binding của template.</p>
   <div class="row">
-    <button id="btn-inc">value += 1</button>
-    <button id="btn-set" class="ghost">value = 20</button>
+    <button id="btn-inc">toggle()</button>
+    <button id="btn-set" class="ghost">close()</button>
   </div>
   <div class="stage" id="stage2"></div>
   <pre class="t-dim" id="tr-reactive">— bấm nút để chạy —</pre>
@@ -137,33 +137,43 @@ try {
   // ==========================================================================
   // 1. Mixin ghi lại lifecycle
   // ==========================================================================
-  const LifecycleMixin = dedupingMixin((superClass) => {
-    class LifecycleMixinImpl extends superClass {
+  const OpenableMixin = dedupingMixin((superClass) => {
+    class OpenableMixinImpl extends superClass {
+      static get properties() {
+        return {
+          opened: {type: Boolean, value: false, reflectToAttribute: true},
+          nhan:   {type: String, computed: 'tinhNhan_(opened)'},
+        };
+      }
+      toggle() { this.opened = !this.opened; }
+      open()   { this.opened = true; }
+      close()  { this.opened = false; }
+      tinhNhan_(o) { return o ? 'Đang mở' : 'Đang đóng'; }
       constructor() {
         super();
-        trace?.log('LifecycleMixin.constructor', 't-in', 1);
+        trace?.log('OpenableMixin.constructor', 't-in', 1);
       }
       connectedCallback() {
         super.connectedCallback();                    // setup → super ĐẦU
-        trace?.log('LifecycleMixin.connectedCallback — sau super', 't-in', 1);
+        trace?.log('OpenableMixin.connectedCallback — sau super', 't-in', 1);
       }
       ready() {
-        trace?.log('LifecycleMixin.ready — TRƯỚC super', 't-in', 1);
+        trace?.log('OpenableMixin.ready — TRƯỚC super', 't-in', 1);
         super.ready();
-        trace?.log('LifecycleMixin.ready — SAU super', 't-out', 1);
+        trace?.log('OpenableMixin.ready — SAU super', 't-out', 1);
       }
       disconnectedCallback() {
-        trace?.log('LifecycleMixin.disconnectedCallback — trước super', 't-out', 1);
+        trace?.log('OpenableMixin.disconnectedCallback — trước super', 't-out', 1);
         super.disconnectedCallback();                 // teardown → super CUỐI
       }
     }
-    return LifecycleMixinImpl;
+    return OpenableMixinImpl;
   });
 
-  class LifeDemo extends LifecycleMixin(PolymerElement) {
+  class LifeDemo extends OpenableMixin(PolymerElement) {
     static get is() { return 'life-demo'; }
     static get template() {
-      return html`<span style="font:13px ui-monospace,monospace">&lt;life-demo&gt; đang sống</span>`;
+      return html`<span style="font:13px ui-monospace,monospace">&lt;life-demo&gt; · [[nhan]]</span>`;
     }
     connectedCallback() {
       super.connectedCallback();
@@ -224,44 +234,43 @@ try {
   // ==========================================================================
   const tReactive = makeTrace('tr-reactive');
 
-  const DoublerMixin = dedupingMixin((superClass) => {
-    class DoublerMixinImpl extends superClass {
+  const ReactiveOpenableMixin = dedupingMixin((superClass) => {
+    class ReactiveOpenableMixinImpl extends superClass {
       static get properties() {
         return {
-          value:   {type: Number, value: 1},
-          doubled: {type: Number, computed: 'computeDoubled_(value)'},
-          isBig:   {type: Boolean, value: false, reflectToAttribute: true,
-                    computed: 'computeBig_(value)'},
+          opened: {type: Boolean, value: false, reflectToAttribute: true,
+                   observer: 'openedChanged_'},
+          nhan:   {type: String, computed: 'tinhNhan_(opened)'},
         };
       }
-      static get observers() {
-        return ['onValueChanged_(value)'];
-      }
-      computeDoubled_(v) { return v * 2; }
-      computeBig_(v) { return v >= 10; }
-      onValueChanged_(v) {
-        tReactive.log(`observer của MIXIN chạy → value = ${v}`, 't-in');
+      toggle() { this.opened = !this.opened; }
+      open()   { this.opened = true; }
+      close()  { this.opened = false; }
+      tinhNhan_(o) { return o ? 'Đang mở' : 'Đang đóng'; }
+      openedChanged_(moi) {
+        tReactive.log(`observer của MIXIN chạy → opened = ${moi}`, 't-in');
+        this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
       }
     }
-    return DoublerMixinImpl;
+    return ReactiveOpenableMixinImpl;
   });
 
-  class ReactiveDemo extends DoublerMixin(PolymerElement) {
+  class ReactiveDemo extends ReactiveOpenableMixin(PolymerElement) {
     static get is() { return 'reactive-demo'; }
     static get properties() {
-      return {label: {type: String, value: 'Kết quả'}};   // property riêng của element
+      return {tieuDe: {type: String, value: 'Bảng'}};   // property riêng của element
     }
     static get template() {
       return html`
         <style>
           :host { display:block; font:13px ui-monospace,Menlo,monospace; }
-          :host([is-big]) .box { color:#d93025; font-weight:700; }
+          :host([opened]) .than { display:block; color:#0f9d58; }
+          .than { display:none; }
         </style>
         <div class="box">
-          [[label]]: value=<b id="v">[[value]]</b> ·
-          doubled=<b id="d">[[doubled]]</b> ·
-          isBig=<b id="b">[[isBig]]</b>
-        </div>`;
+          <b id="t">[[tieuDe]]</b> — <b id="v">[[nhan]]</b>
+        </div>
+        <div class="than">nội dung chỉ hiện khi [opened]</div>`;
     }
   }
   customElements.define(ReactiveDemo.is, ReactiveDemo);
@@ -271,20 +280,21 @@ try {
 
   tReactive.reset();
   tReactive.log('Element vừa khởi tạo:', 't-dim');
-  tReactive.log(`  value=${rEl.value}  doubled=${rEl.doubled}  isBig=${rEl.isBig}`, '');
-  tReactive.log(`  label="${rEl.label}"  ← property của ELEMENT`, '');
+  tReactive.log(`  opened=${rEl.opened}  nhan="${rEl.nhan}"   ← từ MIXIN`, '');
+  tReactive.log(`  tieuDe="${rEl.tieuDe}"                  ← từ ELEMENT`, '');
   tReactive.log('  → cả property của mixin lẫn của element đều có mặt.', 't-out');
   tReactive.log('');
 
   document.getElementById('btn-inc').onclick = () => {
-    rEl.value += 1;
-    tReactive.log(`  sau khi gán: doubled=${rEl.doubled}, isBig=${rEl.isBig}, ` +
-                  `DOM hiện "${rEl.shadowRoot.getElementById('d').textContent}"`, 't-out');
+    rEl.toggle();
+    tReactive.log(`  sau toggle(): nhan="${rEl.nhan}", ` +
+                  `DOM hiện "${rEl.shadowRoot.getElementById('v').textContent}", ` +
+                  `attribute [opened]=${rEl.hasAttribute('opened')}`, 't-out');
   };
   document.getElementById('btn-set').onclick = () => {
-    rEl.value = 20;
-    tReactive.log(`  sau khi gán: doubled=${rEl.doubled}, isBig=${rEl.isBig}, ` +
-                  `attribute is-big=${rEl.hasAttribute('is-big')}`, 't-out');
+    rEl.close();
+    tReactive.log(`  sau close(): nhan="${rEl.nhan}", ` +
+                  `attribute [opened]=${rEl.hasAttribute('opened')}`, 't-out');
   };
 
   // ==========================================================================
@@ -336,20 +346,20 @@ try {
       const {mixinBehaviors} = await import(`${POLYMER}/lib/legacy/class.js`);
 
       // Behavior = OBJECT LITERAL, không phải hàm. Không có super.
-      const GreetBehavior = {
+      const OpenableBehavior = {
         properties: {
-          greeting: {type: String, value: 'Xin chào từ Behavior'},
+          opened: {type: Boolean, value: false, reflectToAttribute: true},
         },
         attached() {                                  // tên lifecycle của Polymer 1
-          t.log('GreetBehavior.attached() chạy', 't-in', 1);
+          t.log('OpenableBehavior.attached() chạy', 't-in', 1);
         },
-        greet() { return 'method từ behavior'; },
+        toggle() { this.opened = !this.opened; },
       };
 
-      class BehaviorDemo extends mixinBehaviors([GreetBehavior], PolymerElement) {
+      class BehaviorDemo extends mixinBehaviors([OpenableBehavior], PolymerElement) {
         static get is() { return 'behavior-demo'; }
         static get template() {
-          return html`<span style="font:13px ui-monospace,monospace">[[greeting]]</span>`;
+          return html`<span style="font:13px ui-monospace,monospace">opened = [[opened]]</span>`;
         }
       }
       customElements.define(BehaviorDemo.is, BehaviorDemo);
@@ -357,8 +367,9 @@ try {
       const bEl = document.createElement('behavior-demo');
       document.getElementById('stage4').appendChild(bEl);
 
-      t.log(`greeting (property từ behavior) = "${bEl.greeting}"`, 't-out');
-      t.log(`greet()  (method từ behavior)   = "${bEl.greet()}"`, 't-out');
+      t.log(`opened (property từ behavior) = ${bEl.opened}`, 't-out');
+      bEl.toggle();
+      t.log(`sau toggle() (method từ behavior) = ${bEl.opened}`, 't-out');
       t.log('');
       t.log('→ mixinBehaviors() chính là MỘT MIXIN bọc object behavior lại,', 't-dim');
       t.log('  làm cầu nối cú pháp Polymer 1 vào thế giới class ES6.', 't-dim');
@@ -381,15 +392,15 @@ try {
     document.body.appendChild(el);               // cần nằm trong DOM để stamp template
     el.style.display = 'none';
 
-    el.value = 777;
+    el.toggle();
     const domNgay = el.shadowRoot.getElementById('v').textContent;
 
-    t.log('el.value = 777;', 't-dim');
+    t.log('el.toggle();   // method của mixin', 't-dim');
     t.log('const text = el.shadowRoot.getElementById("v").textContent;', 't-dim');
     t.log('');
-    t.log(`→ text = "${domNgay}"`, domNgay === '777' ? 't-out' : 't-bad');
+    t.log(`→ text = "${domNgay}"`, domNgay === 'Đang mở' ? 't-out' : 't-bad');
     t.log('');
-    if (domNgay === '777') {
+    if (domNgay === 'Đang mở') {
       t.log('✓ DOM đã cập nhật NGAY, không cần chờ gì cả.', 't-out');
       t.log('  Polymer chặn ở setter và cập nhật thẳng binding — đồng bộ.', 't-dim');
     }

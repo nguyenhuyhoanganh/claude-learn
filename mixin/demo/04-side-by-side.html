@@ -57,7 +57,7 @@
 <div class="wrap">
 
 <h1>Demo 4 — Cùng một mixin, hai framework, chạy song song</h1>
-<p class="sub">Một <code>LoadableMixin</code> (quản lý trạng thái loading) được viết hai lần — Polymer 3 và Lit 3 — rồi chạy cùng một kịch bản để so sánh.</p>
+<p class="sub">Một <code>OpenableMixin</code> (mở/đóng panel) được viết hai lần — Polymer 3 và Lit 3 — rồi chạy cùng một kịch bản để so sánh.</p>
 
 <div id="status">Đang tải Polymer và Lit từ CDN…</div>
 
@@ -67,60 +67,69 @@
   <div class="cols">
     <div class="col p">
       <h3>Polymer 3</h3>
-      <pre>const LoadableMixin = <b>dedupingMixin</b>((sc) =&gt;
+      <pre>const OpenableMixin = <b>dedupingMixin</b>((sc) =&gt;
   class extends sc {
     <b>static get properties()</b> {
       return {
-        isLoading: {
+        opened: {
           type: Boolean,
           <b>value: false</b>,
           <b>reflectToAttribute: true</b>,
+          <b>observer: 'openedChanged_'</b>,
         },
-        loadError: {type: String, <b>value: ''</b>},
+        nhan: {<b>computed: 'tinhNhan_(opened)'</b>},
       };
     }
 
-    async withLoading(fn) {
-      this.isLoading = true;
-      this.loadError = '';
-      try { return await fn(); }
-      catch (e) { this.loadError = e.message; }
-      finally { this.isLoading = false; }
+    toggle() { this.opened = !this.opened; }
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
+
+    tinhNhan_(o) { return o ? 'Đang mở' : 'Đang đóng'; }
+
+    <b>openedChanged_(moi)</b> {
+      this.dispatchEvent(new CustomEvent(
+          'opened-changed', {detail: {value: moi}}));
     }
   });</pre>
     </div>
     <div class="col l">
       <h3>Lit 3</h3>
-      <pre>const LoadableMixin = <b>dedupeMixin</b>((Base) =&gt;
+      <pre>const OpenableMixin = <b>dedupeMixin</b>((Base) =&gt;
   class extends Base {
     <b>static properties = {</b>
-      isLoading: {
+      opened: {
         type: Boolean,
         <b>reflect: true</b>,
       },
-      loadError: {type: String},
-    <b>}</b>;
+    <b>};</b>
 
     <b>constructor() {</b>
       <b>super();</b>
-      <b>this.isLoading = false;</b>
-      <b>this.loadError = '';</b>
+      <b>this.opened = false;</b>
     <b>}</b>
 
-    async withLoading(fn) {
-      this.isLoading = true;
-      this.loadError = '';
-      try { return await fn(); }
-      catch (e) { this.loadError = e.message; }
-      finally { this.isLoading = false; }
+    <b>get nhan()</b> { return this.opened ? 'Đang mở' : 'Đang đóng'; }
+
+    toggle() { this.opened = !this.opened; }
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
+
+    <b>updated(changed)</b> {
+      super.updated(changed);
+      if (changed.has('opened')) {
+        this.dispatchEvent(new CustomEvent(
+            'opened-changed', {detail: {value: this.opened}}));
+      }
     }
   });</pre>
     </div>
   </div>
   <div class="verdict">
-    <strong>Phần thân <code>withLoading()</code> giống hệt nhau.</strong>
+    <strong><code>toggle()</code>, <code>open()</code>, <code>close()</code> giống hệt nhau từng chữ.</strong>
     Chỉ khác ở vỏ khai báo: deduping, cú pháp <code>properties</code>,
-    chỗ đặt giá trị mặc định, và tên <code>reflect</code>.
+    chỗ đặt giá trị mặc định, tên <code>reflect</code>, và cách phản ứng khi
+    property đổi (<code>observer</code> vs <code>updated()</code>).
   </div>
 </section>
 
@@ -137,7 +146,7 @@
 
 <section>
   <h2>3. Đồng bộ vs bất đồng bộ — khác biệt quan trọng nhất</h2>
-  <p class="note">Cùng một đoạn code: gán property rồi đọc DOM ngay lập tức.</p>
+  <p class="note">Cùng một đoạn code: gọi <code>toggle()</code> của mixin rồi đọc DOM ngay lập tức.</p>
   <div class="row"><button id="btn-sync">Gán property rồi đọc DOM</button></div>
   <div class="cols">
     <div class="col p"><h3>Polymer 3</h3><pre id="sync-p">— chưa chạy —</pre></div>
@@ -147,9 +156,9 @@
 </section>
 
 <section>
-  <h2>4. Mixin chạy thật — trạng thái loading</h2>
-  <p class="note">Bấm để gọi một hàm async giả lập (800ms, có 40% xác suất lỗi). Cả hai element dùng <code>withLoading()</code> từ mixin của mình.</p>
-  <div class="row"><button id="btn-load">Gọi withLoading() trên cả hai</button></div>
+  <h2>4. Mixin chạy thật — mở/đóng</h2>
+  <p class="note">Bấm nút, hoặc bấm thẳng vào tiêu đề trong khung. Cả hai element dùng <code>toggle()</code> từ mixin của mình; CSS <code>:host([opened])</code> ăn theo attribute mà mixin reflect ra.</p>
+  <div class="row"><button id="btn-load">Gọi toggle() trên cả hai</button></div>
   <div class="cols">
     <div class="col p"><h3>Polymer 3</h3><div id="host-p"></div></div>
     <div class="col l"><h3>Lit 3</h3><div id="host-l"></div></div>
@@ -214,14 +223,14 @@ try {
   }
 
   // ==========================================================================
-  // LoadableMixin — bản POLYMER
+  // OpenableMixin — bản POLYMER
   // ==========================================================================
-  const LoadablePolymer = dedupingMixin((sc) => class extends sc {
+  const OpenablePolymer = dedupingMixin((sc) => class extends sc {
     static get properties() {
       return {
-        isLoading: {type: Boolean, value: false, reflectToAttribute: true},
-        loadError: {type: String, value: ''},
-        result:    {type: String, value: '—'},
+        opened: {type: Boolean, value: false, reflectToAttribute: true,
+                 observer: 'openedChanged_'},
+        nhan:   {type: String, computed: 'tinhNhan_(opened)'},
       };
     }
     ready() {
@@ -233,36 +242,30 @@ try {
       super.connectedCallback();
       tp?.log('mixin.connectedCallback', '', 1);
     }
-    async withLoading(fn) {
-      this.isLoading = true;
-      this.loadError = '';
-      try {
-        const r = await fn();
-        this.result = r;
-        return r;
-      } catch (e) {
-        this.loadError = e.message;
-      } finally {
-        this.isLoading = false;
-      }
+    toggle() { this.opened = !this.opened; }
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
+    tinhNhan_(o) { return o ? 'Đang mở' : 'Đang đóng'; }
+    openedChanged_(moi) {
+      this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
     }
   });
 
-  class PolyCard extends LoadablePolymer(PolymerElement) {
+  class PolyCard extends OpenablePolymer(PolymerElement) {
     static get is() { return 'poly-card'; }
+    static get properties() { return {tieuDe: {type: String, value: 'Bảng'}}; }
     static get template() {
       return phtml`
         <style>
           :host { display:block; padding:12px 14px; border-radius:6px;
                   background:#f1f3f5; font:12.5px ui-monospace,Menlo,monospace;
                   border:1px solid #e3e6ea; }
-          :host([is-loading]) { opacity:.55; }
-          .err { color:#d93025; font-weight:600; }
-          .ok  { color:#0f9d58; }
+          :host([opened]) .than { display:block; }
+          .than { display:none; margin-top:6px; color:#0f9d58; }
+          h4 { margin:0; cursor:pointer; font:inherit; font-weight:600; }
         </style>
-        <div>isLoading = <b>[[isLoading]]</b></div>
-        <div>result    = <span class="ok" id="r">[[result]]</span></div>
-        <div>loadError = <span class="err">[[loadError]]</span></div>`;
+        <h4 id="h" on-click="toggle">[[tieuDe]] — <span id="n">[[nhan]]</span></h4>
+        <div class="than">nội dung chỉ hiện khi opened</div>`;
     }
     ready() {
       tp?.log('element.ready — trước super');
@@ -277,21 +280,18 @@ try {
   customElements.define(PolyCard.is, PolyCard);
 
   // ==========================================================================
-  // LoadableMixin — bản LIT
+  // OpenableMixin — bản LIT
   // ==========================================================================
-  const LoadableLit = dedupeMixin((Base) => class extends Base {
+  const OpenableLit = dedupeMixin((Base) => class extends Base {
     static properties = {
-      isLoading: {type: Boolean, reflect: true},
-      loadError: {type: String},
-      result:    {type: String},
+      opened: {type: Boolean, reflect: true},
     };
     constructor() {
       super();
-      this.isLoading = false;
-      this.loadError = '';
-      this.result = '—';
+      this.opened = false;
       tl?.log('mixin.constructor', '', 1);
     }
+    get nhan() { return this.opened ? 'Đang mở' : 'Đang đóng'; }
     connectedCallback() {
       super.connectedCallback();
       tl?.log('mixin.connectedCallback', '', 1);
@@ -303,39 +303,33 @@ try {
     updated(changed) {
       super.updated(changed);
       tl?.log(`mixin.updated     [${[...changed.keys()]}]`, '', 1);
-    }
-    async withLoading(fn) {
-      this.isLoading = true;
-      this.loadError = '';
-      try {
-        const r = await fn();
-        this.result = r;
-        return r;
-      } catch (e) {
-        this.loadError = e.message;
-      } finally {
-        this.isLoading = false;
+      if (changed.has('opened')) {
+        this.dispatchEvent(new CustomEvent('opened-changed',
+            {detail: {value: this.opened}}));
       }
     }
+    toggle() { this.opened = !this.opened; }
+    open()   { this.opened = true; }
+    close()  { this.opened = false; }
   });
 
-  class LitCard extends LoadableLit(LitElement) {
+  class LitCard extends OpenableLit(LitElement) {
+    static properties = {tieuDe: {type: String}};
     static styles = css`
       :host { display:block; padding:12px 14px; border-radius:6px;
               background:#f1f3f5; font:12.5px ui-monospace,Menlo,monospace;
               border:1px solid #e3e6ea; }
-      :host([isloading]) { opacity:.55; }
-      .err { color:#d93025; font-weight:600; }
-      .ok  { color:#0f9d58; }`;
-    constructor() { super(); tl?.log('element.constructor'); }
+      :host([opened]) .than { display:block; }
+      .than { display:none; margin-top:6px; color:#0f9d58; }
+      h4 { margin:0; cursor:pointer; font:inherit; font-weight:600; }`;
+    constructor() { super(); this.tieuDe = 'Bảng'; tl?.log('element.constructor'); }
     connectedCallback() { super.connectedCallback(); tl?.log('element.connectedCallback'); }
     willUpdate(c) { super.willUpdate(c); tl?.log('element.willUpdate'); }
     render() {
       tl?.log('element.render()');
       return lhtml`
-        <div>isLoading = <b>${this.isLoading}</b></div>
-        <div>result    = <span class="ok" id="r">${this.result}</span></div>
-        <div>loadError = <span class="err">${this.loadError}</span></div>`;
+        <h4 id="h" @click=${this.toggle}>${this.tieuDe} — <span id="n">${this.nhan}</span></h4>
+        <div class="than">nội dung chỉ hiện khi opened</div>`;
     }
     firstUpdated() { tl?.log('element.firstUpdated'); }
     updated(c) { super.updated(c); tl?.log('element.updated'); }
@@ -356,8 +350,8 @@ try {
     const pEl = document.createElement('poly-card');
     pEl.style.display = 'none';
     document.body.appendChild(pEl);
-    trP.log('── đổi property: result = "xong" ──', 't-dim');
-    pEl.result = 'xong';
+    trP.log('── gọi toggle() ──', 't-dim');
+    pEl.toggle();
     trP.log('(Polymer không có hook "đã render" — nó cập nhật', 't-dim');
     trP.log(' thẳng binding, đồng bộ, không có vòng render)', 't-dim');
     tp = null; pEl.remove();
@@ -369,8 +363,8 @@ try {
     lEl.style.display = 'none';
     document.body.appendChild(lEl);
     await lEl.updateComplete;
-    trL.log('── đổi property: result = "xong" ──', 't-dim');
-    lEl.result = 'xong';
+    trL.log('── gọi toggle() ──', 't-dim');
+    lEl.toggle();
     await lEl.updateComplete;
     tl = null; lEl.remove();
 
@@ -393,20 +387,20 @@ try {
     const sp = makeTrace('sync-p'), sl = makeTrace('sync-l');
     sp.reset(); sl.reset();
 
-    const code = 'el.result = "777";\nconst text = el.shadowRoot.getElementById("r").textContent;';
+    const code = 'el.toggle();\nconst text = el.shadowRoot.getElementById("n").textContent;';
 
     // --- Polymer ---
     const pEl = document.createElement('poly-card');
     pEl.style.display = 'none';
     document.body.appendChild(pEl);
-    pEl.result = '777';
-    const pNow = pEl.shadowRoot.getElementById('r').textContent;
+    pEl.toggle();
+    const pNow = pEl.shadowRoot.getElementById('n').textContent;
     sp.log(code, 't-dim');
     sp.log('');
-    sp.log(`→ text = "${pNow}"`, pNow === '777' ? 't-ok' : 't-bad');
+    sp.log(`→ text = "${pNow}"`, pNow === 'Đang mở' ? 't-ok' : 't-bad');
     sp.log('');
-    sp.log(pNow === '777' ? '✓ DOM đã đổi NGAY trong cùng lệnh gán.' : '✗ bất ngờ',
-           pNow === '777' ? 't-ok' : 't-bad');
+    sp.log(pNow === 'Đang mở' ? '✓ DOM đã đổi NGAY trong cùng lệnh gọi.' : '✗ bất ngờ',
+           pNow === 'Đang mở' ? 't-ok' : 't-bad');
     sp.log('  Polymer chặn ở setter → cập nhật binding đồng bộ.', 't-dim');
     pEl.remove();
 
@@ -415,16 +409,16 @@ try {
     lEl.style.display = 'none';
     document.body.appendChild(lEl);
     await lEl.updateComplete;
-    lEl.result = '777';
-    const lNow = lEl.shadowRoot.getElementById('r').textContent;
+    lEl.toggle();
+    const lNow = lEl.shadowRoot.getElementById('n').textContent;
     await lEl.updateComplete;
-    const lAfter = lEl.shadowRoot.getElementById('r').textContent;
+    const lAfter = lEl.shadowRoot.getElementById('n').textContent;
     sl.log(code, 't-dim');
     sl.log('');
-    sl.log(`→ text = "${lNow}"`, lNow === '777' ? 't-ok' : 't-bad');
+    sl.log(`→ text = "${lNow}"`, lNow === 'Đang mở' ? 't-ok' : 't-bad');
     sl.log('');
     sl.log('await el.updateComplete;', 't-dim');
-    sl.log(`→ text = "${lAfter}"`, lAfter === '777' ? 't-ok' : 't-bad');
+    sl.log(`→ text = "${lAfter}"`, lAfter === 'Đang mở' ? 't-ok' : 't-bad');
     sl.log('');
     sl.log('✗ Đọc ngay → giá trị CŨ. Lit gom thay đổi, render ở microtask sau.', 't-bad');
     sl.log('✓ Phải await updateComplete.', 't-ok');
@@ -449,14 +443,10 @@ try {
   document.getElementById('host-l').appendChild(liveL);
 
   document.getElementById('btn-load').onclick = async () => {
-    const btn = document.getElementById('btn-load');
-    btn.disabled = true;
-    const fakeFetch = () => new Promise((res, rej) => setTimeout(() => {
-      Math.random() < 0.4 ? rej(new Error('Lỗi mạng giả lập')) : res('dữ liệu OK');
-    }, 800));
-    // Cùng một API withLoading(), hai bản cài đặt khác nhau
-    await Promise.all([liveP.withLoading(fakeFetch), liveL.withLoading(fakeFetch)]);
-    btn.disabled = false;
+    // Cùng một API toggle(), hai bản cài đặt khác nhau
+    liveP.toggle();
+    liveL.toggle();
+    await liveL.updateComplete;
   };
 
   // ==========================================================================
@@ -469,8 +459,9 @@ try {
     ['Giá trị mặc định', '<code>value: false</code> ngay trong khai báo', 'gán trong <code>constructor</code>'],
     ['Phản chiếu attribute', '<code>reflectToAttribute</code>', '<code>reflect</code>'],
     ['Hook khởi tạo một lần', '<code>ready()</code>', '<code>firstUpdated()</code> hoặc <code>connectedCallback()</code>'],
-    ['Giá trị dẫn xuất', '<code>computed:</code>', 'getter hoặc <code>willUpdate()</code>'],
-    ['Theo dõi thay đổi', '<code>observers</code>', '<code>updated(changed)</code>'],
+    ['Giá trị dẫn xuất', "<code>computed: 'tinhNhan_(opened)'</code>", '<code>get nhan()</code>'],
+    ['Theo dõi thay đổi', "<code>observer: 'openedChanged_'</code>", '<code>updated(changed)</code>'],
+    ['<code>toggle/open/close</code>', '<strong>giống hệt</strong>', '<strong>giống hệt</strong>'],
     ['Cập nhật DOM', '<strong>đồng bộ</strong>, từng binding', '<strong>bất đồng bộ</strong>, gom nhóm, render lại + diff'],
     ['Chờ render xong', 'không cần', '<code>await el.updateComplete</code>'],
     ['Lựa chọn thay thế', 'không có', '<strong>ReactiveController</strong>'],
