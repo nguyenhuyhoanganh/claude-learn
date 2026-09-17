@@ -117,7 +117,7 @@
   <p class="lead">Mỗi phần trả lời đúng một câu hỏi.</p>
   <table>
     <tr><th>Phần</th><th>Câu hỏi</th></tr>
-    <tr><td><strong>1. Định nghĩa</strong></td><td>Mixin là gì, và vì sao 3 cách share code tự nhiên hơn lại không đủ?</td></tr>
+    <tr><td><strong>1. Định nghĩa</strong></td><td>Mixin là gì? Bắt đầu từ 2 class JavaScript thuần, chưa cần framework.</td></tr>
     <tr><td><strong>2. Luồng chạy</strong></td><td>Nhìn một chuỗi mixin, nói đúng thứ tự code chạy — không đoán.</td></tr>
     <tr><td><strong>3. Polymer</strong></td><td>Behaviors, mixins, và Polymer thêm gì lên trên JS thuần?</td></tr>
     <tr><td><strong>4. Lit</strong></td><td>Khác gì, và vì sao ReactiveController thường tốt hơn mixin?</td></tr>
@@ -132,26 +132,28 @@
 <!-- 3 -->
 <section class="slide">
   <h2>Bài toán gốc</h2>
-  <p class="lead">5 component WebUI, cả 5 cần đúng 3 thứ giống nhau.</p>
-  <pre class="plain">class SettingsPage extends PolymerElement {
-  i18n(key) { return loadTimeData.getString(key); }
-  connectedCallback() {
-    super.connectedCallback();
-    document.addEventListener('language-changed', this.h_);
+  <p class="lead">Hai class chẳng liên quan gì nhau. Sếp bảo: đếm xem mỗi thứ được dùng bao nhiêu lần.</p>
+  <pre class="plain">class NutBam {
+  constructor() { <b>this.soLanDung = 0;</b> }              <span class="c">// ①</span>
+  bam() {
+    <b>this.soLanDung++;</b>                                <span class="c">// ②</span>
+    console.log('Nút được bấm');
   }
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    document.removeEventListener('language-changed', this.h_);
-  }
+  thongKe() { <b>return `Đã dùng ${this.soLanDung} lần`;</b> } <span class="c">// ③</span>
 }
 
-class PrivacyPage   extends PolymerElement { <span class="c">/* ... y hệt 12 dòng ... */</span> }
-class DownloadsPage extends PolymerElement { <span class="c">/* ... y hệt, nhưng hôm nay</span>
-                                       <span class="r">ai đó quên removeEventListener */</span> }</pre>
+class OTimKiem {
+  constructor() { <b>this.soLanDung = 0;</b> }              <span class="c">// ① y hệt</span>
+  tim(tuKhoa) {
+    <b>this.soLanDung++;</b>                                <span class="c">// ② y hệt</span>
+    console.log('Đang tìm:', tuKhoa);
+  }
+  thongKe() { <b>return `Đã dùng ${this.soLanDung} lần`;</b> } <span class="c">// ③ y hệt</span>
+}</pre>
   <div class="box bad">
-    Vấn đề không phải "gõ nhiều". Là <strong>sửa 1 chỗ phải sửa 5 chỗ</strong>,
-    <strong>sai lệch âm thầm</strong> (leak không ai thấy), và
-    <strong>không test riêng được</strong>.
+    Vấn đề không phải "gõ nhiều". Là <strong>sửa 1 chỗ phải sửa N chỗ</strong>,
+    <strong>sai lệch âm thầm</strong> (class thứ 5 có người quên dòng ②),
+    và <strong>không test riêng được</strong>.
   </div>
 </section>
 
@@ -161,16 +163,15 @@ class DownloadsPage extends PolymerElement { <span class="c">/* ... y hệt, nh�
   <p class="lead">Mỗi cấp giải quyết được điều cấp trước không làm nổi.</p>
   <table>
     <tr><th></th><th>Hàm thuần</th><th>Kế thừa</th><th>Object.assign</th><th>Class mixin</th></tr>
-    <tr><td>State riêng mỗi element</td><td class="c">✗</td><td>✓</td><td>✓</td><td>✓</td></tr>
-    <tr><td>Hook lifecycle</td><td class="c">✗</td><td>✓</td><td>⚠ đè mất</td><td>✓</td></tr>
+    <tr><td>State riêng mỗi đối tượng</td><td class="c">✗</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Gắn nhiều nguồn cùng lúc</td><td>✓</td><td class="c">✗</td><td>✓</td><td>✓</td></tr>
     <tr><td>Gọi được <code>super</code></td><td class="c">—</td><td>✓</td><td class="c">✗</td><td>✓</td></tr>
-    <tr><td>Nhiều nguồn cùng lúc</td><td>✓</td><td class="c">✗</td><td>✓</td><td>✓</td></tr>
-    <tr><td>Reactive properties</td><td class="c">✗</td><td>✓</td><td>⚠</td><td>✓</td></tr>
+    <tr><td>Ghi đè an toàn (không mất method cũ)</td><td class="c">—</td><td>✓</td><td class="c">✗</td><td>✓</td></tr>
     <tr><td><strong>Độ phức tạp</strong></td><td>thấp nhất</td><td>thấp</td><td>trung bình</td><td><em>cao nhất</em></td></tr>
   </table>
   <div class="box">
     Class mixin là cột duy nhất không có ✗ nào — nhưng <strong>đắt nhất</strong>.
-    Thứ tự ưu tiên: <strong>hàm thuần → controller → mixin</strong>. Đừng nhảy thẳng tới mixin.
+    Thứ tự ưu tiên: <strong>hàm thuần → kế thừa → mixin</strong>. Đừng nhảy thẳng tới mixin.
   </div>
 </section>
 
@@ -180,25 +181,28 @@ class DownloadsPage extends PolymerElement { <span class="c">/* ... y hệt, nh�
   <div class="cols">
     <div>
       <h3>Kế thừa giải quyết được…</h3>
-      <pre class="plain">class I18nElement extends PolymerElement {
-  i18n(key) { ... }
+      <pre class="plain">class CoDemLuot {
+  constructor() { this.soLanDung = 0; }
+  ghiNhanDung() { this.soLanDung++; }
+  thongKe() { ... }
 }
 
-class SettingsPage extends I18nElement { }
-class PrivacyPage  extends I18nElement { }</pre>
-      <p style="color:var(--ok)">✓ Có state, có lifecycle, <code>super</code> chạy đúng.</p>
+class NutBam   extends CoDemLuot { }
+class OTimKiem extends CoDemLuot { }</pre>
+      <p style="color:var(--ok)">✓ Có state riêng, không lặp dòng nào.</p>
     </div>
     <div>
-      <h3>…cho tới khi cần thứ hai</h3>
-      <pre class="plain">class SettingsPage extends I18nElement { }
+      <h3>…cho tới khi cần khả năng thứ hai</h3>
+      <pre class="plain"><span class="c">// sếp bảo: cho phép bật/tắt nữa</span>
+class CoBatTat {
+  bat() { this.dangBat = true; }
+  tat() { this.dangBat = false; }
+}
 
-<span class="c">// giờ cần thêm WebUIListener nữa</span>
-<span class="c">// extends cái gì?</span>
-
-class SettingsPage extends <span class="r">I18nElement,</span>
-                           <span class="r">WebUIListenerElement</span>
-<span class="r">// ✗ KHÔNG tồn tại trong JavaScript</span></pre>
-      <p style="color:var(--err)">JS chỉ có kế thừa <strong>đơn</strong>.</p>
+class NutBam extends <span class="r">CoDemLuot, CoBatTat</span> { }
+<span class="r">// ✗ SyntaxError</span>
+<span class="r">// JS KHÔNG có đa kế thừa</span></pre>
+      <p style="color:var(--err)">Một class chỉ được có <strong>đúng một cha</strong>.</p>
     </div>
   </div>
   <div class="box warn">Mixin sinh ra để phá đúng bức tường này.</div>
@@ -236,11 +240,18 @@ Object.assign(MyEl.prototype, behaviorTwo);   <span class="c">// ĐÈ LÊN — o
 <section class="slide center" data-toc="Định nghĩa mixin">
   <h3>Định nghĩa</h3>
   <h1 style="font-size:34px;max-width:22ch;line-height:1.35">Mixin là một hàm nhận vào một class và trả về một class con mới của nó, đã được bổ sung tính năng.</h1>
-  <pre class="plain" style="margin-top:28px;text-align:left;display:inline-block">const I18nMixin = (Base) =&gt; class extends Base {
-  i18n(key) { return loadTimeData.getString(key); }
+  <pre class="plain" style="margin-top:26px;text-align:left;display:inline-block">const <b>DemLuotMixin</b> = <b>(Base)</b> =&gt; class <b>extends Base</b> {
+  constructor(...args) { super(...args); this.soLanDung = 0; }
+  ghiNhanDung() { this.soLanDung++; }
 };
 
-class SettingsPage extends <b>I18nMixin(PolymerElement)</b> { }</pre>
+const <b>BatTatMixin</b> = <b>(Base)</b> =&gt; class <b>extends Base</b> {
+  bat() { this.dangBat = true; }
+  tat() { this.dangBat = false; }
+};
+
+<span class="c">// xếp chồng bao nhiêu tuỳ thích — không còn bức tường</span>
+class NutBam extends <b>DemLuotMixin(BatTatMixin(Object))</b> { }</pre>
 </section>
 
 <!-- 8 -->

@@ -6,34 +6,42 @@
 
 ## 1. Mixin làm gì với prototype chain
 
-Nhắc lại: `class B extends A` chỉ làm đúng một việc — đặt `B.prototype.__proto__ = A.prototype`.
+Nhắc lại: `class B extends A` chỉ làm đúng một việc — đặt `B.prototype.__proto__ = A.prototype`. Nói cách khác, nó nối `B` vào sau `A` thành một chuỗi.
 
-Mixin cũng vậy, chỉ là class trung gian không có tên.
+Mixin cũng y như vậy, chỉ khác là class trung gian không có tên sẵn.
+
+Lấy lại `DemLuotMixin` từ bài 1:
 
 ```javascript
-const M = (Base) => class extends Base { ping() { return 'M'; } };
+const DemLuotMixin = (Base) => class extends Base {
+  ghiNhanDung() { this.soLanDung++; }
+};
 
-class MyEl extends M(HTMLElement) { }
+class NutBam extends DemLuotMixin(Object) { }
 ```
 
-Chuỗi sinh ra:
+Chuỗi sinh ra chỉ có 3 mắt xích:
 
 ```text
-MyEl.prototype
+NutBam.prototype
       │  __proto__
       ▼
-(class ẩn danh do M sinh ra).prototype     ← ping() nằm ở đây
+(class ẩn danh do DemLuotMixin sinh ra).prototype   ← ghiNhanDung() nằm ở đây
       │  __proto__
       ▼
-HTMLElement.prototype
-      │  __proto__
-      ▼
-Element.prototype  →  Node.prototype  →  EventTarget.prototype  →  Object.prototype
+Object.prototype
 ```
 
-Khi bạn gọi `el.ping()`, JS đi **từ dưới lên**: tìm trong `MyEl.prototype` → không có → tìm tiếp ở class của `M` → thấy → chạy.
+Khi bạn gọi `nut.ghiNhanDung()`, JS đi **từ trên xuống**: tìm trong `NutBam.prototype` → không có → tìm tiếp ở class do mixin sinh ra → thấy → chạy.
 
 Đây là toàn bộ "phép thuật" của mixin. Không có gì hơn.
+
+Đổi `Object` thành `HTMLElement` thì chuỗi dài thêm ở phía dưới, nhưng phần mixin chèn vào **không đổi chút nào**:
+
+```text
+NutBam  →  DemLuotMixin  →  HTMLElement  →  Element  →  Node  →  EventTarget  →  Object
+           └─ mixin chèn ─┘  └────── phần có sẵn của trình duyệt ──────────────────┘
+```
 
 ### Xếp chồng nhiều mixin
 
