@@ -2,7 +2,9 @@
 
 > Một buổi trình bày ~60–90 phút về **mixin** trong Web Components: định nghĩa, luồng chạy, cách dùng, demo chạy thật, và so sánh chi tiết **Polymer 3 ↔ LitElement**.
 
-Bộ tài liệu này bổ sung cho [`phase-3-polymer/07-mixins-behaviors.md`](../phase-3-polymer/07-mixins-behaviors.md). Bài đó dạy *cách viết mixin trong Chromium*. Bộ này trả lời câu hỏi sâu hơn: **mixin thực sự chạy như thế nào**, và **đổi gì khi codebase migrate từ Polymer sang Lit**.
+Bộ tài liệu đứng độc lập — đọc từ đầu tới cuối không cần biết trước gì về Polymer hay Lit, chỉ cần ES6 class. Nó trả lời hai câu hỏi mà tài liệu thông thường hay bỏ qua: **mixin thực sự chạy như thế nào** (prototype chain, thứ tự `super`, deduping), và **đổi gì khi codebase migrate từ Polymer sang Lit**.
+
+> Nếu bạn đang học WebUI Chromium, [`chromium/phase-3-polymer/07-mixins-behaviors.md`](../chromium/phase-3-polymer/07-mixins-behaviors.md) trong repo này dạy *cách viết mixin theo convention của Chromium*. Bộ này đi sâu vào *cơ chế* bên dưới — hai bên bổ sung cho nhau, không trùng lặp.
 
 ## Đối tượng
 
@@ -27,8 +29,8 @@ Bộ tài liệu này bổ sung cho [`phase-3-polymer/07-mixins-behaviors.md`](.
 
 ```bash
 # Mở trực tiếp
-xdg-open chromium/mixin-presentation/slides.html   # Linux
-open chromium/mixin-presentation/slides.html       # macOS
+xdg-open mixin/slides.html   # Linux
+open mixin/slides.html       # macOS
 ```
 
 Điều khiển: `→` / `Space` next, `←` prev, `F` fullscreen, `O` overview.
@@ -49,7 +51,7 @@ open chromium/mixin-presentation/slides.html       # macOS
 Demo 01 mở trực tiếp bằng `file://` được. Demo 02–04 dùng ES modules + import map từ CDN — **nên chạy qua HTTP server** để tránh khác biệt CORS giữa các browser:
 
 ```bash
-cd chromium/mixin-presentation/demo
+cd mixin/demo
 python3 -m http.server 8000
 # → http://localhost:8000/02-mixin-polymer.html
 ```

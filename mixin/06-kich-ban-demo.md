@@ -5,7 +5,7 @@
 ## Chuẩn bị (5 phút trước giờ)
 
 ```bash
-cd chromium/mixin-presentation/demo
+cd mixin/demo
 python3 -m http.server 8000
 ```
 
@@ -13,7 +13,7 @@ Mở sẵn 5 tab:
 
 | Tab | URL |
 |---|---|
-| Slide | `chromium/mixin-presentation/slides.html` (mở thẳng bằng `file://` được) |
+| Slide | `mixin/slides.html` (mở thẳng bằng `file://` được) |
 | Demo 1 | `http://localhost:8000/01-mixin-thuan-js.html` |
 | Demo 2 | `http://localhost:8000/02-mixin-polymer.html` |
 | Demo 3 | `http://localhost:8000/03-mixin-lit.html` |
