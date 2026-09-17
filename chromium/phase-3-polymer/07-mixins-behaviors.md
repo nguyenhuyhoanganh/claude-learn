@@ -4,6 +4,10 @@ Khi nhiều components có chung một số logic (vd: tất cả Chromium WebUI
 
 Polymer 1/2 dùng **Behaviors**. Polymer 3 chuyển sang **Mixins** (class mixin pattern). Bài này dạy cả 2 — vì code cũ vẫn có Behaviors.
 
+> 📊 **Muốn đào sâu hơn?** [Bài trình bày: Mixin — từ cơ bản đến nâng cao](../mixin-presentation/README.md)
+> đi sâu vào *luồng chạy* (prototype chain, thứ tự `super`, deduping) và *so sánh chi tiết
+> Polymer ↔ Lit*, kèm 4 demo chạy thật trong browser.
+
 ## Vấn đề — cần share logic
 
 Giả sử bạn có 5 component, tất cả đều cần:

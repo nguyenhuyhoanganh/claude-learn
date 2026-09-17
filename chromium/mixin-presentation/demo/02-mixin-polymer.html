@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo 2 — Mixin trong Polymer 3</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --ink:#1c1e21; --muted:#6b7280; --line:#e3e6ea;
+          --accent:#1a73e8; --ok:#0f9d58; --warn:#e37400; --err:#d93025; --code:#f1f3f5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16181c; --panel:#1e2126; --ink:#e8eaed; --muted:#9aa0a6;
+            --line:#2f343a; --code:#15171a; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px 16px 64px; background:var(--bg); color:var(--ink);
+         font:14px/1.6 -apple-system,'Segoe UI',Roboto,sans-serif; }
+  .wrap { max-width:1060px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+            padding:18px 20px; margin-bottom:18px; }
+  h2 { font-size:16px; margin:0 0 6px; display:flex; align-items:center; gap:8px; }
+  .badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:99px;
+           background:var(--accent); color:#fff; }
+  .note { color:var(--muted); margin:0 0 14px; font-size:13px; }
+  pre { background:var(--code); border:1px solid var(--line); border-radius:6px;
+        padding:12px 14px; overflow-x:auto; margin:0 0 12px;
+        font:12.5px/1.65 ui-monospace,Menlo,Consolas,monospace; white-space:pre-wrap; }
+  .t-in{color:var(--accent);} .t-out{color:var(--ok);} .t-bad{color:var(--err);font-weight:600;}
+  .t-dim{color:var(--muted);}
+  button { font:inherit; font-weight:500; padding:7px 14px; border-radius:6px;
+           border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--accent); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
+  code { background:var(--code); padding:1px 5px; border-radius:4px;
+         font:12.5px ui-monospace,Menlo,Consolas,monospace; }
+  #status { padding:10px 14px; border-radius:6px; background:#fff3cd; color:#664d03;
+            border:1px solid #ffe08a; margin-bottom:18px; font-size:13px; }
+  #status.ok { background:#e6f4ea; color:#137333; border-color:#a8dab5; }
+  #status.err { background:#fce8e6; color:#a50e0e; border-color:#f5aea9; }
+  .stage { border:1px dashed var(--line); border-radius:6px; padding:12px 14px;
+           background:var(--code); margin-bottom:12px; }
+</style>
+
+<!-- Nhánh Behaviors legacy của Polymer import '@webcomponents/shadycss/...' bằng bare
+     specifier, nên cần import map. Phần PolymerElement hiện đại thì không cần. -->
+<script type="importmap">
+{
+  "imports": {
+    "@webcomponents/shadycss/": "https://cdn.jsdelivr.net/npm/@webcomponents/shadycss@1.11.2/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Demo 2 — Mixin trong Polymer 3</h1>
+<p class="sub">Polymer 3.5.1 thật, tải từ CDN. Mọi con số bên dưới là kết quả chạy thật, không phải chữ viết sẵn.</p>
+
+<div id="status">Đang tải Polymer từ CDN…</div>
+
+<section>
+  <h2><span class="badge">1</span> Thứ tự lifecycle khi có mixin</h2>
+  <p class="note">Mixin hook vào <code>ready()</code> và <code>connectedCallback()</code>. Chú ý: <code>ready()</code> chạy <strong>bên trong</strong> <code>connectedCallback</code> đầu tiên — và chỉ một lần duy nhất.</p>
+  <div class="row">
+    <button id="btn-create">Tạo &amp; gắn element</button>
+    <button id="btn-detach" class="ghost">Gỡ ra</button>
+    <button id="btn-reattach" class="ghost">Gắn lại (xem ready có chạy lại không)</button>
+  </div>
+  <div class="stage" id="stage1"></div>
+  <pre class="t-dim" id="tr-life">— bấm nút để chạy —</pre>
+</section>
+
+<section>
+  <h2><span class="badge">2</span> Mixin mang theo <code>properties</code>, <code>computed</code>, <code>observers</code></h2>
+  <p class="note">Đây là điểm mạnh riêng của Polymer: mixin không chỉ là túi method — nó là một "mảnh component" đầy đủ. Property do mixin khai báo vẫn dùng được trong data binding của template.</p>
+  <div class="row">
+    <button id="btn-inc">value += 1</button>
+    <button id="btn-set" class="ghost">value = 20</button>
+  </div>
+  <div class="stage" id="stage2"></div>
+  <pre class="t-dim" id="tr-reactive">— bấm nút để chạy —</pre>
+</section>
+
+<section>
+  <h2><span class="badge">3</span> <code>dedupingMixin</code> — có sẵn trong Polymer</h2>
+  <p class="note">Polymer đóng gói sẵn cơ chế chống áp mixin trùng. So sánh với mixin không bọc.</p>
+  <div class="row"><button id="btn-dedupe">Kiểm tra deduping</button></div>
+  <pre class="t-dim" id="tr-dedupe">— bấm nút để chạy —</pre>
+</section>
+
+<section>
+  <h2><span class="badge">4</span> Behaviors — cú pháp Polymer 1 còn sót lại</h2>
+  <p class="note">Object literal + <code>mixinBehaviors()</code>. Bạn sẽ gặp trong code Chromium cũ. Đọc hiểu là đủ — <strong>đừng viết mới</strong>.</p>
+  <div class="row"><button id="btn-behavior">Chạy element dùng Behavior</button></div>
+  <div class="stage" id="stage4"></div>
+  <pre class="t-dim" id="tr-behavior">— bấm nút để chạy —</pre>
+</section>
+
+<section>
+  <h2><span class="badge">5</span> Cập nhật <strong>đồng bộ</strong> — khác biệt lớn nhất với Lit</h2>
+  <p class="note">Trong Polymer, gán property xong thì DOM đã đổi <em>ngay dòng sau</em>. Ghi nhớ kết quả này rồi so với demo 3.</p>
+  <div class="row"><button id="btn-sync">Gán property rồi đọc DOM ngay</button></div>
+  <pre class="t-dim" id="tr-sync">— bấm nút để chạy —</pre>
+</section>
+
+</div>
+
+<script type="module">
+const POLYMER = 'https://cdn.jsdelivr.net/npm/@polymer/polymer@3.5.1';
+const statusEl = document.getElementById('status');
+
+function makeTrace(id) {
+  const el = document.getElementById(id);
+  let lines = [];
+  return {
+    reset() { lines = []; el.innerHTML = ''; },
+    log(text, kind = '', depth = 0) {
+      lines.push(`<span class="${kind}">${'  '.repeat(depth)}${
+        String(text).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</span>`);
+      el.innerHTML = lines.join('\n');
+    },
+  };
+}
+
+let trace = null;   // trace đang hoạt động
+
+try {
+  const {PolymerElement, html} = await import(`${POLYMER}/polymer-element.js`);
+  const {dedupingMixin} = await import(`${POLYMER}/lib/utils/mixin.js`);
+
+  statusEl.className = 'ok';
+  statusEl.textContent = '✓ Đã tải Polymer 3.5.1 — mọi output bên dưới là kết quả chạy thật.';
+
+  // ==========================================================================
+  // 1. Mixin ghi lại lifecycle
+  // ==========================================================================
+  const LifecycleMixin = dedupingMixin((superClass) => {
+    class LifecycleMixinImpl extends superClass {
+      constructor() {
+        super();
+        trace?.log('LifecycleMixin.constructor', 't-in', 1);
+      }
+      connectedCallback() {
+        super.connectedCallback();                    // setup → super ĐẦU
+        trace?.log('LifecycleMixin.connectedCallback — sau super', 't-in', 1);
+      }
+      ready() {
+        trace?.log('LifecycleMixin.ready — TRƯỚC super', 't-in', 1);
+        super.ready();
+        trace?.log('LifecycleMixin.ready — SAU super', 't-out', 1);
+      }
+      disconnectedCallback() {
+        trace?.log('LifecycleMixin.disconnectedCallback — trước super', 't-out', 1);
+        super.disconnectedCallback();                 // teardown → super CUỐI
+      }
+    }
+    return LifecycleMixinImpl;
+  });
+
+  class LifeDemo extends LifecycleMixin(PolymerElement) {
+    static get is() { return 'life-demo'; }
+    static get template() {
+      return html`<span style="font:13px ui-monospace,monospace">&lt;life-demo&gt; đang sống</span>`;
+    }
+    connectedCallback() {
+      super.connectedCallback();
+      trace?.log('LifeDemo.connectedCallback — sau super', 't-in', 0);
+    }
+    ready() {
+      trace?.log('LifeDemo.ready — TRƯỚC super', 't-in', 0);
+      super.ready();
+      trace?.log('LifeDemo.ready — SAU super', 't-out', 0);
+    }
+    disconnectedCallback() {
+      trace?.log('LifeDemo.disconnectedCallback — trước super', 't-out', 0);
+      super.disconnectedCallback();
+    }
+  }
+  customElements.define(LifeDemo.is, LifeDemo);
+
+  const tLife = makeTrace('tr-life');
+  const stage1 = document.getElementById('stage1');
+  let liveEl = null;
+
+  document.getElementById('btn-create').onclick = () => {
+    if (liveEl) { tLife.log('(đã có element rồi — gỡ ra trước)', 't-dim'); return; }
+    tLife.reset(); trace = tLife;
+    tLife.log('── createElement + appendChild ──', 't-dim');
+    liveEl = document.createElement('life-demo');
+    stage1.appendChild(liveEl);
+    trace = null;
+    tLife.log('');
+    tLife.log('→ constructor chạy trước, rồi connectedCallback kích hoạt ready().', 't-dim');
+    tLife.log('→ Phần TRƯỚC super.ready() đi từ ngoài vào; phần SAU đi từ trong ra.', 't-dim');
+  };
+
+  document.getElementById('btn-detach').onclick = () => {
+    if (!liveEl) { tLife.log('(chưa có element)', 't-dim'); return; }
+    tLife.reset(); trace = tLife;
+    tLife.log('── remove() ──', 't-dim');
+    liveEl.remove();
+    trace = null;
+    tLife.log('');
+    tLife.log('→ Teardown đảo ngược: element trước, mixin sau.', 't-dim');
+  };
+
+  document.getElementById('btn-reattach').onclick = () => {
+    if (!liveEl) { tLife.log('(chưa có element — bấm "Tạo & gắn" trước)', 't-dim'); return; }
+    tLife.reset(); trace = tLife;
+    tLife.log('── appendChild lại chính element cũ ──', 't-dim');
+    stage1.appendChild(liveEl);
+    trace = null;
+    tLife.log('');
+    tLife.log('→ connectedCallback CHẠY LẠI, nhưng ready() KHÔNG.', 't-bad');
+    tLife.log('→ Vì vậy listener toàn cục phải đặt ở connectedCallback,', 't-dim');
+    tLife.log('  nếu đặt ở ready() thì sau khi gỡ-gắn lại sẽ mất.', 't-dim');
+  };
+
+  // ==========================================================================
+  // 2. properties / computed / observers khai báo trong mixin
+  // ==========================================================================
+  const tReactive = makeTrace('tr-reactive');
+
+  const DoublerMixin = dedupingMixin((superClass) => {
+    class DoublerMixinImpl extends superClass {
+      static get properties() {
+        return {
+          value:   {type: Number, value: 1},
+          doubled: {type: Number, computed: 'computeDoubled_(value)'},
+          isBig:   {type: Boolean, value: false, reflectToAttribute: true,
+                    computed: 'computeBig_(value)'},
+        };
+      }
+      static get observers() {
+        return ['onValueChanged_(value)'];
+      }
+      computeDoubled_(v) { return v * 2; }
+      computeBig_(v) { return v >= 10; }
+      onValueChanged_(v) {
+        tReactive.log(`observer của MIXIN chạy → value = ${v}`, 't-in');
+      }
+    }
+    return DoublerMixinImpl;
+  });
+
+  class ReactiveDemo extends DoublerMixin(PolymerElement) {
+    static get is() { return 'reactive-demo'; }
+    static get properties() {
+      return {label: {type: String, value: 'Kết quả'}};   // property riêng của element
+    }
+    static get template() {
+      return html`
+        <style>
+          :host { display:block; font:13px ui-monospace,Menlo,monospace; }
+          :host([is-big]) .box { color:#d93025; font-weight:700; }
+        </style>
+        <div class="box">
+          [[label]]: value=<b id="v">[[value]]</b> ·
+          doubled=<b id="d">[[doubled]]</b> ·
+          isBig=<b id="b">[[isBig]]</b>
+        </div>`;
+    }
+  }
+  customElements.define(ReactiveDemo.is, ReactiveDemo);
+
+  const rEl = document.createElement('reactive-demo');
+  document.getElementById('stage2').appendChild(rEl);
+
+  tReactive.reset();
+  tReactive.log('Element vừa khởi tạo:', 't-dim');
+  tReactive.log(`  value=${rEl.value}  doubled=${rEl.doubled}  isBig=${rEl.isBig}`, '');
+  tReactive.log(`  label="${rEl.label}"  ← property của ELEMENT`, '');
+  tReactive.log('  → cả property của mixin lẫn của element đều có mặt.', 't-out');
+  tReactive.log('');
+
+  document.getElementById('btn-inc').onclick = () => {
+    rEl.value += 1;
+    tReactive.log(`  sau khi gán: doubled=${rEl.doubled}, isBig=${rEl.isBig}, ` +
+                  `DOM hiện "${rEl.shadowRoot.getElementById('d').textContent}"`, 't-out');
+  };
+  document.getElementById('btn-set').onclick = () => {
+    rEl.value = 20;
+    tReactive.log(`  sau khi gán: doubled=${rEl.doubled}, isBig=${rEl.isBig}, ` +
+                  `attribute is-big=${rEl.hasAttribute('is-big')}`, 't-out');
+  };
+
+  // ==========================================================================
+  // 3. dedupingMixin
+  // ==========================================================================
+  document.getElementById('btn-dedupe').onclick = () => {
+    const t = makeTrace('tr-dedupe'); t.reset();
+
+    let runsPlain = 0, runsDeduped = 0;
+    const PlainMixin   = (sc) => class extends sc { constructor(){ super(); runsPlain++; } };
+    const DedupedMixin = dedupingMixin((sc) => class extends sc { constructor(){ super(); runsDeduped++; } });
+
+    class PlainParent extends PlainMixin(PolymerElement) {}
+    class PlainChild  extends PlainMixin(PlainParent) {}
+    class DedParent   extends DedupedMixin(PolymerElement) {}
+    class DedChild    extends DedupedMixin(DedParent) {}
+    customElements.define('plain-parent', PlainParent);
+    customElements.define('plain-child',  PlainChild);
+    customElements.define('ded-parent',   DedParent);
+    customElements.define('ded-child',    DedChild);
+
+    runsPlain = 0;   document.createElement('plain-child');
+    const plainRuns = runsPlain;
+    runsDeduped = 0; document.createElement('ded-child');
+    const dedRuns = runsDeduped;
+
+    t.log('Mixin THƯỜNG (không bọc dedupingMixin):', 't-dim');
+    t.log(`  PlainMixin(PolymerElement) === PlainMixin(PolymerElement) → ${
+          PlainMixin(PolymerElement) === PlainMixin(PolymerElement)}`, 't-bad');
+    t.log(`  Child (mixin áp 2 lần qua kế thừa) → constructor chạy ${plainRuns} lần`, 't-bad');
+    t.log('');
+    t.log('Mixin bọc dedupingMixin():', 't-dim');
+    t.log(`  DedupedMixin(PolymerElement) === DedupedMixin(PolymerElement) → ${
+          DedupedMixin(PolymerElement) === DedupedMixin(PolymerElement)}`, 't-out');
+    t.log(`  DedupedMixin(DedupedMixin(PolymerElement)) === DedupedMixin(PolymerElement) → ${
+          DedupedMixin(DedupedMixin(PolymerElement)) === DedupedMixin(PolymerElement)}`, 't-out');
+    t.log(`  Child (mixin áp 2 lần qua kế thừa) → constructor chạy ${dedRuns} lần`, 't-out');
+    t.log('');
+    t.log('→ Luôn bọc dedupingMixin() cho mọi mixin Polymer.', 't-dim');
+    document.getElementById('btn-dedupe').disabled = true;   // customElements.define chỉ 1 lần
+  };
+
+  // ==========================================================================
+  // 4. Behaviors legacy
+  // ==========================================================================
+  document.getElementById('btn-behavior').onclick = async () => {
+    const t = makeTrace('tr-behavior'); t.reset();
+    try {
+      const {mixinBehaviors} = await import(`${POLYMER}/lib/legacy/class.js`);
+
+      // Behavior = OBJECT LITERAL, không phải hàm. Không có super.
+      const GreetBehavior = {
+        properties: {
+          greeting: {type: String, value: 'Xin chào từ Behavior'},
+        },
+        attached() {                                  // tên lifecycle của Polymer 1
+          t.log('GreetBehavior.attached() chạy', 't-in', 1);
+        },
+        greet() { return 'method từ behavior'; },
+      };
+
+      class BehaviorDemo extends mixinBehaviors([GreetBehavior], PolymerElement) {
+        static get is() { return 'behavior-demo'; }
+        static get template() {
+          return html`<span style="font:13px ui-monospace,monospace">[[greeting]]</span>`;
+        }
+      }
+      customElements.define(BehaviorDemo.is, BehaviorDemo);
+
+      const bEl = document.createElement('behavior-demo');
+      document.getElementById('stage4').appendChild(bEl);
+
+      t.log(`greeting (property từ behavior) = "${bEl.greeting}"`, 't-out');
+      t.log(`greet()  (method từ behavior)   = "${bEl.greet()}"`, 't-out');
+      t.log('');
+      t.log('→ mixinBehaviors() chính là MỘT MIXIN bọc object behavior lại,', 't-dim');
+      t.log('  làm cầu nối cú pháp Polymer 1 vào thế giới class ES6.', 't-dim');
+      t.log('→ Behavior KHÔNG có super: Polymer tự gọi tất cả lifecycle theo thứ tự,', 't-dim');
+      t.log('  nhưng method trùng tên thì đè nhau im lặng.', 't-dim');
+      document.getElementById('btn-behavior').disabled = true;
+    } catch (e) {
+      t.log('Không tải được nhánh legacy: ' + e.message, 't-bad');
+      t.log('Nhánh này cần import map cho @webcomponents/shadycss (đã khai báo ở <head>)', 't-dim');
+      t.log('và cần chạy qua http:// thay vì file://.', 't-dim');
+    }
+  };
+
+  // ==========================================================================
+  // 5. Cập nhật đồng bộ
+  // ==========================================================================
+  document.getElementById('btn-sync').onclick = () => {
+    const t = makeTrace('tr-sync'); t.reset();
+    const el = document.createElement('reactive-demo');
+    document.body.appendChild(el);               // cần nằm trong DOM để stamp template
+    el.style.display = 'none';
+
+    el.value = 777;
+    const domNgay = el.shadowRoot.getElementById('v').textContent;
+
+    t.log('el.value = 777;', 't-dim');
+    t.log('const text = el.shadowRoot.getElementById("v").textContent;', 't-dim');
+    t.log('');
+    t.log(`→ text = "${domNgay}"`, domNgay === '777' ? 't-out' : 't-bad');
+    t.log('');
+    if (domNgay === '777') {
+      t.log('✓ DOM đã cập nhật NGAY, không cần chờ gì cả.', 't-out');
+      t.log('  Polymer chặn ở setter và cập nhật thẳng binding — đồng bộ.', 't-dim');
+    }
+    t.log('');
+    t.log('⚠ Trong Lit, đúng đoạn code này trả về giá trị CŨ.', 't-bad');
+    t.log('  Xem demo 3 mục 5 và demo 4 để so sánh trực tiếp.', 't-dim');
+    el.remove();
+  };
+
+} catch (e) {
+  statusEl.className = 'err';
+  statusEl.innerHTML = `✗ Không tải được Polymer từ CDN: ${e.message}<br>` +
+    'Demo này cần internet. Hãy chạy qua HTTP server: ' +
+    '<code>python3 -m http.server 8000</code> rồi mở ' +
+    '<code>http://localhost:8000/02-mixin-polymer.html</code>';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mixin: từ cơ bản đến nâng cao — Polymer → Lit</title>
+<style>
+  :root {
+    --bg:#101215; --ink:#e8eaed; --muted:#9aa0a6; --line:#2b3037;
+    --poly:#8ab4f8; --lit:#c9aef5; --ok:#81c995; --err:#f28b82; --warn:#fdd663;
+    --code:#181b1f;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; }
+  body { background:var(--bg); color:var(--ink); overflow:hidden;
+         font:16px/1.6 -apple-system,'Segoe UI',Roboto,sans-serif; }
+
+  .slide { position:absolute; inset:0; display:none; flex-direction:column;
+           padding:52px 64px 68px; overflow:auto; }
+  .slide.on { display:flex; }
+  @media (max-width:760px) { .slide { padding:32px 22px 60px; } }
+
+  h1 { font-size:42px; line-height:1.2; font-weight:700; letter-spacing:-.02em; }
+  h2 { font-size:30px; line-height:1.25; font-weight:650; letter-spacing:-.015em;
+       margin-bottom:6px; }
+  h3 { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+       font-weight:600; margin-bottom:10px; }
+  .lead { font-size:19px; color:var(--muted); margin-bottom:26px; max-width:70ch; }
+  p, li { font-size:17px; }
+  ul { margin:0 0 16px 22px; } li { margin-bottom:9px; }
+  .big { font-size:22px; }
+  strong { color:#fff; font-weight:650; }
+  em { color:var(--warn); font-style:normal; }
+
+  pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--poly);
+        border-radius:7px; padding:15px 17px; overflow:auto; margin-bottom:14px;
+        font:13.5px/1.62 ui-monospace,Menlo,Consolas,monospace; white-space:pre; }
+  pre.lit { border-left-color:var(--lit); }
+  pre.plain { border-left-color:var(--line); }
+  pre b { color:var(--warn); font-weight:600; }
+  pre .c { color:var(--muted); }
+  pre .g { color:var(--ok); }
+  pre .r { color:var(--err); }
+  code { background:var(--code); padding:1.5px 6px; border-radius:4px;
+         font:14px ui-monospace,Menlo,Consolas,monospace; }
+
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start; }
+  .cols.tight { gap:14px; }
+  @media (max-width:860px) { .cols { grid-template-columns:1fr; } }
+  .tag { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.04em;
+         padding:3px 9px; border-radius:99px; margin-bottom:8px; }
+  .tag.p { background:rgba(138,180,248,.16); color:var(--poly); }
+  .tag.l { background:rgba(201,174,245,.16); color:var(--lit); }
+
+  table { border-collapse:collapse; width:100%; font-size:15px; }
+  th,td { text-align:left; padding:8px 11px; border-bottom:1px solid var(--line);
+          vertical-align:top; }
+  th { color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.04em; }
+  td code { font-size:13px; }
+
+  .box { border:1px solid var(--line); border-radius:8px; padding:15px 17px;
+         background:var(--code); margin-bottom:14px; }
+  .box.ok { border-left:3px solid var(--ok); }
+  .box.bad { border-left:3px solid var(--err); }
+  .box.warn { border-left:3px solid var(--warn); }
+
+  .nav { position:fixed; left:0; right:0; bottom:0; height:46px; display:flex;
+         align-items:center; justify-content:space-between; padding:0 22px;
+         border-top:1px solid var(--line); background:rgba(16,18,21,.94);
+         font-size:13px; color:var(--muted); backdrop-filter:blur(8px); }
+  .nav .deck { font-weight:600; color:var(--ink); }
+  .nav button { background:none; border:1px solid var(--line); color:var(--muted);
+                border-radius:5px; padding:3px 11px; cursor:pointer; font:inherit;
+                margin-left:6px; }
+  .nav button:hover { color:var(--ink); border-color:var(--muted); }
+  .bar { position:fixed; top:0; left:0; height:2px; background:var(--poly);
+         transition:width .18s ease; z-index:10; }
+
+  /* Overview */
+  #ov { position:fixed; inset:0; background:rgba(10,11,13,.97); z-index:20;
+        display:none; padding:34px; overflow:auto; }
+  #ov.on { display:block; }
+  #ov h4 { color:var(--muted); font-size:13px; text-transform:uppercase;
+           letter-spacing:.06em; margin-bottom:16px; font-weight:600; }
+  .ovgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:11px; }
+  .ovcard { border:1px solid var(--line); border-radius:7px; padding:11px 13px;
+            cursor:pointer; background:var(--code); }
+  .ovcard:hover { border-color:var(--poly); }
+  .ovcard .n { color:var(--muted); font-size:11px; margin-bottom:3px; }
+  .ovcard .t { font-size:13.5px; font-weight:600; line-height:1.35; }
+
+  .center { justify-content:center; align-items:center; text-align:center; }
+  .center .lead { margin:14px auto 0; }
+  .kbd { display:inline-block; border:1px solid var(--line); border-bottom-width:2px;
+         border-radius:4px; padding:1px 7px; font-size:12.5px; font-family:ui-monospace,monospace; }
+  .arrow { color:var(--muted); font-size:20px; }
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+
+<!-- 1 -->
+<section class="slide center" data-toc="Mở đầu">
+  <h1>Mixin</h1>
+  <p class="lead big">Từ cơ bản đến nâng cao — và điều gì đổi<br>khi Polymer được nâng lên Lit</p>
+  <p style="margin-top:30px;color:var(--muted);font-size:14px">
+    <span class="kbd">→</span> / <span class="kbd">Space</span> tiếp ·
+    <span class="kbd">←</span> lùi ·
+    <span class="kbd">O</span> mục lục ·
+    <span class="kbd">F</span> toàn màn hình
+  </p>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <h2>Chúng ta sẽ đi qua</h2>
+  <p class="lead">Mỗi phần trả lời đúng một câu hỏi.</p>
+  <table>
+    <tr><th>Phần</th><th>Câu hỏi</th></tr>
+    <tr><td><strong>1. Định nghĩa</strong></td><td>Mixin là gì, và vì sao 3 cách share code tự nhiên hơn lại không đủ?</td></tr>
+    <tr><td><strong>2. Luồng chạy</strong></td><td>Nhìn một chuỗi mixin, nói đúng thứ tự code chạy — không đoán.</td></tr>
+    <tr><td><strong>3. Polymer</strong></td><td>Behaviors, mixins, và Polymer thêm gì lên trên JS thuần?</td></tr>
+    <tr><td><strong>4. Lit</strong></td><td>Khác gì, và vì sao ReactiveController thường tốt hơn mixin?</td></tr>
+    <tr><td><strong>5. So sánh</strong></td><td>Cầm mixin Polymer chuyển sang Lit — đổi những gì?</td></tr>
+  </table>
+  <div class="box warn" style="margin-top:8px">
+    Mọi con số và trace trong slide này đều lấy từ <strong>demo chạy thật</strong> —
+    Polymer 3.5.1 và Lit 3 trong Chromium, không phải chữ viết sẵn.
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <h2>Bài toán gốc</h2>
+  <p class="lead">5 component WebUI, cả 5 cần đúng 3 thứ giống nhau.</p>
+  <pre class="plain">class SettingsPage extends PolymerElement {
+  i18n(key) { return loadTimeData.getString(key); }
+  connectedCallback() {
+    super.connectedCallback();
+    document.addEventListener('language-changed', this.h_);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    document.removeEventListener('language-changed', this.h_);
+  }
+}
+
+class PrivacyPage   extends PolymerElement { <span class="c">/* ... y hệt 12 dòng ... */</span> }
+class DownloadsPage extends PolymerElement { <span class="c">/* ... y hệt, nhưng hôm nay</span>
+                                       <span class="r">ai đó quên removeEventListener */</span> }</pre>
+  <div class="box bad">
+    Vấn đề không phải "gõ nhiều". Là <strong>sửa 1 chỗ phải sửa 5 chỗ</strong>,
+    <strong>sai lệch âm thầm</strong> (leak không ai thấy), và
+    <strong>không test riêng được</strong>.
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <h2>Bốn cấp độ share code</h2>
+  <p class="lead">Mỗi cấp giải quyết được điều cấp trước không làm nổi.</p>
+  <table>
+    <tr><th></th><th>Hàm thuần</th><th>Kế thừa</th><th>Object.assign</th><th>Class mixin</th></tr>
+    <tr><td>State riêng mỗi element</td><td class="c">✗</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Hook lifecycle</td><td class="c">✗</td><td>✓</td><td>⚠ đè mất</td><td>✓</td></tr>
+    <tr><td>Gọi được <code>super</code></td><td class="c">—</td><td>✓</td><td class="c">✗</td><td>✓</td></tr>
+    <tr><td>Nhiều nguồn cùng lúc</td><td>✓</td><td class="c">✗</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Reactive properties</td><td class="c">✗</td><td>✓</td><td>⚠</td><td>✓</td></tr>
+    <tr><td><strong>Độ phức tạp</strong></td><td>thấp nhất</td><td>thấp</td><td>trung bình</td><td><em>cao nhất</em></td></tr>
+  </table>
+  <div class="box">
+    Class mixin là cột duy nhất không có ✗ nào — nhưng <strong>đắt nhất</strong>.
+    Thứ tự ưu tiên: <strong>hàm thuần → controller → mixin</strong>. Đừng nhảy thẳng tới mixin.
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <h2>Bức tường: kế thừa đơn</h2>
+  <div class="cols">
+    <div>
+      <h3>Kế thừa giải quyết được…</h3>
+      <pre class="plain">class I18nElement extends PolymerElement {
+  i18n(key) { ... }
+}
+
+class SettingsPage extends I18nElement { }
+class PrivacyPage  extends I18nElement { }</pre>
+      <p style="color:var(--ok)">✓ Có state, có lifecycle, <code>super</code> chạy đúng.</p>
+    </div>
+    <div>
+      <h3>…cho tới khi cần thứ hai</h3>
+      <pre class="plain">class SettingsPage extends I18nElement { }
+
+<span class="c">// giờ cần thêm WebUIListener nữa</span>
+<span class="c">// extends cái gì?</span>
+
+class SettingsPage extends <span class="r">I18nElement,</span>
+                           <span class="r">WebUIListenerElement</span>
+<span class="r">// ✗ KHÔNG tồn tại trong JavaScript</span></pre>
+      <p style="color:var(--err)">JS chỉ có kế thừa <strong>đơn</strong>.</p>
+    </div>
+  </div>
+  <div class="box warn">Mixin sinh ra để phá đúng bức tường này.</div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <h2><code>Object.assign</code> — mixin "giả"</h2>
+  <p class="lead">Cách cổ điển từ thời jQuery: copy method vào prototype.</p>
+  <pre class="plain">Object.assign(MyEl.prototype, behaviorOne);   <span class="c">// ghi setup()</span>
+Object.assign(MyEl.prototype, behaviorTwo);   <span class="c">// ĐÈ LÊN — one.setup mất luôn</span></pre>
+  <div class="cols tight">
+    <div class="box bad">
+      <h3>Kết quả đo được</h3>
+      <pre class="plain" style="margin:0"><span class="r">ViaAssign.setup() = "TWO"</span>
+
+✗ behaviorOne.setup bị đè — im lặng
+✗ base.setup cũng mất
+✗ không có super để gọi lại</pre>
+    </div>
+    <div class="box ok">
+      <h3>Class mixin thì…</h3>
+      <pre class="plain" style="margin:0"><span class="g">ViaMixin.setup() =
+  "TWO(ONE(BASE-ĐÃ-CHẠY))"</span>
+
+✓ cả 3 tầng đều chạy
+✓ lồng nhau đúng thứ tự</pre>
+    </div>
+  </div>
+  <p style="color:var(--muted)"><code>Object.assign</code> là <strong>ghi đè phẳng</strong>.
+  Không có khái niệm "gọi cái trước đó". → Demo 1, mục 4.</p>
+</section>
+
+<!-- 7 -->
+<section class="slide center" data-toc="Định nghĩa mixin">
+  <h3>Định nghĩa</h3>
+  <h1 style="font-size:34px;max-width:22ch;line-height:1.35">Mixin là một hàm nhận vào một class và trả về một class con mới của nó, đã được bổ sung tính năng.</h1>
+  <pre class="plain" style="margin-top:28px;text-align:left;display:inline-block">const I18nMixin = (Base) =&gt; class extends Base {
+  i18n(key) { return loadTimeData.getString(key); }
+};
+
+class SettingsPage extends <b>I18nMixin(PolymerElement)</b> { }</pre>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <h2>Ba tính chất bắt buộc</h2>
+  <p class="lead">Thiếu một cái thì không còn là mixin.</p>
+  <table>
+    <tr><th>Tính chất</th><th>Vì sao cần</th></tr>
+    <tr><td><strong>Nhận <code>Base</code> làm tham số</strong></td>
+        <td>Hard-code <code>extends PolymerElement</code> → chỉ dùng được cho Polymer, không xếp chồng được</td></tr>
+    <tr><td><strong>Trả class mới, không sửa <code>Base</code></strong></td>
+        <td><code>Base</code> giữ nguyên → dùng lại được chỗ khác, không ô nhiễm toàn cục</td></tr>
+    <tr><td><strong>Bên trong dùng <code>extends Base</code></strong></td>
+        <td>Đây là thứ tạo ra <code>super</code> — khác biệt cốt lõi với <code>Object.assign</code></td></tr>
+  </table>
+  <div class="box warn">
+    Tên chính xác hơn là <strong>"subclass factory"</strong>: nó không <em>trộn</em> method vào class bạn —
+    nó là nhà máy sản xuất class con. Đưa vào <code>A</code>, nhận về <code>B extends A</code>.
+  </div>
+</section>
+
+<!-- 9 -->
+<section class="slide">
+  <h2>Nó thực sự làm gì: chèn một mắt xích</h2>
+  <div class="cols">
+    <div>
+      <pre class="plain">class MyEl extends A(B(C(HTMLElement))) { }</pre>
+      <pre class="plain">MyEl.prototype
+     │
+     ▼
+   A.prototype      ← gần bạn nhất
+     │
+     ▼
+   B.prototype
+     │
+     ▼
+   C.prototype      ← gần base nhất
+     │
+     ▼
+HTMLElement.prototype
+     │
+     ▼
+Element → Node → EventTarget</pre>
+    </div>
+    <div>
+      <h3>Hai quy tắc rút ra</h3>
+      <div class="box">
+        <strong>Đọc từ trong ra ngoài.</strong><br>
+        <code>C</code> áp trước (gần base), rồi <code>B</code>, rồi <code>A</code> (gần bạn).
+      </div>
+      <div class="box">
+        <strong>Gần bạn hơn thì thắng.</strong><br>
+        Cả A, B, C đều có <code>whoAmI()</code> → <code>A</code> thắng,
+        vì JS tra từ trên xuống và dừng ở cái đầu tiên tìm thấy.
+      </div>
+      <p style="color:var(--muted)">Đây là toàn bộ "phép thuật" của mixin. Không có gì hơn.<br>
+      → Demo 1 in ra chuỗi này từ element thật.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <h2>Thứ tự constructor — JS ép buộc</h2>
+  <p class="lead"><code>super()</code> phải xong trước khi dùng <code>this</code> → base luôn chạy trước.</p>
+  <div class="cols">
+    <div>
+      <pre class="plain">class MyEl extends A(B(HTMLElement)) {
+  constructor() { super(); log('MyEl'); }
+}</pre>
+      <div class="box ok">
+        <h3>Trace thật</h3>
+        <pre class="plain" style="margin:0"><span class="g">B body</span>       ← trong cùng, chạy trước
+<span class="g">A body</span>
+<span class="g">MyEl body</span>    ← ngoài cùng, chạy sau</pre>
+      </div>
+    </div>
+    <div>
+      <pre class="plain">   ĐI XUỐNG          ĐI LÊN
+ (gọi super())    (chạy thân hàm)
+
+  MyEl                MyEl   ← (4)
+    │                   ▲
+    ▼                   │
+    A                   A    ← (3)
+    │                   ▲
+    ▼                   │
+    B                   B    ← (2)
+    │                   ▲
+    ▼                   │
+ HTMLElement ───────────┘    ← (1)</pre>
+    </div>
+  </div>
+  <p><strong>Constructor: luôn base-first. Không có ngoại lệ.</strong></p>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <h2>Method thường — <em>bạn</em> quyết thứ tự</h2>
+  <div class="cols">
+    <div>
+      <span class="tag p">SETUP</span>
+      <pre class="plain">connectedCallback() {
+  <b>super.connectedCallback();</b>   <span class="c">// ĐẦU</span>
+  this.doMyThing();
+}</pre>
+      <pre class="plain" style="border-left-color:var(--ok)"><span class="g">Mixin C → B → A → MyEl</span>
+base-first, giống constructor</pre>
+      <p style="color:var(--muted)">Dùng khi logic của bạn <strong>phụ thuộc</strong> việc base đã khởi tạo xong.</p>
+    </div>
+    <div>
+      <span class="tag l">TEARDOWN</span>
+      <pre class="plain">disconnectedCallback() {
+  this.cleanUp();
+  <b>super.disconnectedCallback();</b>  <span class="c">// CUỐI</span>
+}</pre>
+      <pre class="plain" style="border-left-color:var(--ok)"><span class="g">MyEl → A → B → C</span>
+đảo ngược</pre>
+      <p style="color:var(--muted)">Bạn dọn dẹp <strong>trước khi</strong> base tháo dỡ mọi thứ.</p>
+    </div>
+  </div>
+  <div class="box warn">
+    <strong>Quy tắc nhớ:</strong> vào thì base vào trước, ra thì base ra sau — như xếp chồng đĩa.
+  </div>
+</section>
+
+<!-- 12 -->
+<section class="slide">
+  <h2>Bug tốn thời gian nhất: quên <code>super</code></h2>
+  <pre class="plain">const M = (Base) =&gt; class extends Base {
+  connectedCallback() {
+    console.log('M chạy');
+    <span class="r">// quên super.connectedCallback()</span>
+  }
+};</pre>
+  <div class="box bad">
+    <p class="big"><strong>Mọi thứ nằm dưới <code>M</code> trong chuỗi đều không chạy.</strong></p>
+    <p style="margin-top:8px">Với Lit: element không bao giờ render. Màn hình trắng.
+    <strong>Không có lỗi nào được ném ra.</strong></p>
+  </div>
+  <div class="box ok">
+    <strong>Thói quen:</strong> viết <code>super.x()</code> <em>trước</em> khi viết thân hàm.
+    Luôn luôn, mọi lifecycle method.
+  </div>
+</section>
+
+<!-- 13 -->
+<section class="slide">
+  <h2>Bài toán kim cương</h2>
+  <p class="lead">Nhớ lại: <strong>mỗi lần gọi mixin sinh ra một class mới.</strong> <code>M(Base) !== M(Base)</code></p>
+  <div class="cols">
+    <div>
+      <pre class="plain">class Parent extends LoggerMixin(Base) { }
+class Child  extends LoggerMixin(Parent) { }
+                     <span class="r">↑ áp lần 2</span>
+
+Child → Logger#2 → Parent → Logger#1 → Base
+         <span class="r">▲                    ▲</span>
+         <span class="r">└── cùng 1 mixin, 2 bản ──┘</span></pre>
+    </div>
+    <div class="box bad">
+      <h3>Số liệu đo thật</h3>
+      <pre class="plain" style="margin:0">áp 1 lần → ctor chạy <span class="g">1</span> lần
+áp 2 lần → ctor chạy <span class="r">2</span> lần</pre>
+      <p style="margin-top:10px">Listener đăng ký 2 lần. Handler chạy 2 lần.
+      Counter tăng gấp đôi.</p>
+      <p style="margin-top:8px;color:var(--muted)">Code trông hoàn toàn hợp lý → rất khó lần ra.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 14 -->
+<section class="slide">
+  <h2>Chữa deduping — cần <em>hai</em> phần</h2>
+  <pre class="plain">function dedupeMixin(mixin) {
+  const cache  = new WeakMap();
+  const marker = Symbol('mixin-applied');
+
+  return (Base) =&gt; {
+    <b>if (Base[marker]) return Base;</b>                 <span class="c">// (2) chuỗi đã có → không bọc thêm</span>
+    <b>if (cache.has(Base)) return cache.get(Base);</b>   <span class="c">// (1) đã áp lên Base này → dùng lại</span>
+
+    const Klass = mixin(Base);
+    Object.defineProperty(Klass, marker, {value: true}); <span class="c">// static → class con kế thừa dấu</span>
+    cache.set(Base, Klass);
+    return Klass;
+  };
+}</pre>
+  <table>
+    <tr><th></th><th>Chỉ WeakMap</th><th>WeakMap + dấu</th></tr>
+    <tr><td><code>M(Base) === M(Base)</code></td><td style="color:var(--ok)">true</td><td style="color:var(--ok)">true</td></tr>
+    <tr><td><code>M(M(Base)) === M(Base)</code></td><td style="color:var(--err)">false</td><td style="color:var(--ok)">true</td></tr>
+    <tr><td>Ca kim cương <code>Child</code></td><td style="color:var(--err)"><strong>chạy 2 lần</strong></td><td style="color:var(--ok)">chạy 1 lần</td></tr>
+  </table>
+  <div class="box warn">Bản "chỉ WeakMap" hay được chép trên blog <strong>vẫn hỏng</strong> đúng ở ca vừa nói.</div>
+</section>
+
+<!-- 15 -->
+<section class="slide">
+  <h2>Polymer: hai thế hệ</h2>
+  <div class="cols">
+    <div>
+      <span class="tag p">POLYMER 1/2 — BEHAVIORS</span>
+      <pre>const I18nBehavior = {
+  properties: { locale: {...} },
+  <b>attached()</b> { ... },      <span class="c">// tên P1</span>
+  i18n(key) { ... },
+};
+
+Polymer({
+  is: 'settings-page',
+  <b>behaviors: [I18nBehavior]</b>,
+});</pre>
+      <ul style="font-size:15px">
+        <li>Object literal, <strong>không có <code>super</code></strong></li>
+        <li>Lifecycle: Polymer gọi <em>tất cả</em>, theo thứ tự</li>
+        <li>Method thường: <span style="color:var(--err)">đè nhau im lặng</span></li>
+      </ul>
+    </div>
+    <div>
+      <span class="tag p">POLYMER 3 — MIXINS</span>
+      <pre>const I18nMixin = <b>dedupingMixin</b>((sc) =&gt; {
+  class I18nMixinImpl extends sc {
+    ready() {
+      <b>super.ready();</b>
+      ...
+    }
+    i18n(key) { ... }
+  }
+  return I18nMixinImpl;
+});
+
+class SettingsPage extends
+    <b>I18nMixin(PolymerElement)</b> { }</pre>
+      <ul style="font-size:15px">
+        <li>Subclass factory ES6 chuẩn</li>
+        <li><code>super</code> thật</li>
+      </ul>
+    </div>
+  </div>
+  <div class="box">Behaviors <strong>vẫn còn</strong> trong code Chromium cũ → đọc hiểu là đủ, <strong>đừng viết mới</strong>.</div>
+</section>
+
+<!-- 16 -->
+<section class="slide">
+  <h2>Polymer thêm 3 thứ lên trên mixin thuần</h2>
+  <p class="lead">Mixin Polymer không chỉ là túi method — nó là một "mảnh component" đầy đủ.</p>
+  <div class="cols tight">
+    <div>
+      <pre>const DoublerMixin = dedupingMixin((sc) =&gt;
+  class extends sc {
+    <b>static get properties()</b> {
+      return {
+        value:   {type: Number, value: 1},
+        doubled: {<b>computed</b>: 'compute_(value)'},
+      };
+    }
+    <b>static get observers()</b> {
+      return ['onValue_(value)'];
+    }
+    compute_(v) { return v * 2; }
+  });</pre>
+    </div>
+    <div>
+      <div class="box ok">
+        <h3>Chạy thật</h3>
+        <pre class="plain" style="margin:0"><span class="g">observer của MIXIN chạy → value = 1</span>
+doubled=2, template render "2"
+
+<span class="c">→ set value = 20</span>
+<span class="g">observer của MIXIN chạy → value = 20</span>
+doubled=40, is-big=true</pre>
+      </div>
+      <ol style="margin-left:20px;font-size:16px">
+        <li><code>properties</code> gộp tự động qua chain</li>
+        <li><code>computed</code> + <code>observers</code> chạy được <strong>từ trong mixin</strong></li>
+        <li><code>dedupingMixin</code> có sẵn</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 17 -->
+<section class="slide">
+  <h2>Luồng Polymer — trace thật</h2>
+  <div class="cols">
+    <div>
+      <pre><span class="c">── createElement + appendChild ──</span>
+  mixin.constructor
+element.ready — trước super
+  mixin.ready — trước super
+  mixin.ready — sau super
+element.ready — sau super
+  mixin.connectedCallback
+element.connectedCallback</pre>
+      <pre><span class="c">── gỡ rồi GẮN LẠI ──</span>
+  mixin.connectedCallback
+element.connectedCallback
+<span class="r">→ ready() KHÔNG chạy lại</span></pre>
+    </div>
+    <div>
+      <div class="box">
+        <strong><code>ready()</code> chạy đúng một lần</strong>, bên trong
+        <code>connectedCallback</code> đầu tiên.
+      </div>
+      <div class="box warn">
+        <strong>Hệ quả thực chiến:</strong> listener gắn lên <code>document</code> phải đặt ở
+        <code>connectedCallback</code>, không phải <code>ready()</code> — nếu không, gỡ rồi
+        gắn lại element sẽ mất listener.
+      </div>
+      <div class="box ok">
+        Phần <em>trước</em> <code>super.ready()</code> đi từ ngoài vào;
+        phần <em>sau</em> đi từ trong ra. Mixin <strong>bọc</strong> quanh logic của base.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 18 -->
+<section class="slide">
+  <h2>Lit: cơ chế mixin <em>y hệt</em></h2>
+  <p class="lead"><code>LitElement</code> chỉ là một ES6 class. Khác biệt nằm ở 3 chỗ khác.</p>
+  <div class="cols">
+    <div>
+      <span class="tag p">POLYMER</span>
+      <pre>static get properties() {
+  return {
+    count: {
+      type: Number,
+      <b>value: 0</b>,
+      <b>reflectToAttribute: true</b>,
+      <b>readOnly: true</b>,
+      <b>notify: true</b>,
+    },
+  };
+}</pre>
+    </div>
+    <div>
+      <span class="tag l">LIT</span>
+      <pre class="lit">static properties = {
+  count: {
+    type: Number,
+    <b>reflect: true</b>,
+  },
+};
+
+<b>constructor() {</b>
+  <b>super();</b>
+  <b>this.count = 0;</b>   <span class="c">// mặc định ở đây</span>
+<b>}</b>
+<span class="c">// readOnly, notify: KHÔNG có</span></pre>
+    </div>
+  </div>
+  <div class="box bad">
+    Quên gán mặc định trong <code>constructor</code> → render ra <code>undefined</code>.
+    Lỗi hay gặp nhất khi migrate.
+  </div>
+</section>
+
+<!-- 19 -->
+<section class="slide">
+  <h2>Lit: lifecycle nhiều hook hơn — trace thật</h2>
+  <div class="cols">
+    <div>
+      <pre class="lit"><span class="c">── tạo + gắn ──</span>
+  mixin.constructor
+element.constructor
+  mixin.connectedCallback
+element.connectedCallback
+  mixin.willUpdate  <b>[isLoading,loadError,result]</b>
+element.willUpdate
+element.render()
+element.firstUpdated
+  mixin.updated     <b>[isLoading,loadError,result]</b>
+element.updated
+
+<span class="c">── đổi 1 property ──</span>
+  mixin.willUpdate  <b>[result]</b>
+element.willUpdate
+element.render()
+  mixin.updated     <b>[result]</b>
+element.updated</pre>
+    </div>
+    <div>
+      <table>
+        <tr><th>Hook</th><th>Thay cho</th></tr>
+        <tr><td><code>shouldUpdate</code></td><td>— (chặn render)</td></tr>
+        <tr><td><code>willUpdate</code></td><td>Polymer <code>computed</code></td></tr>
+        <tr><td><code>render</code></td><td>template</td></tr>
+        <tr><td><code>firstUpdated</code></td><td>một phần của <code>ready()</code></td></tr>
+        <tr><td><code>updated</code></td><td>Polymer <code>observers</code></td></tr>
+      </table>
+      <div class="box ok">
+        <code>changedProperties</code> chứa property của <strong>cả mixin lẫn element</strong>
+        → Lit gộp khai báo qua cả chuỗi, y như Polymer.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 20 -->
+<section class="slide">
+  <h2><code>ready()</code> <span class="arrow">≠</span> <code>firstUpdated()</code></h2>
+  <p class="lead">Khác biệt tinh tế, gây bug thật.</p>
+  <table>
+    <tr><th></th><th>Polymer <code>ready()</code></th><th>Lit <code>firstUpdated()</code></th></tr>
+    <tr><td>Chạy khi nào</td><td>Trong <code>connectedCallback</code> <strong>đầu tiên</strong></td><td>Sau vòng render <strong>đầu tiên</strong></td></tr>
+    <tr><td>Shadow DOM đã có?</td><td>Có</td><td>Có</td></tr>
+    <tr><td><strong>Đồng bộ với connect?</strong></td><td style="color:var(--ok)"><strong>Có</strong></td><td style="color:var(--err)"><strong>Không</strong> — microtask sau</td></tr>
+  </table>
+  <div class="box bad">
+    Mixin cần làm gì đó <em>ngay khi element vào DOM</em> — đăng ký vào registry toàn cục,
+    gắn <code>scroll</code> listener — mà đặt ở <code>firstUpdated()</code> thì
+    <strong>bỏ lỡ mọi thứ xảy ra trước lúc render xong</strong>.
+  </div>
+  <div class="box ok">
+    <code>ready()</code> → <strong><code>connectedCallback()</code></strong> trong đa số trường hợp,
+    không phải <code>firstUpdated()</code>.
+  </div>
+</section>
+
+<!-- 21 -->
+<section class="slide">
+  <h2>Khác biệt lớn nhất: đồng bộ vs bất đồng bộ</h2>
+  <pre class="plain">el.result = '777';
+const text = el.shadowRoot.getElementById('r').textContent;</pre>
+  <div class="cols tight">
+    <div>
+      <span class="tag p">POLYMER</span>
+      <pre style="font-size:20px;text-align:center"><span class="g">text = "777"</span></pre>
+      <p style="color:var(--muted)">Setter chặn lại → cập nhật thẳng binding. <strong>Đồng bộ.</strong></p>
+    </div>
+    <div>
+      <span class="tag l">LIT</span>
+      <pre class="lit" style="font-size:20px;text-align:center"><span class="r">text = "—"</span>  <span class="c">← giá trị CŨ</span></pre>
+      <p style="color:var(--muted)">Gom thay đổi, render ở microtask sau. <strong>Bất đồng bộ.</strong></p>
+    </div>
+  </div>
+  <div class="box bad">
+    <strong>Bẫy migrate số 1.</strong> Mọi mixin đọc DOM ngay sau khi set property đều phải thêm
+    <code>await this.updateComplete</code>. Bug này <strong>không ném lỗi</strong> —
+    chỉ âm thầm đọc giá trị cũ.
+  </div>
+  <p style="color:var(--muted)">→ Demo 4, mục 3: hai cột chạy song song trên cùng một trang.</p>
+</section>
+
+<!-- 22 -->
+<section class="slide">
+  <h2>Lit không có <code>dedupingMixin</code></h2>
+  <div class="cols">
+    <div>
+      <pre class="lit">M(M(LitElement)) === M(LitElement)
+<span class="r">→ false</span></pre>
+      <table>
+        <tr><th>Mixin ctor chạy</th><th>Không<br>dedupe</th><th>Chỉ<br>WeakMap</th><th>WeakMap<br>+ dấu</th></tr>
+        <tr><td>áp 1 lần</td><td>1</td><td>1</td><td>1</td></tr>
+        <tr><td>áp 2 lần (kế thừa)</td>
+            <td style="color:var(--err)"><strong>2</strong></td>
+            <td style="color:var(--err)"><strong>2</strong></td>
+            <td style="color:var(--ok)"><strong>1</strong></td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>Ba lựa chọn</h3>
+      <ul>
+        <li>Tự viết <code>dedupeMixin</code> — WeakMap <strong>+</strong> dấu đánh (slide 14)</li>
+        <li>Dùng <code>@open-wc/dedupe-mixin</code></li>
+        <li><strong>Không xếp chồng sâu</strong> — dùng ReactiveController thay thế</li>
+      </ul>
+      <div class="box warn" style="margin-top:14px">
+        Chromium chọn cách thứ ba cho code Lit mới.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 23 -->
+<section class="slide">
+  <h2>ReactiveController — cách làm "đúng Lit"</h2>
+  <div class="cols">
+    <div>
+      <pre class="lit">class TickerController {
+  constructor(host, stepMs) {
+    this.host = host;
+    this.seconds = 0;
+    <b>host.addController(this);</b>
+  }
+  <b>hostConnected()</b> {
+    this.t = setInterval(() =&gt; {
+      this.seconds++;
+      <b>this.host.requestUpdate();</b>
+    }, this.stepMs);
+  }
+  <b>hostDisconnected()</b> { clearInterval(this.t); }
+}
+
+class MyEl extends LitElement {
+  slow = new TickerController(this, 1000);
+  fast = new TickerController(this, 300);
+}</pre>
+    </div>
+    <div>
+      <table>
+        <tr><th></th><th>Mixin</th><th>Controller</th></tr>
+        <tr><td>Đụng prototype chain</td><td style="color:var(--err)">Có</td><td style="color:var(--ok)">Không</td></tr>
+        <tr><td>Trùng tên method</td><td style="color:var(--err)">Có thể đè</td><td style="color:var(--ok)">Không thể</td></tr>
+        <tr><td>Cần deduping</td><td style="color:var(--err)">Có</td><td style="color:var(--ok)">Không</td></tr>
+        <tr><td><strong>Nhiều bản cùng lúc</strong></td><td style="color:var(--err)"><strong>Không</strong></td><td style="color:var(--ok)"><strong>Được</strong></td></tr>
+        <tr><td>Thêm API lên element</td><td style="color:var(--ok)">Có</td><td style="color:var(--muted)">Không (cố ý)</td></tr>
+        <tr><td>Test riêng</td><td style="color:var(--err)">Khó</td><td style="color:var(--ok)">Dễ</td></tr>
+      </table>
+      <div class="box ok">
+        <strong>Controller là composition, mixin là inheritance.</strong>
+        Composition không có bẫy trùng tên và bẫy deduping.
+      </div>
+    </div>
+  </div>
+  <p style="color:var(--muted)">→ Demo 3, mục 4: hai bộ đếm nhịp khác nhau trong cùng element — mixin bó tay, controller chạy tốt.</p>
+</section>
+
+<!-- 24 -->
+<section class="slide center" data-toc="Chọn mixin hay controller">
+  <h3>Chọn cái nào</h3>
+  <pre class="plain" style="text-align:left;display:inline-block;font-size:15px;margin-top:10px">Thứ này có cần thêm method/property lên <b>CHÍNH element</b> không?
+(để template, hoặc code ngoài, gọi được el.foo())
+
+        │
+        ├── CÓ ─────────►  <b>Mixin</b>
+        │                  vd: i18n() dùng trong template, API công khai
+        │
+        └── KHÔNG ──────►  <b>ReactiveController</b>
+                           vd: theo dõi kích thước, timer, fetch state,
+                               nghe sự kiện, kết nối WebSocket</pre>
+  <div class="box warn" style="margin-top:24px;max-width:70ch;text-align:left">
+    Và trước cả hai: <strong>hàm thuần có đủ không?</strong>
+    Không state, không lifecycle → <code>export function</code> là xong.
+  </div>
+</section>
+
+<!-- 25 -->
+<section class="slide">
+  <h2>Migrate: 7 bước</h2>
+  <pre class="plain">1. <b>dedupingMixin</b> của Polymer      →  dedupeMixin tự viết (WeakMap + dấu)
+2. <b>static get properties()</b>        →  static properties = {...}
+3. <b>value: X</b>                       →  gán this.x = X trong constructor
+4. <b>reflectToAttribute</b>             →  reflect
+5. <b>readOnly</b> + this._setX()        →  getter + #private + requestUpdate()
+6. <b>ready()</b>                        →  connectedCallback()  <span class="c">(thường đúng hơn firstUpdated)</span>
+7. <b>computed</b> / <b>observers</b>           →  getter / willUpdate() / updated()</pre>
+  <div class="box bad">
+    <h3>Rồi rà 3 bẫy</h3>
+    <p>☐ Đọc DOM ngay sau khi set property? → thêm <code>await this.updateComplete</code></p>
+    <p>☐ Dùng <code>this.set('a.b', v)</code>? → gán object mới: <code>this.a = {...this.a, b: v}</code></p>
+    <p>☐ Property nào <code>notify: true</code>? → thêm <code>dispatchEvent</code> thủ công</p>
+  </div>
+</section>
+
+<!-- 26 -->
+<section class="slide">
+  <h2>Bẫy migrate hay gặp</h2>
+  <table>
+    <tr><th>Bẫy</th><th>Triệu chứng</th><th>Sửa</th></tr>
+    <tr><td>Đọc DOM ngay sau khi set</td><td>Lấy giá trị cũ, <em>không có lỗi</em></td><td><code>await this.updateComplete</code></td></tr>
+    <tr><td><code>this.set('a.b', v)</code></td><td>Không render lại</td><td><code>this.a = {...this.a, b: v}</code></td></tr>
+    <tr><td>Sửa item trong mảng</td><td>Không render lại</td><td><code>this.list = [...this.list]</code></td></tr>
+    <tr><td><code>ready()</code> → <code>firstUpdated()</code> máy móc</td><td>Bỏ lỡ event sớm</td><td>Cân nhắc <code>connectedCallback()</code></td></tr>
+    <tr><td>Quên giá trị mặc định</td><td>Render ra <code>undefined</code></td><td>Gán trong <code>constructor</code></td></tr>
+    <tr><td>Quên deduping</td><td>Listener nhân đôi</td><td>WeakMap + dấu đánh</td></tr>
+    <tr><td>Set property trong <code>updated()</code></td><td>Thêm vòng render, có thể lặp vô hạn</td><td>Chuyển sang <code>willUpdate()</code></td></tr>
+  </table>
+  <div class="box warn">
+    Polymer theo dõi được <strong>path con</strong> (<code>user.name</code>);
+    Lit chỉ theo <strong>tham chiếu</strong>. Đây là nguồn gốc của 3 bẫy đầu bảng.
+  </div>
+</section>
+
+<!-- 27 -->
+<section class="slide">
+  <h2>Tổng kết so sánh</h2>
+  <table>
+    <tr><th>Tiêu chí</th><th>Polymer 3</th><th>Lit 3</th></tr>
+    <tr><td><strong>Khái niệm mixin</strong></td><td colspan="2" style="color:var(--ok)">Giống hệt — subclass factory ES6</td></tr>
+    <tr><td>Deduping</td><td style="color:var(--ok)">có sẵn</td><td>tự viết</td></tr>
+    <tr><td>Khai báo property</td><td>nhiều tính năng</td><td>tối giản, dễ hiểu</td></tr>
+    <tr><td>Giá trị dẫn xuất</td><td><code>computed</code></td><td style="color:var(--ok)">getter — JS thuần, debug dễ</td></tr>
+    <tr><td>Theo dõi thay đổi</td><td style="color:var(--ok)">path con</td><td>chỉ tham chiếu</td></tr>
+    <tr><td>Luồng cập nhật</td><td>đồng bộ, từng binding</td><td style="color:var(--ok)">gom nhóm, hiệu quả hơn</td></tr>
+    <tr><td>Thay thế mixin</td><td>không có</td><td style="color:var(--ok)"><strong>ReactiveController</strong></td></tr>
+    <tr><td>Kích thước</td><td>~30 KB</td><td style="color:var(--ok)">~5–7 KB</td></tr>
+  </table>
+  <div class="box">
+    <strong>Vì sao Chromium migrate:</strong> không phải vì mixin Polymer tệ — mà vì Lit
+    nhỏ hơn 5 lần, gần JavaScript chuẩn hơn (ít DSL phải học), và có ReactiveController:
+    công cụ giải quyết đúng bài toán của mixin <em>mà không kèm bẫy trùng tên và deduping</em>.
+  </div>
+</section>
+
+<!-- 28 -->
+<section class="slide">
+  <h2>Mang về ba điều</h2>
+  <div class="box ok">
+    <p class="big"><strong>1. Mixin không copy method — nó chèn một mắt xích vào prototype chain.</strong></p>
+    <p style="color:var(--muted)">Mọi hành vi, mọi bug, mọi khác biệt giữa hai framework đều suy ra được từ câu này.</p>
+  </div>
+  <div class="box ok">
+    <p class="big"><strong>2. Khái niệm mixin không đổi khi lên Lit. Chỉ đổi 3 thứ.</strong></p>
+    <p style="color:var(--muted)">Khai báo property · tên hook lifecycle · tự lo deduping.
+    Phần khó thật sự là <em>đồng bộ → bất đồng bộ</em>.</p>
+  </div>
+  <div class="box ok">
+    <p class="big"><strong>3. Ở Lit, hỏi trước: cái này có nên là ReactiveController không?</strong></p>
+    <p style="color:var(--muted)">Thường là có. Chỉ dùng mixin khi cần thêm API lên chính element.</p>
+  </div>
+  <p style="margin-top:6px;color:var(--muted)">
+    Tài liệu đầy đủ: <code>chromium/mixin-presentation/</code> ·
+    4 demo chạy thật trong <code>demo/</code>
+  </p>
+</section>
+
+<div class="nav">
+  <span class="deck">Mixin: Polymer → Lit</span>
+  <span>
+    <span id="counter">1 / 28</span>
+    <button id="b-prev">←</button>
+    <button id="b-next">→</button>
+    <button id="b-ov">Mục lục</button>
+    <button id="b-fs">⛶</button>
+  </span>
+</div>
+
+<div id="ov"><h4>Mục lục — bấm để nhảy tới</h4><div class="ovgrid" id="ovgrid"></div></div>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  const bar = document.getElementById('bar');
+  const counter = document.getElementById('counter');
+  const ov = document.getElementById('ov');
+  let i = 0;
+
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('on', k === i));
+    bar.style.width = ((i + 1) / slides.length * 100) + '%';
+    counter.textContent = `${i + 1} / ${slides.length}`;
+    location.hash = i + 1;
+    slides[i].scrollTop = 0;
+  }
+  const next = () => show(i + 1);
+  const prev = () => show(i - 1);
+
+  // Mục lục
+  document.getElementById('ovgrid').innerHTML = slides.map((s, k) => {
+    const h = s.querySelector('h1, h2');
+    const label = s.dataset.toc || (h ? h.textContent.trim() : '—');
+    return `<div class="ovcard" data-i="${k}">
+              <div class="n">${k + 1}</div>
+              <div class="t">${label}</div>
+            </div>`;
+  }).join('');
+  document.getElementById('ovgrid').onclick = (e) => {
+    const card = e.target.closest('.ovcard');
+    if (card) { show(+card.dataset.i); ov.classList.remove('on'); }
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key.toLowerCase() === 'o') ov.classList.toggle('on');
+    else if (e.key === 'Escape') ov.classList.remove('on');
+    else if (e.key.toLowerCase() === 'f') {
+      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    }
+  });
+
+  document.getElementById('b-next').onclick = next;
+  document.getElementById('b-prev').onclick = prev;
+  document.getElementById('b-ov').onclick = () => ov.classList.toggle('on');
+  document.getElementById('b-fs').onclick = () =>
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+
+  show(Math.max(0, (parseInt(location.hash.slice(1), 10) || 1) - 1));
+</script>
+</body>
+</html>

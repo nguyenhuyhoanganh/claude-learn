@@ -85,13 +85,31 @@ chromium/
 │   ├── 04-js-bindings.md
 │   └── 05-pagehandler-pattern.md
 │
-└── phase-7-practical/                 ← Thực chiến
-    ├── 01-reading-source.md
-    ├── 02-case-study-settings.md
-    ├── 03-creating-new-webui.md       ← Tạo WebUI page mới từ đầu
-    ├── 04-testing-webui.md
-    └── 05-debugging.md
+├── phase-7-practical/                 ← Thực chiến
+│   ├── 01-reading-source.md
+│   ├── 02-case-study-settings.md
+│   ├── 03-creating-new-webui.md       ← Tạo WebUI page mới từ đầu
+│   ├── 04-testing-webui.md
+│   └── 05-debugging.md
+│
+└── mixin-presentation/                ← 📊 Bài trình bày chuyên sâu: Mixin
+    ├── 01-mixin-la-gi.md              ← Định nghĩa, 4 cấp độ share code
+    ├── 02-luong-chay-cua-mixin.md     ← Prototype chain, super chain, deduping
+    ├── 03-mixin-trong-polymer.md      ← Behaviors → mixins
+    ├── 04-mixin-trong-lit.md          ← Lit + ReactiveController
+    ├── 05-so-sanh-polymer-vs-lit.md   ← So sánh chi tiết + migration
+    ├── 06-kich-ban-demo.md            ← Kịch bản trình bày
+    ├── slides.html                    ← Deck tự chứa (28 slide)
+    └── demo/                          ← 4 demo chạy thật trong browser
 ```
+
+## Tài liệu bổ sung
+
+### 📊 [Bài trình bày: Mixin — từ cơ bản đến nâng cao](mixin-presentation/README.md)
+
+Đào sâu một chủ đề mà phase 3 và phase 4 chỉ chạm qua: **mixin thực sự chạy như thế nào**, và **đổi gì khi migrate Polymer → Lit**. Gồm 6 bài, một deck 28 slide, và 4 demo chạy thật (Polymer 3.5.1 + Lit 3 thật, có bảng trace in ra thứ tự thực thi).
+
+Đọc sau khi xong [bài 7 phase 3](phase-3-polymer/07-mixins-behaviors.md), hoặc dùng làm tài liệu trình bày nội bộ (~75 phút).
 
 ## Lộ trình học (8–12 tuần)
 
