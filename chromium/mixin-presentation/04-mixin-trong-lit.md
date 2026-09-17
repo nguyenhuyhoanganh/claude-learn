@@ -111,17 +111,17 @@ Trace thật từ một mixin hook vào lifecycle:
 ```text
   LoggerMixin.constructor
 MyLit.constructor
-MyLit.connectedCallback BEFORE super
-  LoggerMixin.connectedCallback BEFORE super
+MyLit.connectedCallback — trước super
+  LoggerMixin.connectedCallback — trước super
 MyLit.willUpdate
-  LoggerMixin.willUpdate keys=logCount,own
+  LoggerMixin.willUpdate  đổi=[logCount,own]
 MyLit.render
 MyLit.firstUpdated
-  LoggerMixin.updated keys=logCount,own
+  LoggerMixin.updated     đổi=[logCount,own]
 MyLit.updated
 ```
 
-→ `changedProperties` chứa property của **cả** mixin lẫn class, đúng như mong đợi.
+→ `đổi=[...]` chính là `changedProperties`: chứa property của **cả** mixin lẫn class.
 
 ## 4. Không có `dedupingMixin` — tự lo
 

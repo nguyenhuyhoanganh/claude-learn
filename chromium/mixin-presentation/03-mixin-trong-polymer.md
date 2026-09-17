@@ -235,11 +235,11 @@ disconnectedCallback()           ← teardown: super CUỐI
 Trace thật với mixin hook vào `ready()`:
 
 ```text
-  LoggerMixin.connectedCallback      ← connectedCallback chạy trước ready
-MyEl.ready BEFORE super
-  LoggerMixin.ready BEFORE super
-  LoggerMixin.ready AFTER super
-MyEl.ready AFTER super
+  LoggerMixin.connectedCallback        ← connectedCallback chạy trước ready
+MyEl.ready — trước super
+  LoggerMixin.ready — trước super
+  LoggerMixin.ready — sau super
+MyEl.ready — sau super
 ```
 
 Điểm cần nhớ: **`ready()` chỉ chạy một lần**, bên trong `connectedCallback` đầu tiên. Nếu element bị remove rồi add lại, `connectedCallback` chạy lại nhưng `ready` thì không.

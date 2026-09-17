@@ -167,10 +167,10 @@ Hậu quả: **mọi thứ nằm dưới `M` trong chuỗi đều không chạy.
 
 ```text
   LoggerMixin.connectedCallback
-MyEl.ready BEFORE super
-  LoggerMixin.ready BEFORE super
-  LoggerMixin.ready AFTER super
-MyEl.ready AFTER super
+MyEl.ready — trước super
+  LoggerMixin.ready — trước super
+  LoggerMixin.ready — sau super
+MyEl.ready — sau super
 ```
 
 Đọc được 2 điều:
@@ -183,13 +183,13 @@ MyEl.ready AFTER super
 ```text
   LoggerMixin.constructor
 MyLit.constructor
-MyLit.connectedCallback BEFORE super
-  LoggerMixin.connectedCallback BEFORE super
+MyLit.connectedCallback — trước super
+  LoggerMixin.connectedCallback — trước super
 MyLit.willUpdate
-  LoggerMixin.willUpdate keys=logCount,own
+  LoggerMixin.willUpdate  đổi=[logCount,own]
 MyLit.render
 MyLit.firstUpdated
-  LoggerMixin.updated keys=logCount,own
+  LoggerMixin.updated     đổi=[logCount,own]
 MyLit.updated
 ```
 
