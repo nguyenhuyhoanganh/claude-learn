@@ -310,7 +310,7 @@ try {
     t.log(`  ✗ Chỉ WeakMap  : ${weak.twice} lần — vẫn hỏng ở ca kế thừa.`, 't-bad');
     t.log(`  ✓ WeakMap+dấu  : ${full.twice} lần — đúng.`, 't-out');
     t.log('');
-    t.log('→ Polymer cho sẵn dedupingMixin(). Ở Lit bạn phải tự viết đoạn này,', 't-dim');
+    t.log('→ Polymer có dedupingMixin(). Lit không có helper deduping tích hợp;', 't-dim');
     t.log('  hoặc dùng @open-wc/dedupe-mixin.', 't-dim');
     document.getElementById('btn-dedupe').disabled = true;
   };
@@ -454,7 +454,7 @@ try {
 } catch (e) {
   statusEl.className = 'err';
   statusEl.innerHTML = `✗ Không tải được Lit từ CDN: ${e.message}<br>` +
-    'Demo này cần internet. Hãy chạy qua HTTP server: ' +
+    'Demo này cần internet và HTTP server: ' +
     '<code>python3 -m http.server 8000</code> rồi mở ' +
     '<code>http://localhost:8000/03-mixin-lit.html</code>';
 }

@@ -93,7 +93,7 @@
 
 <section>
   <h2><span class="badge">4</span> Behaviors — cú pháp Polymer 1 còn sót lại</h2>
-  <p class="note">Object literal + <code>mixinBehaviors()</code>. Bạn sẽ gặp trong code Chromium cũ. Đọc hiểu là đủ — <strong>đừng viết mới</strong>.</p>
+  <p class="note">Behavior là object literal được dùng qua <code>mixinBehaviors()</code>. Cơ chế này xuất hiện trong mã Polymer legacy; mã mới nên dùng class mixin.</p>
   <div class="row"><button id="btn-behavior">Chạy element dùng Behavior</button></div>
   <div class="stage" id="stage4"></div>
   <pre class="t-dim" id="tr-behavior">— bấm nút để chạy —</pre>
@@ -413,7 +413,7 @@ try {
 } catch (e) {
   statusEl.className = 'err';
   statusEl.innerHTML = `✗ Không tải được Polymer từ CDN: ${e.message}<br>` +
-    'Demo này cần internet. Hãy chạy qua HTTP server: ' +
+    'Demo này cần internet và HTTP server: ' +
     '<code>python3 -m http.server 8000</code> rồi mở ' +
     '<code>http://localhost:8000/02-mixin-polymer.html</code>';
 }

@@ -1,372 +1,219 @@
-# Bài 1: Mixin là gì — trong Polymer
+# Mixin: khái niệm và phạm vi áp dụng
 
-> Mục tiêu: sau bài này bạn định nghĩa được mixin bằng **một câu**, viết được một mixin Polymer chạy thật, và hiểu vì sao Polymer 3 bỏ Behaviors của Polymer 1.
+## Phạm vi
 
-Cả bài dùng **Polymer 3**. Ví dụ chỉ dùng những thứ có sẵn của framework — `properties`, lifecycle, template — không gọi API nào bên ngoài.
+Phần này định nghĩa class mixin, mô tả vị trí của mixin trong chuỗi kế thừa và so sánh với Behavior legacy của Polymer.
 
-## 1. Bài toán — hai component cùng cần một khả năng
+## Vấn đề cần giải quyết
 
-Bạn có hai component WebUI chẳng liên quan gì nhau:
+Ví dụ có hai custom element không liên quan về mặt nghiệp vụ:
 
-- `<my-panel>` — khung nội dung gập được.
-- `<my-dropdown>` — danh sách xổ xuống.
+- `my-panel` hiển thị hoặc ẩn một phần nội dung;
+- `my-dropdown` hiển thị hoặc ẩn danh sách lựa chọn.
 
-Cả hai đều cần **mở/đóng**. Cụ thể là 4 thứ:
+Cả hai đều cần cùng một khả năng: có trạng thái `opened`, phản chiếu trạng thái đó ra attribute để CSS sử dụng, và có các phương thức `open()`, `close()`, `toggle()`.
 
-1. Property `opened` (Boolean).
-2. Đẩy `opened` ra ngoài thành attribute để CSS bắt được (`:host([opened])`).
-3. Các method `toggle()`, `open()`, `close()`.
-4. Bắn event `opened-changed` để component cha biết.
+Nếu viết trực tiếp vào từng element, phần xử lý mở/đóng sẽ bị lặp. Khi cần thay đổi quy tắc, chẳng hạn không cho mở khi element bị vô hiệu hóa, ta phải sửa nhiều nơi và rất dễ bỏ sót. Mixin cho phép đóng gói khả năng này một lần rồi dùng lại cho nhiều lớp.
 
-Cách làm đầu tiên ai cũng nghĩ ra — viết thẳng vào từng component:
+## Định nghĩa
 
-```javascript
-class MyPanel extends PolymerElement {
-  static get is() { return 'my-panel'; }
+> Mixin là một hàm nhận một lớp cơ sở và trả về một lớp con đã được bổ sung chức năng.
 
-  static get properties() {
-    return {
-      opened: {                          // ①
-        type: Boolean,
-        value: false,
-        reflectToAttribute: true,
-        observer: 'openedChanged_',
-      },
-      tieuDe: {type: String},            // ← phần riêng của MyPanel
-    };
-  }
+Mẫu cơ bản:
 
-  toggle() { this.opened = !this.opened; }        // ②
-  open()   { this.opened = true; }
-  close()  { this.opened = false; }
-
-  openedChanged_(moi) {                            // ③
-    this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
-  }
-}
-
-class MyDropdown extends PolymerElement {
-  static get is() { return 'my-dropdown'; }
-
-  static get properties() {
-    return {
-      opened: {                          // ① y hệt
-        type: Boolean,
-        value: false,
-        reflectToAttribute: true,
-        observer: 'openedChanged_',
-      },
-      danhSach: {type: Array},           // ← phần riêng của MyDropdown
-    };
-  }
-
-  toggle() { this.opened = !this.opened; }        // ② y hệt
-  open()   { this.opened = true; }
-  close()  { this.opened = false; }
-
-  openedChanged_(moi) {                            // ③ y hệt
-    this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
-  }
-}
+```js
+const SomeMixin = (Base) => class extends Base {
+  // property và method dùng chung
+};
 ```
 
-Chạy thì tốt. Nhưng ba khối ①②③ **lặp lại y hệt**, và đây mới chỉ là 2 component. Trong `chrome://settings` có hàng chục thứ mở/đóng được.
+Ví dụ đơn giản:
 
-### Vì sao lặp code là vấn đề
+```js
+const OpenableMixin = (Base) => class extends Base {
+  open() {
+    this.opened = true;
+  }
 
-Không phải vì "gõ nhiều". Vấn đề là:
+  close() {
+    this.opened = false;
+  }
 
-| Vấn đề | Chuyện gì xảy ra |
-|---|---|
-| **Sửa 1 chỗ, phải sửa N chỗ** | Muốn thêm: nhấn `Escape` thì đóng → mở từng component ra sửa |
-| **Sai lệch âm thầm** | Component thứ 5 có người quên `reflectToAttribute` → CSS không ăn, không ai báo lỗi |
-| **Không test riêng được** | Muốn kiểm tra logic đóng/mở phải dựng cả `MyPanel` lên |
-
-Ta cần: **viết logic mở/đóng một lần, gắn vào bao nhiêu component cũng được.**
-
-## 2. Cách của Polymer 1 — Behaviors
-
-Polymer 1 ra đời trước khi class ES6 phổ biến, nên nó gom phần dùng chung vào một **object thường**, gọi là Behavior:
-
-```javascript
-const OpenableBehavior = {
-  properties: {
-    opened: {
-      type: Boolean,
-      value: false,
-      reflectToAttribute: true,
-      observer: 'openedChanged_',
-    },
-  },
-
-  toggle() { this.opened = !this.opened; },
-  open()   { this.opened = true; },
-  close()  { this.opened = false; },
-
-  openedChanged_(moi) {
-    this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
-  },
+  toggle() {
+    this.opened = !this.opened;
+  }
 };
 
-Polymer({
-  is: 'my-panel',
-  behaviors: [OpenableBehavior],       // ← gắn vào
+class MyPanel extends OpenableMixin(HTMLElement) {}
+```
+
+`OpenableMixin(HTMLElement)` tạo ra một lớp con mới của `HTMLElement`. `MyPanel` lại kế thừa từ lớp mới này. Vì vậy, chuỗi kế thừa thực tế là:
+
+```text
+MyPanel → OpenableMixinImpl → HTMLElement
+```
+
+Điều này khác với việc chép các method vào `MyPanel.prototype`. Mixin tạo thêm một mắt xích trong chuỗi kế thừa; nó không thay đổi lớp cơ sở và không ảnh hưởng tới element khác.
+
+## Quan hệ với kế thừa thông thường
+
+JavaScript chỉ cho một lớp cha trực tiếp:
+
+```js
+class MyPanel extends HTMLElement {}
+```
+
+Nhưng một element có thể cần nhiều khả năng độc lập, ví dụ mở/đóng, vô hiệu hóa, hỗ trợ i18n hoặc lắng nghe sự kiện. Mixin cho phép ghép các khả năng đó theo thứ tự rõ ràng:
+
+```js
+class MyPanel extends DisableableMixin(OpenableMixin(HTMLElement)) {}
+```
+
+Trong biểu thức trên, `OpenableMixin` được áp dụng trước, rồi kết quả được truyền vào `DisableableMixin`.
+
+## Mở rộng method bằng `super`
+
+Hai mixin có thể cùng có phương thức `toggle()`. Mixin ở ngoài cùng sẽ được tìm thấy trước. Nó không nhất thiết phải thay thế hoàn toàn phần còn lại; nó có thể bổ sung điều kiện rồi gọi tiếp phương thức ở lớp bên dưới.
+
+```js
+const DisableableMixin = (Base) => class extends Base {
+  toggle() {
+    if (this.disabled) {
+      return;
+    }
+    super.toggle();
+  }
+};
+
+class MyPanel extends DisableableMixin(OpenableMixin(HTMLElement)) {}
+```
+
+Khi gọi `panel.toggle()`:
+
+1. `DisableableMixin.toggle()` chạy trước.
+2. Nếu `disabled` là `true`, phương thức kết thúc.
+3. Nếu không, `super.toggle()` gọi `OpenableMixin.toggle()`.
+
+Đây là lý do cần hiểu mixin như một lớp trong chuỗi kế thừa. `super` chỉ có nghĩa khi có lớp cha thực sự.
+
+## Behavior của Polymer
+
+Các dự án Polymer đời cũ có thể dùng Behavior, là một object chứa property và method dùng chung:
+
+```js
+const OpenableBehavior = {
   properties: {
-    tieuDe: {type: String},
+    opened: {type: Boolean, value: false},
   },
-});
+  toggle() {
+    this.opened = !this.opened;
+  },
+};
 ```
 
-✅ Giải quyết được bài toán lặp code. Gắn được **nhiều** behavior cùng lúc, thứ mà kế thừa thường không làm nổi (`class A extends B, C` là `SyntaxError` — JavaScript chỉ cho một class cha).
+Polymer có thể gộp một số cấu hình của Behavior, như `properties` và lifecycle callbacks. Tuy nhiên, Behavior không phải là một lớp trong chuỗi kế thừa. Nếu hai Behavior định nghĩa cùng một method thông thường, một bản sẽ ghi đè bản kia theo quy tắc merge của Polymer; method bị ghi đè không có `super` để gọi lại.
 
-❌ Nhưng vì behavior chỉ là object thường, nó có một lỗ hổng chết người: **không có `super`**.
+Polymer 3 vẫn có cơ chế tương thích với Behavior cũ, nhưng với mã mới, class mixin rõ ràng và an toàn hơn khi cần mở rộng method.
 
-Polymer 1 phải tự viết cơ chế merge để bù. Kết quả nửa vời:
+## Ví dụ Polymer
 
-| Loại key | Polymer 1 xử lý |
-|---|---|
-| Lifecycle (`attached`, `detached`…) | Gọi **tất cả**, theo thứ tự — behavior trước, element sau |
-| `properties`, `observers`, `listeners` | Gộp lại |
-| **Method thường** | **Ghi đè — cái sau đè cái trước, im lặng** |
+Mixin Polymer có thể khai báo property reactive như một element bình thường:
 
-Dòng cuối là chỗ vỡ:
+```js
+import {dedupingMixin} from '@polymer/polymer/lib/utils/mixin.js';
 
-```javascript
-const OpenableBehavior  = { toggle() { /* mở/đóng */ } };
-const DisableableBehavior = { toggle() { /* kiểm tra disabled rồi mới mở/đóng */ } };
-
-Polymer({
-  is: 'my-panel',
-  behaviors: [OpenableBehavior, DisableableBehavior],
-});
-
-// element.toggle() → chỉ chạy bản của DisableableBehavior.
-// Bản của OpenableBehavior BIẾN MẤT. Không một lời cảnh báo.
-```
-
-`DisableableBehavior` muốn "kiểm tra `disabled` rồi **gọi tiếp** bản gốc" — nhưng nó không có cách nào gọi. Nó là object thường, không nằm trong chuỗi kế thừa nào cả, nên không có `super` để gọi.
-
-> Cùng một vấn đề xảy ra với `Object.assign(MyPanel.prototype, behavior)` — cách "mixin cổ điển" thời jQuery. Đó là **ghi đè phẳng**: không có khái niệm "chạy tiếp cái trước đó".
-
-Đây chính là lý do Polymer 3 bỏ Behaviors.
-
-## 3. Cách của Polymer 3 — Mixin ⭐
-
-Ý tưởng khác hẳn: thay vì *copy method vào* class có sẵn, ta **sinh ra một class trung gian** rồi chèn nó vào giữa chuỗi kế thừa.
-
-```javascript
-import {dedupingMixin} from 'chrome://resources/polymer/v3_0/polymer/lib/utils/mixin.js';
-
-export const OpenableMixin = dedupingMixin((superClass) => {
-  class OpenableMixinImpl extends superClass {
+export const OpenableMixin = dedupingMixin((Base) => {
+  class OpenableMixinImpl extends Base {
     static get properties() {
       return {
         opened: {
           type: Boolean,
           value: false,
           reflectToAttribute: true,
-          observer: 'openedChanged_',
         },
-        nhan: {type: String, computed: 'tinhNhan_(opened)'},
       };
     }
 
+    open() { this.opened = true; }
+    close() { this.opened = false; }
     toggle() { this.opened = !this.opened; }
-    open()   { this.opened = true; }
-    close()  { this.opened = false; }
-
-    tinhNhan_(opened) { return opened ? 'Đang mở' : 'Đang đóng'; }
-
-    openedChanged_(moi) {
-      this.dispatchEvent(new CustomEvent('opened-changed', {detail: {value: moi}}));
-    }
   }
+
   return OpenableMixinImpl;
 });
 ```
 
-Dùng:
+Element dùng mixin chỉ giữ phần riêng của nó:
 
-```javascript
+```js
 class MyPanel extends OpenableMixin(PolymerElement) {
-  static get is() { return 'my-panel'; }
-
   static get properties() {
-    return {tieuDe: {type: String, value: 'Bảng'}};   // chỉ phần riêng
-  }
-
-  static get template() {
-    return html`
-      <style>
-        :host([opened]) .than { display: block; }     /* reflect từ mixin */
-        .than { display: none; }
-      </style>
-      <h3 on-click="toggle">[[tieuDe]] — [[nhan]]</h3>
-      <div class="than"><slot></slot></div>`;
+    return {title: {type: String, value: 'Panel'}};
   }
 }
-customElements.define(MyPanel.is, MyPanel);
 ```
 
-Kết quả chạy thật:
+`opened` được khai báo trong mixin nhưng vẫn dùng được trong template và CSS của `MyPanel`, ví dụ `:host([opened])`.
 
-```text
-panel.opened                      → false          (giá trị mặc định từ mixin)
-panel.nhan                        → "Đang đóng"    (computed trong mixin)
-panel.toggle()
-panel.opened                      → true
-panel.nhan                        → "Đang mở"      (computed tự cập nhật)
-panel.hasAttribute('opened')      → true           (reflectToAttribute)
-panel.tieuDe                      → "Bảng"         (property riêng vẫn còn)
-event 'opened-changed'            → đã bắn         (observer trong mixin)
-```
+## ReactiveController trong Lit
 
-Để ý ba điều:
+`ReactiveController` là một object được một `LitElement` sở hữu và đăng ký qua `host.addController(controller)`. Controller không được chèn vào prototype chain, vì vậy không tự thêm property hoặc method vào API của element.
 
-1. `MyPanel` chỉ còn khai báo **phần riêng của nó**. Toàn bộ logic mở/đóng nằm ở mixin.
-2. Property của mixin (`opened`, `nhan`) và của element (`tieuDe`) **gộp lại với nhau**, dùng trong template như nhau.
-3. `computed`, `observer`, `reflectToAttribute` — mọi tính năng của Polymer **đều chạy từ bên trong mixin**. Mixin không phải cái túi đựng method; nó là một *mảnh component* hoàn chỉnh.
+Controller có thể triển khai các callback lifecycle sau:
 
-Áp lên component thứ hai, không sửa dòng nào trong mixin:
-
-```javascript
-class MyDropdown extends OpenableMixin(PolymerElement) {
-  static get is() { return 'my-dropdown'; }
-  static get properties() { return {danhSach: {type: Array}}; }
-}
-```
-
-## 4. Định nghĩa
-
-> **Mixin là một hàm nhận vào một class và trả về một class con mới của nó, đã được bổ sung tính năng.**
-
-Bộ khung tối giản, thuộc lòng được:
-
-```javascript
-const TenMixin = (superClass) => class extends superClass {
-  // thêm gì đó ở đây
-};
-```
-
-Ba tính chất bắt buộc, thiếu một cái thì không còn là mixin:
-
-| Tính chất | Vì sao cần |
+| Callback | Thời điểm gọi |
 |---|---|
-| Nhận `superClass` làm **tham số** | Viết cứng `extends PolymerElement` thì không xếp chồng được, và không dùng lại cho Lit được |
-| Trả về **class mới**, không sửa `superClass` | `PolymerElement` giữ nguyên → mọi chỗ khác không bị ảnh hưởng |
-| Bên trong dùng `extends superClass` | Đây là thứ tạo ra `super` — khác biệt cốt lõi so với Behaviors |
+| `hostConnected()` | Host được kết nối vào document |
+| `hostDisconnected()` | Host bị gỡ khỏi document |
+| `hostUpdate()` | Trước khi host chạy update |
+| `hostUpdated()` | Sau khi host hoàn tất update |
 
-### Vì sao tên "subclass factory" chính xác hơn
+Ví dụ controller quản lý listener cho thao tác click bên ngoài element:
 
-Chữ "mixin" (trộn vào) dễ gây hiểu lầm rằng nó **trộn** method vào class bạn. Nó không trộn gì cả.
-
-Nó là một **nhà máy sản xuất class con**: đưa vào `PolymerElement`, nhận về một class `extends PolymerElement`.
-
-```javascript
-const X = OpenableMixin(PolymerElement);
-Object.getPrototypeOf(X.prototype) === PolymerElement.prototype;   // true — X đúng là con
-```
-
-Chuỗi kế thừa của `MyPanel`:
-
-```text
-MyPanel  →  OpenableMixin  →  PolymerElement  →  HTMLElement
-            └─ mắt xích mixin chèn vào ─┘
-```
-
-Bài 2 sẽ đào sâu chuỗi này — nó giải thích mọi hành vi của mixin.
-
-## 5. Xếp chồng nhiều mixin — và thứ Behaviors không làm được
-
-Vì mixin nhận class → trả class, ta lồng được bao nhiêu tuỳ thích:
-
-```javascript
-class MyPanel extends DisableableMixin(OpenableMixin(PolymerElement)) { }
-```
-
-Giờ viết `DisableableMixin` — và đây là chỗ thấy rõ giá trị của `super`:
-
-```javascript
-export const DisableableMixin = dedupingMixin((superClass) => {
-  class DisableableMixinImpl extends superClass {
-    static get properties() {
-      return {
-        disabled: {type: Boolean, value: false, reflectToAttribute: true},
-      };
-    }
-
-    toggle() {
-      if (this.disabled) return;      // thêm điều kiện của mình
-      super.toggle();                 // ← rồi CHẠY TIẾP bản của OpenableMixin
-    }
+```js
+class ClickOutsideController {
+  constructor(host, onOutsideClick) {
+    this.host = host;
+    this.onOutsideClick = onOutsideClick;
+    host.addController(this);
   }
-  return DisableableMixinImpl;
-});
-```
 
-`DisableableMixin` **không thay thế** `toggle()` của `OpenableMixin` — nó **bọc quanh**: kiểm tra thêm một điều kiện, rồi gọi tiếp bản gốc.
+  hostConnected() {
+    this.listener_ = (event) => {
+      if (!event.composedPath().includes(this.host)) {
+        this.onOutsideClick();
+      }
+    };
+    document.addEventListener('click', this.listener_);
+  }
 
-Kết quả chạy thật:
-
-```text
-panel.toggle()          → opened = true
-panel.disabled = true
-panel.toggle()          → opened VẪN = true   (DisableableMixin chặn lại)
-```
-
-Đây đúng là thứ Behaviors ở mục 2 bó tay: hai behavior cùng có `toggle()` thì cái sau đè mất cái trước, không có cách nào gọi lại.
-
-> **Đọc chuỗi mixin từ trong ra ngoài.** `DisableableMixin(OpenableMixin(PolymerElement))`: `OpenableMixin` áp trước (gần `PolymerElement`), `DisableableMixin` áp sau (gần `MyPanel`). Cái **gần bạn hơn thì thắng** khi trùng tên — nên `toggle()` của `DisableableMixin` chạy trước, rồi nó gọi `super.toggle()` xuống bản của `OpenableMixin`.
-
-## 6. Thêm lifecycle vào mixin
-
-Mixin làm được cả những việc cần móc vào vòng đời element. Thêm: nhấn `Escape` thì đóng.
-
-```javascript
-connectedCallback() {
-  super.connectedCallback();            // ← setup: super gọi ĐẦU
-  this.esc_ = (e) => { if (e.key === 'Escape') this.close(); };
-  document.addEventListener('keydown', this.esc_);
+  hostDisconnected() {
+    document.removeEventListener('click', this.listener_);
+  }
 }
 
-disconnectedCallback() {
-  document.removeEventListener('keydown', this.esc_);
-  super.disconnectedCallback();         // ← teardown: super gọi CUỐI
+class MyPanel extends OpenableMixin(LitElement) {
+  constructor() {
+    super();
+    this.clickOutside_ = new ClickOutsideController(this, () => this.close());
+  }
 }
 ```
 
-Viết một lần trong `OpenableMixin`, mọi component dùng mixin đều có. Và quan trọng: **dọn dẹp được đóng gói cùng chỗ với đăng ký**, nên không component nào quên gỡ listener nữa.
+Trong ví dụ này, `OpenableMixin` cung cấp API `open()`, `close()` và `toggle()` trên element. `ClickOutsideController` chỉ quản lý listener và gọi callback. Nếu controller thay đổi state nội bộ có ảnh hưởng tới template, controller gọi `this.host.requestUpdate()` để yêu cầu host render lại.
 
-> Vị trí đặt `super` — đầu hay cuối — quyết định thứ tự chạy. Bài 2 sẽ giải thích kỹ vì sao setup thì `super` đầu, teardown thì `super` cuối.
+Controller phù hợp với logic có thể tách khỏi API công khai của element, đặc biệt khi cần nhiều instance độc lập trong cùng một host. Mixin phù hợp khi feature cần trở thành một phần của class, cần override method, hoặc cần kiểm soát thứ tự qua `super`.
 
-## 7. Khi nào dùng mixin, khi nào không
+## Tiêu chí sử dụng
 
-**Dùng mixin khi hội đủ:**
+Nên dùng mixin khi phần dùng chung thực sự là một phần của API element hoặc cần kiểm soát vị trí trong chuỗi lifecycle. Ví dụ: một mixin thêm `opened`, `toggle()` và quy tắc xử lý bàn phím cho mọi panel.
 
-- Logic được dùng ở **từ 3 component trở lên**, và
-- cần **property / state** gắn theo từng element, hoặc
-- cần **móc vào lifecycle**, hoặc
-- cần **thêm method vào chính element** để template hay code ngoài gọi được (`el.toggle()`).
+Không nên dùng mixin chỉ để gom một vài hàm tính toán. Khi đó, hàm thuần thường dễ kiểm thử hơn. Trong Lit, nếu phần dùng chung chỉ cần state, lifecycle và có thể nằm ngoài API công khai của element, hãy cân nhắc `ReactiveController`; bài 4 giải thích lựa chọn này.
 
-**Không dùng mixin khi:**
+## Quy tắc chính
 
-| Tình huống | Dùng gì thay thế |
-|---|---|
-| Chỉ tính toán, không giữ state | Hàm thuần — `export function` |
-| Chỉ 1–2 component xài | Viết thẳng vào component |
-| Cần state + lifecycle nhưng **không** cần thêm API lên element | **ReactiveController** (Lit — bài 4) |
-| Cần dùng **nhiều bản cùng lúc** trong một element | **ReactiveController** — mixin chỉ cho một bản |
-
-> Câu hỏi sàng lọc nhanh: *"Thứ này có cần trở thành một phần của bản thân element không?"*
-> Có → mixin. Không → hàm thuần hoặc controller.
-
-## Tóm tắt bài 1
-
-- Mixin sinh ra để giải bài toán: **nhiều component cùng cần một khả năng**, mà JavaScript chỉ cho **một class cha**.
-- **Định nghĩa:** hàm nhận class → trả class con mới đã thêm tính năng. Khuôn: `(superClass) => class extends superClass { }`.
-- Nó **không copy method**; nó **chèn một mắt xích** vào chuỗi kế thừa → nhờ vậy `super` chạy được.
-- **Behaviors** (Polymer 1) là object thường, **không có `super`** → hai behavior trùng tên method thì đè nhau im lặng. Đây là lý do Polymer 3 bỏ nó.
-- Mixin Polymer là một **mảnh component đầy đủ**: `properties`, `computed`, `observer`, `reflectToAttribute`, lifecycle — chạy hết từ bên trong mixin.
-- `super.toggle()` cho phép một mixin **bọc quanh** method của mixin khác thay vì đè mất.
-
-**Bài kế tiếp** → [Bài 2: Luồng chạy của mixin](02-luong-chay-cua-mixin.md)
+- Mixin là hàm `Base → class extends Base`.
+- Nó tạo lớp trung gian trong chuỗi kế thừa, không sao chép method vào lớp hiện có.
+- Khi nhiều mixin ghi đè cùng một method, mixin ở gần lớp cuối hơn được gọi trước và có thể gọi tiếp bằng `super`.
+- Behavior legacy của Polymer không có cơ chế `super` này cho method thông thường.
+- `ReactiveController` của Lit dùng composition; controller phù hợp với lifecycle và state nội bộ không cần xuất hiện trong API của element.

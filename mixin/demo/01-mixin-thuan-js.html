@@ -53,7 +53,7 @@
 <div class="wrap">
 
 <h1>Demo 1 — Cơ chế mixin: prototype chain &amp; super chain</h1>
-<p class="sub">Chạy offline, không cần framework — vì cơ chế mixin nằm ở tầng JavaScript, <strong>giống hệt nhau</strong> dù base là <code>HTMLElement</code>, <code>PolymerElement</code> hay <code>LitElement</code>. Mục tiêu: <strong>nhìn thấy</strong> prototype chain và thứ tự <code>super</code> thay vì tưởng tượng.</p>
+<p class="sub">Demo chạy offline. Cơ chế class mixin thuộc JavaScript; thay đổi lớp cơ sở từ <code>HTMLElement</code> sang <code>PolymerElement</code> hoặc <code>LitElement</code> không làm thay đổi các mắt xích mixin trong chain.</p>
 
 <section>
   <h2><span class="badge">1</span> Prototype chain thật</h2>
@@ -64,14 +64,14 @@
 
 <section>
   <h2><span class="badge">2</span> Thứ tự constructor — luôn base-first</h2>
-  <p class="note"><code>super()</code> bắt buộc chạy trước thân hàm, nên constructor luôn chạy từ trong (base) ra ngoài. Bạn không đổi được thứ tự này.</p>
+  <p class="note"><code>super()</code> phải chạy trước khi constructor dùng <code>this</code>; constructor vì vậy chạy từ lớp cơ sở lên lớp cuối.</p>
   <div class="row"><button id="btn-ctor">Tạo một &lt;my-box&gt;</button></div>
   <pre class="trace" id="tr-ctor">— bấm nút để chạy —</pre>
 </section>
 
 <section>
   <h2><span class="badge">3</span> <code>super</code> đầu vs <code>super</code> cuối</h2>
-  <p class="note">Với method thường, <strong>bạn</strong> quyết thứ tự bằng vị trí đặt <code>super</code>. Đây là lý do quy tắc "setup super đầu, teardown super cuối" tồn tại.</p>
+  <p class="note">Với method thông thường, vị trí đặt <code>super</code> quyết định thứ tự thực thi. Hai nút dưới minh họa hai thứ tự khác nhau; thứ tự phù hợp phụ thuộc vào hợp đồng của lớp cơ sở.</p>
   <div class="row">
     <button id="btn-connect">Gắn vào DOM (setup — super ĐẦU)</button>
     <button id="btn-disconnect" class="ghost">Gỡ khỏi DOM (teardown — super CUỐI)</button>
@@ -168,7 +168,7 @@ const FocusableMixin = (Base) => class FocusableMixin extends Base {
 class MyBox extends FocusableMixin(DisableableMixin(OpenableMixin(HTMLElement))) {
   constructor() {
     super();
-    trace?.log('MyBox.constructor (thân hàm của bạn)', 't-in', 0);
+    trace?.log('MyBox.constructor (thân hàm lớp dẫn xuất)', 't-in', 0);
   }
   connectedCallback() {
     super.connectedCallback();
@@ -245,7 +245,7 @@ document.getElementById('btn-connect').onclick = () => {
   host.appendChild(live);
   tSuper.log('', '');
   tSuper.log('→ Chạy từ TRONG ra NGOÀI: C → B → A → MyBox', 't-dim');
-  tSuper.log('→ Base khởi tạo xong trước, nên code của bạn dùng được kết quả đó.', 't-dim');
+  tSuper.log('→ Implementation của lớp cơ sở hoàn tất trước phần sau super của lớp dẫn xuất.', 't-dim');
   trace = null;
 };
 
@@ -258,7 +258,7 @@ document.getElementById('btn-disconnect').onclick = () => {
   live = null;
   tSuper.log('', '');
   tSuper.log('→ Chạy từ NGOÀI vào TRONG: MyBox → Focusable → Disableable → Openable — ĐẢO NGƯỢC mục trên.', 't-dim');
-  tSuper.log('→ Bạn dọn dẹp trước, base tháo dỡ sau. Đúng thứ tự an toàn.', 't-dim');
+  tSuper.log('→ Ví dụ này cho thấy thứ tự từ lớp ngoài vào lớp trong khi super đặt ở cuối.', 't-dim');
   trace = null;
 };
 

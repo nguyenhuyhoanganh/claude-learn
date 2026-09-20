@@ -1,147 +1,117 @@
-# Bài 6: Kịch bản demo — chạy buổi trình bày
+# Hướng dẫn chạy demo
 
-> Dành cho người đứng lớp. Thứ tự bấm nút, câu cần nói ở mỗi bước, và các câu hỏi hay bị vặn lại.
+## Phạm vi
 
-## Chuẩn bị (5 phút trước giờ)
+Tài liệu này mô tả môi trường chạy, thứ tự sử dụng và các kết quả cần quan sát trong bốn demo đi kèm.
+
+## Khởi động môi trường
+
+Chạy các demo qua HTTP server:
 
 ```bash
 cd mixin/demo
 python3 -m http.server 8000
 ```
 
-Mở sẵn 5 tab:
-
-| Tab | URL |
+| Nội dung | Địa chỉ |
 |---|---|
-| Slide | `mixin/slides.html` (mở thẳng bằng `file://` được) |
-| Demo 1 | `http://localhost:8000/01-mixin-thuan-js.html` |
-| Demo 2 | `http://localhost:8000/02-mixin-polymer.html` |
-| Demo 3 | `http://localhost:8000/03-mixin-lit.html` |
-| Demo 4 | `http://localhost:8000/04-side-by-side.html` |
+| Slide | `mixin/slides.html` |
+| Mixin JavaScript | `http://localhost:8000/01-mixin-thuan-js.html` |
+| Polymer | `http://localhost:8000/02-mixin-polymer.html` |
+| Lit | `http://localhost:8000/03-mixin-lit.html` |
+| So sánh Polymer/Lit | `http://localhost:8000/04-side-by-side.html` |
 
-Kiểm tra trước: demo 2, 3, 4 phải hiện dải xanh **"✓ Đã tải…"** ở đầu trang. Nếu hiện dải đỏ → mất mạng hoặc CDN bị chặn.
+Demo 2–4 tải thư viện từ CDN. Cần kiểm tra trạng thái tải thư viện trước khi sử dụng. Demo 1 không cần mạng.
 
-> **Demo 1 không cần internet.** Nếu mạng hỏng hoàn toàn, vẫn trình bày được toàn bộ phần 1–2 (định nghĩa + luồng chạy) — là phần cốt lõi. Phần Polymer/Lit chuyển sang đọc trace in sẵn trong slide 17, 19, 21.
+## Thứ tự sử dụng
 
-## Dòng chảy buổi trình bày (~75 phút)
+| Nội dung | Mục đích | Demo |
+|---|---|---|
+| Mixin JavaScript | Prototype chain, `super`, constructor, deduping | 01 |
+| Polymer | Property effects, lifecycle, Behavior legacy | 02 |
+| Lit | Reactive property, update cycle, controller | 03 |
+| Chuyển đổi | Khác biệt về API và thời điểm DOM cập nhật | 04 |
 
-| Phút | Slide | Demo | Việc cần làm |
-|---|---|---|---|
-| 0–5 | 1–2 | — | Mở đầu, nêu bài toán |
-| 5–15 | 3–8 | **Demo 1 mục 4** | 4 cấp độ share code → định nghĩa |
-| 15–30 | 9–14 | **Demo 1 mục 1, 2, 3, 5** | Luồng chạy — phần quan trọng nhất |
-| 30–42 | 15–17 | **Demo 2** | Polymer |
-| 42–55 | 18–24 | **Demo 3** | Lit + ReactiveController |
-| 55–70 | 25–27 | **Demo 4** | So sánh & migration |
-| 70–75 | 28 | — | Chốt 3 điều mang về, Q&A |
+## Demo 1: class mixin JavaScript
 
-## Kịch bản chi tiết
+### Các thao tác
 
-### Demo 1 — nền tảng (dùng 2 lần)
+1. Chạy phần so sánh `Object.assign` và class mixin.
+2. Mở bảng prototype chain.
+3. Chạy trace constructor.
+4. Gắn và gỡ element để xem trace lifecycle.
+5. Chạy phần deduping.
 
-**Lần 1, ở slide 6** (`Object.assign` — mixin giả):
+### Kết quả cần quan sát
 
-> Bấm **"So sánh Object.assign vs class mixin"**.
+- `Object.assign` chỉ giữ implementation cuối cùng khi trùng tên method; class mixin có thể gọi tiếp implementation phía dưới qua `super`.
+- Method được tra cứu theo chain từ lớp cuối đến lớp cơ sở.
+- Constructor chạy từ lớp cơ sở lên lớp cuối.
+- Vị trí `super` trong method quyết định thứ tự thực thi.
+- Một mixin xuất hiện hai lần trong chain có thể khiến listener hoặc lifecycle callback chạy hai lần.
 
-Câu cần nói:
-> "Nhìn dòng đầu: `Object.assign` cho ra `"TWO"`. Cả `ONE` lẫn method của base **biến mất**, và không có lỗi nào báo. Dòng dưới, class mixin cho ra `TWO(ONE(BASE-ĐÃ-CHẠY))` — cả ba tầng đều chạy. Khác biệt duy nhất là chữ `super`."
+## Demo 2: Polymer
 
-**Lần 2, ở slide 9–14** (luồng chạy) — đây là đoạn quan trọng nhất cả buổi:
+### Các thao tác
 
-1. **Bảng prototype chain** (mục 1) — có sẵn khi tải trang.
-   > "Bốn dòng đầu là chain thật của element. `MixinA`, `B`, `C` là ba mắt xích do mixin chèn vào. Cả ba đều có `whoAmI()`. JS tra từ dòng 0 đi xuống, dừng ở cái đầu tiên — nên `MixinA` thắng."
+1. Tạo element và thay đổi `opened`.
+2. Kiểm tra `label`, attribute `opened` và CSS phụ thuộc vào attribute.
+3. Gắn lại element để phân biệt `connectedCallback()` với `ready()`.
+4. Mở ví dụ Behavior legacy.
+5. Chạy phần deduping nếu cần kiểm tra chain phức tạp.
 
-2. **Mục 2 — constructor.** Bấm nút.
-   > "C trước, rồi B, rồi A, cuối cùng mới đến class của mình. Base-first. Cái này JS ép, không đổi được."
+### Kết quả cần quan sát
 
-3. **Mục 3 — bấm "Gắn vào DOM", rồi bấm "Gỡ khỏi DOM".**
-   > "Để ý hai trace này **đảo ngược nhau**. Gắn vào: C→B→A→MyEl. Gỡ ra: MyEl→A→B→C. Khác biệt duy nhất trong code là `super` đặt ở đầu hay ở cuối hàm."
+- Property khai báo trong mixin được template, observer và CSS của element sử dụng như property của chính element.
+- `connectedCallback()` chạy mỗi lần element được gắn vào document; `ready()` chỉ phục vụ khởi tạo Polymer lần đầu.
+- Listener trên `document` phải được thêm ở `connectedCallback()` và gỡ ở `disconnectedCallback()`.
+- Behavior là cơ chế legacy; method thông thường của các Behavior không nối tiếp được bằng `super`.
 
-   *Đây là khoảnh khắc "à ra thế" của buổi học. Đừng vội qua.*
+## Demo 3: Lit
 
-4. **Mục 5 — deduping.** Bấm nút.
-   > "Ba cột. Cột giữa là bản chỉ dùng WeakMap — bản hay được chép trên mạng. Nó vẫn chạy **2 lần** ở ca kế thừa. Phải có thêm dấu đánh mới đúng."
+### Các thao tác
 
-### Demo 2 — Polymer (slide 15–17)
+1. Tạo element và kiểm tra vòng update đầu tiên.
+2. Đổi property, sau đó kiểm tra `changedProperties` ở vòng update tiếp theo.
+3. Thay đổi property rồi đọc DOM trước và sau `updateComplete`.
+4. Mở phần `ReactiveController`.
 
-Thứ tự bấm: **1 → 2 → 4 → 3 → 5**.
+### Kết quả cần quan sát
 
-1. **Mục 1** — bấm "Tạo & gắn element", rồi **"Gắn lại"**.
-   > "Lần gắn lại, `connectedCallback` chạy lại nhưng `ready` thì không. Nên listener toàn cục phải đặt ở `connectedCallback`. Đây là bug hay gặp trong code Chromium thật."
+- Mixin Lit vẫn dùng prototype chain và `super` như mixin JavaScript thông thường.
+- Property reactive không làm DOM đổi ngay trong lệnh gán; Lit gom thay đổi trước khi update.
+- `willUpdate()` phù hợp để chuẩn bị state cho render; `updated()` chạy sau render.
+- Controller có thể có nhiều instance trong cùng host; mỗi instance có state và lifecycle riêng.
 
-2. **Mục 2** — bấm "toggle()" vài lần, rồi "close()".
-   > "`observer`, `computed` và `reflectToAttribute` này khai báo **bên trong mixin**, không phải trong element. Vẫn chạy, template vẫn bind được `[[nhan]]`, CSS vẫn bắt được `:host([opened])`. Mixin Polymer là một mảnh component đầy đủ chứ không chỉ là túi method."
+## Demo 4: so sánh Polymer và Lit
 
-3. **Mục 4** — Behaviors.
-   > "Cú pháp Polymer 1. Object literal, không có `super`. Còn gặp trong code cũ — đọc hiểu là đủ, đừng viết mới."
+### Các thao tác
 
-4. **Mục 3** — deduping. Nhanh, vì đã nói ở demo 1.
+1. Đối chiếu source code hai implementation của `OpenableMixin`.
+2. Chạy cùng một thao tác mở/đóng ở cả hai cột.
+3. Gán property rồi kiểm tra DOM ngay sau đó.
+4. Gọi `toggle()` qua API của element và kiểm tra attribute phản chiếu.
 
-5. **Mục 5** — đồng bộ. **Dừng lại và bảo cả lớp ghi nhớ kết quả `"Đang mở"`.**
-   > "Nhớ kết quả này. 10 phút nữa chúng ta chạy đúng đoạn code này trên Lit."
+### Kết quả cần quan sát
 
-### Demo 3 — Lit (slide 18–24)
+- API JavaScript `open()`, `close()` và `toggle()` không phụ thuộc framework.
+- Khai báo property, template, observer và thời điểm DOM cập nhật là các phần khác nhau giữa Polymer và Lit.
+- Đoạn code Lit thao tác DOM phụ thuộc vào render mới cần `await updateComplete`.
 
-1. **Mục 1** — bấm "Tạo & gắn", rồi **"Đổi property"**.
-   > "Vòng đầu có constructor và `firstUpdated`. Vòng hai thì không — chỉ `willUpdate → render → updated`. Và `changed` chỉ chứa property vừa đổi."
+## Lưu ý kỹ thuật
 
-2. **Mục 2** — properties.
-   > "`opened` khai báo trong mixin, `tieuDe` trong element. Lit gộp cả hai, giống Polymer. Nhưng để ý: không có `value:` — mặc định phải gán trong constructor."
+| Chủ đề | Quy tắc |
+|---|---|
+| HOC của React | HOC bọc component ở cấp render; class mixin thêm lớp vào prototype chain. |
+| Mixin và controller | Controller phù hợp với logic nội bộ; mixin phù hợp khi cần API công khai hoặc kiểm soát inheritance chain. |
+| Deduping | Chỉ cần khi mixin có thể xuất hiện nhiều lần qua inheritance hoặc qua mixin khác. |
+| `ready()` | Không thay trực tiếp bằng `firstUpdated()`; hook Lit phụ thuộc vào mục đích của code cũ. |
+| Mixin chain | Chain quá sâu làm tăng rủi ro trùng tên method và khó debug; nên tách logic độc lập thành controller hoặc hàm thuần. |
 
-3. **Mục 4** — ReactiveController. **Đây là điểm nhấn của phần Lit.**
-   > "Nhìn hai dòng trong khung: `chậm` và `nhanh` nhảy với nhịp khác nhau — **hai controller trong cùng một element**. Mixin không làm được, vì một mixin chỉ cho bạn một `this.seconds`."
+## Danh sách kiểm tra
 
-4. **Mục 5** — bất đồng bộ.
-   > "Đây rồi. Cùng đoạn code Polymer cho `Đang mở`, Lit cho giá trị cũ. Không có lỗi, không có cảnh báo."
-
-### Demo 4 — chốt (slide 25–27)
-
-1. **Mục 1** — mã nguồn đối chiếu. Để cả lớp đọc 30 giây.
-   > "`toggle()`, `open()`, `close()` **giống hệt nhau từng chữ**. Chỉ khác cái vỏ khai báo property và cách phản ứng khi property đổi."
-
-2. **Mục 2** — bấm "Chạy kịch bản trên cả hai".
-   > "Phần constructor và connectedCallback giống nhau ở hai cột — đó là phần JS thuần, không đổi. Khác biệt là Polymer có `ready()` chạy một lần, Lit có cả một vòng update lặp lại mỗi lần property đổi."
-
-3. **Mục 3** — bấm "Gán property rồi đọc DOM". Hai cột cạnh nhau.
-   > "`Đang mở` và `Đang đóng`. Cùng một dòng code."
-
-4. **Mục 4** — bấm "Gọi toggle()" vài lần, hoặc bấm thẳng vào tiêu đề trong hai khung.
-   > "Cùng một API `toggle()`, hai bản cài đặt. CSS `:host([opened])` ăn ở cả hai bên nhờ attribute mà mixin reflect ra. Từ phía người dùng component, không phân biệt được."
-
-## Câu hỏi hay bị vặn lại
-
-**"Mixin có khác Higher-Order Component của React không?"**
-Cùng ý tưởng — hàm nhận vào, trả về phiên bản đã tăng cường. Khác ở chỗ HOC bọc *component* và tạo thêm một tầng trong cây render; mixin bọc *class* và chèn vào prototype chain, không thêm tầng DOM nào. Hook của React gần với ReactiveController hơn là gần mixin.
-
-**"Sao không dùng composition luôn cho gọn?"**
-Nên, nếu được — đó chính là ReactiveController. Mixin chỉ thắng ở một điểm: khi bạn cần API xuất hiện **trên chính element**, ví dụ `toggle()` phải gọi được từ `on-click` trong template, hoặc component cha phải gọi `panel.close()`.
-
-**"Xếp chồng bao nhiêu mixin là quá nhiều?"**
-3–4. Quá đó thì stack trace toàn class ẩn danh, và xác suất trùng tên method tăng nhanh. Nếu đang cần 6 mixin, nhiều khả năng một nửa trong số đó nên là controller hoặc hàm thuần.
-
-**"Có cần `dedupingMixin` khi chắc chắn mixin chỉ dùng một lần không?"**
-Có. Chi phí gần như bằng không, còn người sửa code sau bạn không biết ràng buộc đó. Trong Chromium, quên `dedupingMixin` bị coi là lỗi review.
-
-**"TypeScript có bắt được lỗi trùng tên method giữa hai mixin không?"**
-Không đáng tin. Nếu hai mixin có method cùng tên và **cùng chữ ký**, TypeScript không kêu gì cả — cái ngoài đè cái trong im lặng. Cách phòng duy nhất là đặt tên có tiền tố theo mixin.
-
-**"Chromium đã migrate xong chưa? Giờ học Polymer có phí không?"**
-Chưa xong, và sẽ còn lâu. `chrome://settings`, `chrome://history` và phần lớn WebUI hiện vẫn chạy Polymer. Samsung Browser fork tại một thời điểm cụ thể nên còn Polymer nhiều hơn nữa. Code mới viết bằng Lit, nhưng đọc và sửa code cũ thì bắt buộc biết Polymer.
-
-**"Migrate một mixin mất bao lâu?"**
-Một mixin đơn giản (chỉ method, không state): 15 phút. Có `computed`/`observers`: nửa ngày, chủ yếu tốn thời gian rà 3 cái bẫy ở bài 5 mục 5. Phần lâu nhất luôn là tìm chỗ nào đọc DOM ngay sau khi set property.
-
-## Nếu chỉ có 20 phút
-
-Cắt còn: slide 3 → 7 → 9 → 11 → 13 → 21 → 28, kèm **demo 1 mục 3** và **demo 4 mục 3**.
-
-Hai demo đó truyền đạt được hai ý cốt lõi: *mixin là mắt xích trong chain nên `super` quyết định thứ tự*, và *Polymer đồng bộ còn Lit bất đồng bộ*.
-
-## Tóm tắt bài 6
-
-- Chạy demo qua `python3 -m http.server`, không dùng `file://` cho demo 2–4.
-- Kiểm tra dải xanh "✓ Đã tải…" trước khi bắt đầu.
-- Điểm nhấn: **demo 1 mục 3** (super đầu/cuối đảo ngược trace) và **demo 4 mục 3** (`Đang mở` vs `Đang đóng`).
-- Demo 1 chạy offline — luôn có phương án dự phòng khi mất mạng.
-
-**Quay lại** → [README — mục lục](README.md)
+- Demo 2–4 đã tải đủ dependency từ CDN.
+- Trace trong demo 1 thể hiện đúng thứ tự prototype, constructor và lifecycle.
+- Demo Polymer cho thấy property từ mixin xuất hiện trong template và attribute.
+- Demo Lit cho thấy update cycle và `updateComplete`.
+- Demo so sánh cho thấy cùng API JavaScript nhưng khác reactive system.

@@ -1,109 +1,69 @@
-# Bài trình bày: Mixin — từ cơ bản đến nâng cao (Polymer → Lit)
+# Mixin trong Polymer và Lit
 
-> Một buổi trình bày ~60–90 phút về **mixin** trong Web Components: định nghĩa, luồng chạy, cách dùng, demo chạy thật, và so sánh chi tiết **Polymer 3 ↔ LitElement**.
+Bộ tài liệu này giải thích mixin theo đúng cơ chế của JavaScript, sau đó áp dụng cơ chế đó vào Polymer và Lit. Ví dụ xuyên suốt là `OpenableMixin`: bổ sung trạng thái `opened` cùng các phương thức `open()`, `close()` và `toggle()` cho một custom element.
 
-Tài liệu bám đúng môi trường **Chromium WebUI**: mọi ví dụ viết bằng Polymer 3 hoặc Lit 3, không lùi về JavaScript thuần. Nó trả lời hai câu hỏi mà tài liệu thông thường hay bỏ qua: **mixin thực sự chạy như thế nào** (prototype chain, thứ tự `super`, deduping), và **đổi gì khi codebase nâng từ Polymer lên Lit** — kể cả `ReactiveController`, công cụ Lit đưa ra để thay mixin trong nhiều trường hợp.
+Phạm vi tài liệu:
 
-Một ví dụ duy nhất xuyên suốt cả 6 bài: **`OpenableMixin`** — khả năng mở/đóng cho panel, dropdown, dialog. Nó chỉ dùng những thứ có sẵn của framework (`properties`, lifecycle, template), không gọi API nào bên ngoài, nhưng đủ để chạm tới mọi tính năng của mixin: property + reflect, computed, observer, lifecycle có `super`, method thêm vào element, và xếp chồng với `DisableableMixin`.
+1. Cơ chế class mixin trong JavaScript: prototype chain, thứ tự gọi và `super`.
+2. Cách Polymer và Lit tích hợp mixin với hệ thống property và lifecycle.
+3. Các điểm cần kiểm tra khi chuyển mixin từ Polymer sang Lit.
 
-> Nếu bạn đang học WebUI Chromium, [`chromium/phase-3-polymer/07-mixins-behaviors.md`](../chromium/phase-3-polymer/07-mixins-behaviors.md) trong repo này dạy *cách viết mixin theo convention của Chromium*. Bộ này đi sâu vào *cơ chế* bên dưới — hai bên bổ sung cho nhau, không trùng lặp.
+> Polymer đang ở chế độ bảo trì. Phần Polymer trong tài liệu phục vụ việc đọc và sửa mã nguồn hiện có; với mã mới, hãy tuân theo lựa chọn framework và quy ước của codebase đang làm việc.
 
-## Đối tượng
+## Phạm vi áp dụng
 
-- Dev sắp đọc/sửa code WebUI Chromium (Polymer cũ + Lit mới lẫn lộn).
-- Dev đã biết ES6 class, chưa nắm chắc `super` chain và prototype chain.
-- Người chuẩn bị migrate component Polymer → Lit.
+- Người đã biết `class`, `extends` và phương thức trong JavaScript.
+- Người cần đọc mã Polymer cũ hoặc chuyển component sang Lit.
+- Người làm Web Components, không nhất thiết làm Chromium WebUI.
 
-## Mục lục
+## Cấu trúc tài liệu
 
-| # | Bài | Nội dung | Thời lượng |
-|---|-----|----------|-----------|
-| 1 | [Mixin là gì](01-mixin-la-gi.md) | Bài toán trong Polymer → Behaviors hỏng ở đâu → mixin → định nghĩa | 15 phút |
-| 2 | [Luồng chạy của mixin](02-luong-chay-cua-mixin.md) | Prototype chain, `super` chain, thứ tự constructor, deduping | 20 phút |
-| 3 | [Mixin trong Polymer](03-mixin-trong-polymer.md) | Behaviors → mixins, `dedupingMixin`, properties/observers merge | 15 phút |
-| 4 | [Mixin trong Lit](04-mixin-trong-lit.md) | `static properties` merge, lifecycle mới, **ReactiveController** | 15 phút |
-| 5 | [So sánh chi tiết Polymer ↔ Lit](05-so-sanh-polymer-vs-lit.md) | Syntax, luồng chạy, cùng 1 mixin 2 cách, migration | 20 phút |
-| 6 | [Kịch bản demo](06-kich-ban-demo.md) | Cách chạy demo, timing, câu hỏi thường gặp | — |
+| Bài | Nội dung chính |
+|---|---|
+| [1. Mixin là gì?](01-mixin-la-gi.md) | Bài toán dùng chung logic, định nghĩa và giới hạn của Behavior |
+| [2. Mixin hoạt động thế nào?](02-luong-chay-cua-mixin.md) | Prototype chain, `super`, constructor và deduping |
+| [3. Mixin trong Polymer](03-mixin-trong-polymer.md) | `properties`, lifecycle, `dedupingMixin` và mã legacy |
+| [4. Mixin trong Lit](04-mixin-trong-lit.md) | Reactive property, update cycle và ReactiveController |
+| [5. Chuyển từ Polymer sang Lit](05-so-sanh-polymer-vs-lit.md) | Bản đồ chuyển đổi và quy trình kiểm tra |
+| [6. Kịch bản demo](06-kich-ban-demo.md) | Cách trình bày các demo theo một mạch ngắn gọn |
 
-## Slide
+## Định nghĩa ngắn
 
-[`slides.html`](slides.html) — deck tự chứa (không cần internet, không cần build). Mở bằng browser:
+```js
+const OpenableMixin = (Base) => class extends Base {
+  toggle() {
+    this.opened = !this.opened;
+  }
+};
 
-```bash
-# Mở trực tiếp
-xdg-open mixin/slides.html   # Linux
-open mixin/slides.html       # macOS
+class MyPanel extends OpenableMixin(HTMLElement) {}
 ```
 
-Điều khiển: `→` / `Space` next, `←` prev, `F` fullscreen, `O` overview.
+Mixin không sao chép phương thức vào `MyPanel`. Nó tạo một lớp con trung gian:
 
-## Demo
+```text
+MyPanel → OpenableMixinImpl → HTMLElement
+```
 
-4 demo chạy thật trong browser, mỗi demo có **bảng trace** in ra thứ tự thực thi để bạn *nhìn thấy* luồng chạy thay vì tưởng tượng.
+Vì đây là quan hệ kế thừa thật, một mixin có thể gọi `super.toggle()` để tiếp tục thực thi phương thức ở lớp phía dưới.
 
-| Demo | File | Cần internet |
-|---|---|---|
-| Mixin thuần JS — prototype chain & super chain | [`demo/01-mixin-thuan-js.html`](demo/01-mixin-thuan-js.html) | Không |
-| Mixin trong Polymer 3 — cả Behaviors legacy | [`demo/02-mixin-polymer.html`](demo/02-mixin-polymer.html) | Có (CDN) |
-| Mixin trong Lit 3 — lifecycle & ReactiveController | [`demo/03-mixin-lit.html`](demo/03-mixin-lit.html) | Có (CDN) |
-| Side-by-side: cùng 1 mixin, 2 framework | [`demo/04-side-by-side.html`](demo/04-side-by-side.html) | Có (CDN) |
+## Slide và demo
 
-### Chạy demo
-
-Demo 01 mở trực tiếp bằng `file://` được. Demo 02–04 dùng ES modules + import map từ CDN — **nên chạy qua HTTP server** để tránh khác biệt CORS giữa các browser:
+- [slides.html](slides.html) là bộ slide tự chứa, có thể mở trực tiếp bằng trình duyệt.
+- Các file trong [demo](demo) minh họa thứ tự thực thi. Demo Polymer và Lit tải thư viện từ CDN, nên cần mạng và nên chạy qua HTTP server:
 
 ```bash
 cd mixin/demo
 python3 -m http.server 8000
-# → http://localhost:8000/02-mixin-polymer.html
 ```
 
-> Các demo dùng Polymer `3.5.1`, Lit `3.x` và `@webcomponents/shadycss` `1.11.2` từ jsDelivr. Bản Polymer tải qua CDN dùng import tương đối nên chạy thẳng được; riêng nhánh **Behaviors legacy** cần `<script type="importmap">` để map `@webcomponents/shadycss/` — demo 02 đã kèm sẵn.
+Sau đó mở `http://localhost:8000/01-mixin-thuan-js.html` đến `04-side-by-side.html`.
 
-## Một trang tóm tắt
+## Tài liệu tham khảo
 
-Nếu chỉ có 5 phút, đây là toàn bộ nội dung:
-
-```text
-Mixin = hàm nhận 1 class, trả về class con mới đã thêm tính năng.
-
-    const OpenableMixin = (superClass) => class extends superClass { ... };
-    class MyPanel extends OpenableMixin(PolymerElement) { }
-
-Nó KHÔNG copy method sang component bạn. Nó CHÈN một mắt xích mới
-vào chuỗi kế thừa, nằm GIỮA component bạn và class base:
-
-    MyPanel  →  OpenableMixin  →  PolymerElement  →  HTMLElement
-
-Vì là mắt xích thật nên `super.toggle()` hoạt động bình thường
-→ một mixin có thể "bọc" method của mixin khác thay vì đè mất nó.
-Đây đúng là thứ Behaviors của Polymer 1 KHÔNG làm được, và là lý do
-Polymer 3 bỏ Behaviors.
-
-Polymer và Lit dùng CHUNG cơ chế này (đều là ES6 class).
-Khác nhau ở phần framework, không phải phần mixin:
-
-  • Polymer: `static get properties()`, `value:`, `computed:`, `observer:`,
-             `reflectToAttribute`, hook `ready()`, có sẵn `dedupingMixin()`.
-             Cập nhật DOM ĐỒNG BỘ.
-  • Lit:     `static properties = {}`, mặc định gán trong constructor,
-             computed → getter, observer → `updated()`, `reflect`.
-             KHÔNG có deduping sẵn. Cập nhật DOM BẤT ĐỒNG BỘ
-             → phải `await this.updateComplete` trước khi đọc DOM.
-
-Ở Lit còn có ReactiveController — dùng thay mixin khi KHÔNG cần
-thêm API lên chính element, hoặc khi cần nhiều bản trong một element.
-
-    Cần el.toggle() gọi được từ template?  → Mixin
-    Chỉ cần lifecycle + state riêng?        → ReactiveController
-```
-
-## Nguồn tham chiếu
-
-- [Polymer 3 — mixin utils](https://github.com/Polymer/polymer/blob/master/lib/utils/mixin.js)
-- [Lit — Mixins guide](https://lit.dev/docs/composition/mixins/)
-- [Lit — Reactive Controllers](https://lit.dev/docs/composition/controllers/)
-- [TypeScript — Mixins handbook](https://www.typescriptlang.org/docs/handbook/mixins.html)
-- Chromium: `ui/webui/resources/cr_elements/i18n_mixin.ts`, `web_ui_listener_mixin.ts`
-
-→ Bắt đầu: [Bài 1 — Mixin là gì](01-mixin-la-gi.md)
+- [Polymer: custom elements và mixin](https://polymer-library.polymer-project.org/3.0/docs/devguide/custom-elements)
+- [Polymer: data system](https://polymer-library.polymer-project.org/3.0/docs/devguide/data-system)
+- [Lit: mixins](https://lit.dev/docs/composition/mixins/)
+- [Lit: reactive properties](https://lit.dev/docs/components/properties/)
+- [Lit: lifecycle](https://lit.dev/docs/components/lifecycle/)
+- [Lit: controllers và composition](https://lit.dev/docs/composition/overview/)

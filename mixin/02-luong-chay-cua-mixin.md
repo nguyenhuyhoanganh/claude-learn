@@ -1,347 +1,209 @@
-# Bài 2: Luồng chạy của mixin — prototype chain và `super` chain
+# Cơ chế hoạt động của mixin
 
-> Mục tiêu: nhìn vào một chuỗi mixin bất kỳ và **nói đúng thứ tự** các đoạn code sẽ chạy, không cần đoán.
+## Phạm vi
 
-Đây là bài quan trọng nhất của buổi trình bày. Hầu hết bug liên quan đến mixin đều là bug *thứ tự*, không phải bug *logic*.
+Phần này mô tả prototype chain, thứ tự constructor, cách `super` ảnh hưởng đến thứ tự gọi method và trường hợp một mixin xuất hiện lặp trong chain.
 
-## 1. Mixin làm gì với prototype chain
+## Prototype chain
 
-Nhắc lại: `class B extends A` chỉ làm đúng một việc — đặt `B.prototype.__proto__ = A.prototype`. Nói cách khác, nó nối `B` vào sau `A` thành một chuỗi.
+Xét khai báo:
 
-Mixin cũng y như vậy, chỉ khác là class trung gian không có tên sẵn.
-
-Lấy lại `OpenableMixin` từ bài 1:
-
-```javascript
-class MyPanel extends OpenableMixin(PolymerElement) { }
+```js
+class MyPanel extends DisableableMixin(OpenableMixin(HTMLElement)) {}
 ```
 
-Chuỗi sinh ra:
+JavaScript tạo các lớp trung gian. Nếu gọi các lớp đó là `DisableableMixinImpl` và `OpenableMixinImpl`, quan hệ prototype là:
 
 ```text
 MyPanel.prototype
-      │  __proto__
-      ▼
-OpenableMixin.prototype        ← toggle(), open(), close() nằm ở đây
-      │  __proto__
-      ▼
-PolymerElement.prototype       ← ready(), connectedCallback()… của framework
-      │  __proto__
-      ▼
-HTMLElement.prototype  →  Element  →  Node  →  EventTarget  →  Object
+  → DisableableMixinImpl.prototype
+  → OpenableMixinImpl.prototype
+  → HTMLElement.prototype
 ```
 
-Khi bạn gọi `panel.toggle()`, JS đi **từ trên xuống**: tìm trong `MyPanel.prototype` → không có → tìm tiếp ở `OpenableMixin` → thấy → chạy.
+Khi chạy `panel.toggle()`, JavaScript tìm `toggle` từ trái sang phải trong sơ đồ trên. Nếu `MyPanel` không có method này nhưng `DisableableMixinImpl` có, method ở `DisableableMixinImpl` sẽ được gọi.
 
-Đây là toàn bộ "phép thuật" của mixin. Không có gì hơn. Mixin chỉ chèn thêm **một mắt xích** vào giữa component của bạn và `PolymerElement`.
+Quy tắc cần nhớ là: lớp ở gần `MyPanel` hơn có ưu tiên cao hơn khi trùng tên method.
 
-> Đổi `PolymerElement` thành `LitElement` thì phần dưới chuỗi đổi, nhưng **mắt xích mixin chèn vào không đổi chút nào**. Đây là lý do bài 4 sẽ thấy: cơ chế mixin của Lit giống hệt Polymer.
+## Xếp chồng mixin
 
-### Xếp chồng nhiều mixin
+Viết tổng quát:
 
-```javascript
-class MyPanel extends DisableableMixin(OpenableMixin(PolymerElement)) { }
+```js
+class MyElement extends A(B(Base)) {}
 ```
 
-Đọc **từ trong ra ngoài**: `OpenableMixin` được áp trước (gần `PolymerElement` nhất), rồi `DisableableMixin` (gần `MyPanel` nhất).
+Thứ tự áp dụng là `B` trước rồi `A`. Chuỗi kế thừa là:
 
 ```text
-MyPanel  →  DisableableMixin  →  OpenableMixin  →  PolymerElement
-   ▲               ▲                    ▲
-   │               │                    │
-class của bạn  gần bạn hơn         gần base hơn
-               ưu tiên cao hơn      chạy "sâu" hơn
+MyElement → AImpl → BImpl → Base
 ```
 
-Cả hai mixin đều có `toggle()`. `DisableableMixin` nằm gần `MyPanel` hơn nên **thắng** — JS tìm thấy nó trước. Rồi bên trong nó gọi `super.toggle()` để chạy tiếp xuống bản của `OpenableMixin`.
+Do đó, `AImpl` được tra cứu trước `BImpl`. Đây là lý do `A` có thể kiểm tra hoặc thay đổi hành vi rồi gọi `super` xuống `B`.
 
-Với ký hiệu tổng quát, `A(B(C(Base)))` đọc là: `C` áp trước, rồi `B`, rồi `A`.
-
-> **Mẹo nhớ:** mixin nằm **gần class của bạn nhất** thì **thắng** khi trùng tên method, vì JS tìm thấy nó trước.
-
-## 2. Thứ tự constructor — luôn từ trong ra ngoài
-
-Trong JS, `super()` **bắt buộc** gọi trước khi dùng `this`. Nghĩa là constructor của base **luôn chạy xong trước** phần thân constructor của class con.
-
-```javascript
-const A = (Base) => class extends Base {
-  constructor() { super(); console.log('A body'); }
-};
+```js
 const B = (Base) => class extends Base {
-  constructor() { super(); console.log('B body'); }
-};
-
-class MyEl extends A(B(HTMLElement)) {
-  constructor() { super(); console.log('MyEl body'); }
-}
-```
-
-Kết quả:
-
-```text
-B body       ← trong cùng chạy trước
-A body
-MyEl body    ← ngoài cùng chạy sau
-```
-
-Luồng thực tế: `MyEl.constructor` gọi `super()` → `A.constructor` gọi `super()` → `B.constructor` gọi `super()` → `HTMLElement` xong → *quay ngược lại* chạy thân `B`, rồi `A`, rồi `MyEl`.
-
-```text
-đi xuống (gọi super)          đi lên (chạy thân hàm)
-MyEl ──┐                              ┌── MyEl body   (4)
-       ▼                              │
-  A ───┐                          ┌───┘
-       ▼                          │
-  B ───┐                      ┌───┘  A body           (3)
-       ▼                      │
- HTMLElement ─────────────────┘      B body           (2)
-                                     HTMLElement      (1)
-```
-
-→ **Constructor: luôn là base-first.** Không có ngoại lệ, vì JS ép buộc.
-
-## 3. Thứ tự method thường — bạn tự quyết
-
-Với method không phải constructor, thứ tự phụ thuộc **bạn đặt `super.x()` ở đâu**.
-
-### Kiểu A — `super` gọi đầu (phổ biến nhất)
-
-```javascript
-const M = (Base) => class extends Base {
-  connectedCallback() {
-    super.connectedCallback();     // ← đầu
-    console.log('M: sau super');
+  action() {
+    console.log('B');
   }
 };
-class MyEl extends M(HTMLElement) {
-  connectedCallback() {
-    super.connectedCallback();     // ← đầu
-    console.log('MyEl: sau super');
+
+const A = (Base) => class extends Base {
+  action() {
+    console.log('A: before');
+    super.action();
+    console.log('A: after');
+  }
+};
+
+class MyElement extends A(B(HTMLElement)) {}
+
+new MyElement().action();
+// A: before
+// B
+// A: after
+```
+
+Một mixin gọi `super.action()` chỉ khi nó có hợp đồng rõ ràng rằng lớp phía dưới cung cấp `action()`. Với mixin tổng quát, hãy ghi điều kiện này trong tài liệu hoặc dùng một tên method nội bộ ít có khả năng trùng.
+
+## Thứ tự constructor
+
+```js
+const A = (Base) => class extends Base {
+  constructor() {
+    super();
+    console.log('A');
+  }
+};
+
+const B = (Base) => class extends Base {
+  constructor() {
+    super();
+    console.log('B');
+  }
+};
+
+class MyElement extends A(B(HTMLElement)) {
+  constructor() {
+    super();
+    console.log('MyElement');
   }
 }
 ```
 
-```text
-M: sau super        ← base-first, giống constructor
-MyEl: sau super
-```
-
-Dùng khi: logic của bạn **phụ thuộc** vào việc base đã khởi tạo xong (đọc `this.shadowRoot`, đọc property đã init...).
-
-### Kiểu B — `super` gọi cuối
-
-```javascript
-const M = (Base) => class extends Base {
-  disconnectedCallback() {
-    console.log('M: trước super');
-    super.disconnectedCallback();  // ← cuối
-  }
-};
-```
+Kết quả là `B`, `A`, rồi `MyElement`. Lý do là mỗi constructor phải gọi `super()` trước khi dùng `this`; lời gọi đi đến lớp cơ sở trước, sau đó phần thân constructor được thực thi khi ngăn xếp lời gọi quay trở lại.
 
 ```text
-MyEl: trước super   ← đảo ngược!
-M: trước super
+HTMLElement → B → A → MyElement
 ```
 
-Dùng khi: **cleanup**. Bạn muốn gỡ listener của mình *trước khi* base tháo dỡ mọi thứ.
+Đây là quy tắc của JavaScript, không phải quy tắc riêng của Polymer hay Lit.
 
-> **Quy tắc thực chiến:**
-> - Setup (`connectedCallback`, `ready`, `willUpdate`) → `super` **đầu tiên**.
-> - Teardown (`disconnectedCallback`) → `super` **cuối cùng**.
->
-> Cách nhớ: vào thì base vào trước, ra thì base ra sau — như xếp chồng đĩa.
+## Thứ tự method và vị trí `super`
 
-### Kiểu C — quên `super` (bug kinh điển)
+Constructor bắt buộc gọi `super()` trước khi dùng `this`, còn method thông thường thì không. Vì vậy, thứ tự chạy phụ thuộc vào vị trí của lệnh `super`.
 
-```javascript
-const M = (Base) => class extends Base {
+```js
+const A = (Base) => class extends Base {
   connectedCallback() {
-    console.log('M chạy');
-    // quên super.connectedCallback()
+    super.connectedCallback();
+    console.log('A sau super');
   }
 };
 ```
 
-Hậu quả: **mọi thứ nằm dưới `M` trong chuỗi đều không chạy.** Với Lit, quên `super.connectedCallback()` → element không bao giờ render, màn hình trắng, không có lỗi nào được ném ra. Đây là lỗi tốn thời gian debug nhất khi làm việc với mixin.
+Nếu lớp cuối cũng gọi `super.connectedCallback()` trước khi log, phần ở lớp cơ sở sẽ chạy trước. Nếu một lớp log trước rồi mới gọi `super`, phần log của lớp đó chạy trước các lớp phía dưới.
 
-## 4. Trace thật — chạy được, không phải lý thuyết
+Không có quy tắc chung rằng teardown luôn phải gọi `super` ở cuối. Vị trí lời gọi phải dựa trên hợp đồng của framework và thứ tự phụ thuộc của code. Polymer yêu cầu gọi phương thức lifecycle của lớp cha ngay đầu callback để framework hoàn tất phần xử lý của nó. Với Lit, callback chuẩn của custom element phải gọi implementation của lớp cha để giữ hoạt động chuẩn của Lit; vị trí lời gọi quyết định thứ tự của các lớp trong chain.
 
-Đoạn trace dưới đây là **output thật** lấy từ Chromium headless, chạy Polymer 3.5.1 và Lit 3 với cùng một mixin log lifecycle.
+## Override lifecycle thiếu `super`
 
-### Polymer
-
-```text
-  LoggerMixin.connectedCallback
-MyEl.ready — trước super
-  LoggerMixin.ready — trước super
-  LoggerMixin.ready — sau super
-MyEl.ready — sau super
+```js
+const LoggingMixin = (Base) => class extends Base {
+  connectedCallback() {
+    console.log('connected');
+    // thiếu super.connectedCallback()
+  }
+};
 ```
 
-Đọc được 2 điều:
+Lời gọi dừng ở lớp này. Mọi implementation `connectedCallback` phía dưới nó đều không chạy. Với `PolymerElement` hoặc `LitElement`, việc đó có thể làm hỏng quá trình khởi tạo hoặc update mà không tạo ra thông báo lỗi dễ hiểu.
 
-1. `connectedCallback` chạy **trước** `ready` — vì Polymer gọi `ready()` từ bên trong lần `connectedCallback` đầu tiên.
-2. Phần trước `super.ready()` chạy **từ ngoài vào** (`MyEl` → `Mixin`), phần sau `super.ready()` chạy **từ trong ra** (`Mixin` → `MyEl`). Đây chính là mô hình "bọc" — mixin quấn quanh logic của base.
+Khi review mixin có override lifecycle, hãy kiểm tra `super` trước tiên.
 
-### Lit
+## Mixin xuất hiện lặp trong chain
 
-```text
-  LoggerMixin.constructor
-MyLit.constructor
-MyLit.connectedCallback — trước super
-  LoggerMixin.connectedCallback — trước super
-MyLit.willUpdate
-  LoggerMixin.willUpdate  đổi=[logCount,own]
-MyLit.render
-MyLit.firstUpdated
-  LoggerMixin.updated     đổi=[logCount,own]
-MyLit.updated
+Mỗi lần gọi một mixin thông thường, JavaScript tạo một lớp mới:
+
+```js
+const M = (Base) => class extends Base {};
+
+M(HTMLElement) === M(HTMLElement); // false
 ```
 
-Đọc được:
+Điều này trở thành vấn đề nếu cùng một mixin đi vào chuỗi kế thừa qua hai đường khác nhau:
 
-1. Constructor: mixin trước, class bạn sau (đúng quy tắc mục 2).
-2. `willUpdate` nhận `changedProperties` chứa **cả property của mixin lẫn của class** (`logCount,own`) → Lit đã gộp khai báo property từ cả chuỗi.
-3. `updated` của mixin chạy trước `updated` của class, vì cả hai đều gọi `super.updated()` ở đầu.
-
-> Cả hai trace này được tái tạo trực tiếp trong [`demo/04-side-by-side.html`](demo/04-side-by-side.html) — chạy song song hai framework, in ra hai cột.
-
-## 5. Vấn đề kim cương và deduping
-
-Nhớ lại bài 1: **mỗi lần gọi mixin sinh ra một class mới.**
-
-```javascript
-M(Base) === M(Base)   // false
+```js
+class Parent extends LoggerMixin(HTMLElement) {}
+class Child extends LoggerMixin(Parent) {}
 ```
 
-Giờ xét tình huống rất đời thường:
+`Child` lúc này có hai lớp do `LoggerMixin` tạo ra. Nếu mixin đăng ký listener hoặc thay đổi lifecycle, công việc có thể được thực hiện hai lần.
 
-```javascript
-const A = LoggerMixin(PolymerElement);
+### `dedupingMixin` trong Polymer
 
-class Parent extends LoggerMixin(PolymerElement) { }
-class Child  extends LoggerMixin(Parent) { }   // ← áp LoggerMixin lần 2
-```
+Polymer cung cấp `dedupingMixin` cho trường hợp này. Hàm này nhớ lớp đã tạo cho một base class và kiểm tra xem mixin đã xuất hiện trong chuỗi kế thừa hay chưa.
 
-Chuỗi của `Child`:
-
-```text
-Child → LoggerMixin#2 → Parent → LoggerMixin#1 → PolymerElement
-                ▲                       ▲
-                └──── cùng 1 mixin, 2 bản sao ────┘
-```
-
-Hậu quả đo được (số liệu thật từ demo):
-
-```text
-1 element, mixin áp MỘT lần  → constructor của mixin chạy 1 lần
-1 element, mixin áp HAI lần  → constructor của mixin chạy 2 lần
-```
-
-Nghĩa là: listener đăng ký 2 lần, event handler chạy 2 lần, và nếu mixin có counter thì nó tăng gấp đôi. Bug rất khó lần ra vì code trông hoàn toàn hợp lý.
-
-### Cách chữa: nhớ xem đã áp chưa
-
-Ý tưởng gồm **hai** phần, và phần thứ hai hay bị bỏ sót:
-
-1. **Cache theo `Base`** — áp mixin lên đúng một `Base` hai lần thì trả lại class cũ.
-2. **Đánh dấu lên class kết quả** — để nhận ra mixin đã nằm sẵn ở đâu đó *phía trên* trong chuỗi, kể cả khi đi qua kế thừa (chính là trường hợp `Child`/`Parent` ở trên).
-
-```javascript
-function dedupeMixin(mixin) {
-  const cache = new WeakMap();
-  const marker = Symbol('mixin-applied');   // dấu riêng cho từng mixin
-
-  return (Base) => {
-    // (2) Chuỗi đã có mixin này rồi → trả nguyên Base, không bọc thêm
-    if (Base[marker]) return Base;
-    // (1) Đã từng áp lên đúng Base này → dùng lại class cũ
-    if (cache.has(Base)) return cache.get(Base);
-
-    const Klass = mixin(Base);
-    // static property → mọi class con của Klass đều "thấy" dấu này
-    Object.defineProperty(Klass, marker, {value: true});
-    cache.set(Base, Klass);
-    return Klass;
-  };
-}
-
-const LoggerMixin = dedupeMixin((Base) => class extends Base { /* ... */ });
-```
-
-Kết quả đo được, so với bản chỉ có `WeakMap`:
-
-| | Chỉ `WeakMap` | `WeakMap` + dấu |
-|---|---|---|
-| `M(Base) === M(Base)` | ✅ true | ✅ true |
-| `M(M(Base)) === M(Base)` | ❌ false | ✅ true |
-| Số lần chạy ở ca kim cương `Child`/`Parent` | ❌ **2 lần** | ✅ 1 lần |
-
-→ Chỉ dùng `WeakMap` thì **vẫn hỏng đúng ở tình huống đã nêu bên trên**. Phải có cả dấu đánh.
-
-Hai chi tiết kỹ thuật:
-
-- Dùng `WeakMap` chứ không phải `Map` — để class không bị giữ sống mãi (tránh leak).
-- Dấu đánh là **static property**, mà static property được kế thừa theo chuỗi class (`Child.__proto__ === Parent`), nên `Parent[marker]` đúng cho mọi class con.
-
-Polymer **đóng gói sẵn** đúng cơ chế hai phần này:
-
-```javascript
+```js
 import {dedupingMixin} from '@polymer/polymer/lib/utils/mixin.js';
 
-const LoggerMixin = dedupingMixin((Base) => class extends Base { /* ... */ });
-
-LoggerMixin(LoggerMixin(PolymerElement)) === LoggerMixin(PolymerElement)   // true ✅
+export const LoggerMixin = dedupingMixin((Base) => class extends Base {
+  // ...
+});
 ```
 
-Bên trong, `dedupingMixin` của Polymer dùng một `WeakMap` cộng với `__mixinSet` — vai trò y hệt `marker` ở trên.
+Đây là lựa chọn phù hợp cho mixin Polymer có thể được kết hợp với mixin hoặc lớp khác.
 
-Lit **không có** hàm tương đương — bạn tự viết (bài 4). Đây là một trong những khác biệt dễ vấp nhất khi migrate.
+### Lit và JavaScript thuần
 
-## 6. Bảng tra thứ tự
+Lit không có helper deduping tích hợp. Chỉ cần viết helper riêng khi thiết kế mixin có khả năng bị áp dụng lặp qua nhiều lớp. Helper cần làm hai việc: nhớ kết quả theo base class và nhận ra mixin đã có trong chuỗi kế thừa.
 
-Với `class MyEl extends A(B(Base))`:
+```js
+function dedupeMixin(mixin) {
+  const cache = new WeakMap();
+  const marker = Symbol('applied');
 
-| Việc | Thứ tự chạy | Do ai quyết |
-|---|---|---|
-| `constructor` | `Base` → `B` → `A` → `MyEl` | JS ép buộc |
-| Method có `super` ở **đầu** | `Base` → `B` → `A` → `MyEl` | Bạn |
-| Method có `super` ở **cuối** | `MyEl` → `A` → `B` → `Base` | Bạn |
-| Tra cứu method trùng tên | `MyEl` → `A` → `B` → `Base`, **dừng ở cái đầu tiên tìm thấy** | JS |
-| Gộp `static properties` | Gộp cả chuỗi; **gần `MyEl` hơn thì thắng** khi trùng key | Framework |
+  return (Base) => {
+    if (Base[marker]) return Base;
+    if (cache.has(Base)) return cache.get(Base);
 
-## 7. Bẫy thường gặp
-
-| Bẫy | Triệu chứng | Cách tránh |
-|---|---|---|
-| Quên `super.x()` | Element không render, **không có lỗi** | Luôn viết `super.x()` trước khi viết thân hàm |
-| `super` đặt sai đầu/cuối | Cleanup chạy sau khi DOM đã tháo → lỗi null | Setup: super đầu. Teardown: super cuối |
-| Áp mixin 2 lần | Listener nhân đôi, counter nhân đôi | `dedupingMixin` (Polymer) / WeakMap (Lit) |
-| Hai mixin trùng tên method | Cái ngoài đè cái trong, im lặng | Gọi `super.x()` để bọc thay vì đè; hoặc đặt tên có tiền tố |
-| Hai mixin trùng tên property | Framework gộp, giá trị khó đoán | Tiền tố theo mixin |
-| Chuỗi mixin quá dài | Stack trace toàn class ẩn danh | Tối đa 3–4 mixin; gom vào một `const Base = ...` |
-
-### Mẹo đặt tên cho class ẩn danh
-
-Stack trace đầy class không tên rất khó debug. Đặt tên cho class bên trong mixin:
-
-```javascript
-const LoggerMixin = (Base) => {
-  class LoggerMixinImpl extends Base { /* ... */ }   // ← có tên
-  return LoggerMixinImpl;
-};
+    const Result = mixin(Base);
+    Object.defineProperty(Result, marker, {value: true});
+    cache.set(Base, Result);
+    return Result;
+  };
+}
 ```
 
-Giờ DevTools hiện `LoggerMixinImpl` thay vì chuỗi rỗng. Chromium dùng đúng thủ thuật này trong các mixin TypeScript của `cr_elements`.
+`WeakMap` giúp cache không giữ class lại chỉ vì cache còn tồn tại. Deduping chỉ phù hợp khi cách sử dụng mixin có nguy cơ áp dụng lặp và có test cho trường hợp kế thừa tương ứng.
 
-## Tóm tắt bài 2
+## Bảng tra cứu
 
-- Mixin chèn một **mắt xích thật** vào prototype chain; mọi hành vi đều suy ra được từ đó.
-- `A(B(Base))` đọc **từ trong ra ngoài**: `B` gần base, `A` gần bạn. Gần bạn hơn thì **thắng** khi trùng tên.
-- **Constructor luôn base-first** — JS ép buộc, không đổi được.
-- Method thường: **bạn** quyết thứ tự qua vị trí của `super`. Setup → super đầu; teardown → super cuối.
-- Quên `super` = cắt đứt chuỗi, hỏng im lặng. Bug tốn thời gian nhất.
-- Áp mixin 2 lần = chạy 2 lần thật (đã đo). Polymer có `dedupingMixin`; Lit phải tự viết WeakMap.
+Với `class MyElement extends A(B(Base))`:
 
-**Bài kế tiếp** → [Bài 3: Mixin trong Polymer](03-mixin-trong-polymer.md)
+| Việc | Thứ tự hoặc quy tắc |
+|---|---|
+| Tra cứu method | `MyElement → A → B → Base`; gặp method đầu tiên thì dừng |
+| Constructor | `Base → B → A → MyElement` |
+| Method có `super` ở đầu | Phần ở lớp cơ sở chạy trước phần sau `super` |
+| Method có `super` ở cuối | Phần trước `super` ở lớp ngoài chạy trước |
+| Áp cùng mixin hai lần | Có thể tạo hai lớp trung gian và chạy logic hai lần |
+
+## Quy tắc chính
+
+- Mixin tạo lớp trung gian thật trong prototype chain.
+- Với `A(B(Base))`, `A` gần lớp cuối hơn và được tìm thấy trước.
+- Constructor luôn đi từ base lên lớp cuối.
+- Với method thường, thứ tự phụ thuộc vào nơi gọi `super`.
+- Quên `super` ở lifecycle có thể cắt đứt phần framework phía dưới.
+- Dùng `dedupingMixin` cho mixin Polymer có nguy cơ đi vào chain nhiều lần.

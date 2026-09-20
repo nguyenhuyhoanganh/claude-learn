@@ -1,969 +1,499 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mixin: từ cơ bản đến nâng cao — Polymer → Lit</title>
-<style>
-  :root {
-    --bg:#101215; --ink:#e8eaed; --muted:#9aa0a6; --line:#2b3037;
-    --poly:#8ab4f8; --lit:#c9aef5; --ok:#81c995; --err:#f28b82; --warn:#fdd663;
-    --code:#181b1f;
-  }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  html,body { height:100%; }
-  body { background:var(--bg); color:var(--ink); overflow:hidden;
-         font:16px/1.6 -apple-system,'Segoe UI',Roboto,sans-serif; }
-
-  .slide { position:absolute; inset:0; display:none; flex-direction:column;
-           padding:52px 64px 68px; overflow:auto; }
-  .slide.on { display:flex; }
-  @media (max-width:760px) { .slide { padding:32px 22px 60px; } }
-
-  h1 { font-size:42px; line-height:1.2; font-weight:700; letter-spacing:-.02em; }
-  h2 { font-size:30px; line-height:1.25; font-weight:650; letter-spacing:-.015em;
-       margin-bottom:6px; }
-  h3 { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
-       font-weight:600; margin-bottom:10px; }
-  .lead { font-size:19px; color:var(--muted); margin-bottom:26px; max-width:70ch; }
-  p, li { font-size:17px; }
-  ul { margin:0 0 16px 22px; } li { margin-bottom:9px; }
-  .big { font-size:22px; }
-  strong { color:#fff; font-weight:650; }
-  em { color:var(--warn); font-style:normal; }
-
-  pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--poly);
-        border-radius:7px; padding:15px 17px; overflow:auto; margin-bottom:14px;
-        font:13.5px/1.62 ui-monospace,Menlo,Consolas,monospace; white-space:pre; }
-  pre.lit { border-left-color:var(--lit); }
-  pre.plain { border-left-color:var(--line); }
-  pre b { color:var(--warn); font-weight:600; }
-  pre .c { color:var(--muted); }
-  pre .g { color:var(--ok); }
-  pre .r { color:var(--err); }
-  code { background:var(--code); padding:1.5px 6px; border-radius:4px;
-         font:14px ui-monospace,Menlo,Consolas,monospace; }
-
-  .cols { display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start; }
-  .cols.tight { gap:14px; }
-  @media (max-width:860px) { .cols { grid-template-columns:1fr; } }
-  .tag { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.04em;
-         padding:3px 9px; border-radius:99px; margin-bottom:8px; }
-  .tag.p { background:rgba(138,180,248,.16); color:var(--poly); }
-  .tag.l { background:rgba(201,174,245,.16); color:var(--lit); }
-
-  table { border-collapse:collapse; width:100%; font-size:15px; }
-  th,td { text-align:left; padding:8px 11px; border-bottom:1px solid var(--line);
-          vertical-align:top; }
-  th { color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.04em; }
-  td code { font-size:13px; }
-
-  .box { border:1px solid var(--line); border-radius:8px; padding:15px 17px;
-         background:var(--code); margin-bottom:14px; }
-  .box.ok { border-left:3px solid var(--ok); }
-  .box.bad { border-left:3px solid var(--err); }
-  .box.warn { border-left:3px solid var(--warn); }
-
-  .nav { position:fixed; left:0; right:0; bottom:0; height:46px; display:flex;
-         align-items:center; justify-content:space-between; padding:0 22px;
-         border-top:1px solid var(--line); background:rgba(16,18,21,.94);
-         font-size:13px; color:var(--muted); backdrop-filter:blur(8px); }
-  .nav .deck { font-weight:600; color:var(--ink); }
-  .nav button { background:none; border:1px solid var(--line); color:var(--muted);
-                border-radius:5px; padding:3px 11px; cursor:pointer; font:inherit;
-                margin-left:6px; }
-  .nav button:hover { color:var(--ink); border-color:var(--muted); }
-  .bar { position:fixed; top:0; left:0; height:2px; background:var(--poly);
-         transition:width .18s ease; z-index:10; }
-
-  /* Overview */
-  #ov { position:fixed; inset:0; background:rgba(10,11,13,.97); z-index:20;
-        display:none; padding:34px; overflow:auto; }
-  #ov.on { display:block; }
-  #ov h4 { color:var(--muted); font-size:13px; text-transform:uppercase;
-           letter-spacing:.06em; margin-bottom:16px; font-weight:600; }
-  .ovgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:11px; }
-  .ovcard { border:1px solid var(--line); border-radius:7px; padding:11px 13px;
-            cursor:pointer; background:var(--code); }
-  .ovcard:hover { border-color:var(--poly); }
-  .ovcard .n { color:var(--muted); font-size:11px; margin-bottom:3px; }
-  .ovcard .t { font-size:13.5px; font-weight:600; line-height:1.35; }
-
-  .center { justify-content:center; align-items:center; text-align:center; }
-  .center .lead { margin:14px auto 0; }
-  .kbd { display:inline-block; border:1px solid var(--line); border-bottom-width:2px;
-         border-radius:4px; padding:1px 7px; font-size:12.5px; font-family:ui-monospace,monospace; }
-  .arrow { color:var(--muted); font-size:20px; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mixin trong Polymer và Lit</title>
+  <style>
+    :root {
+      --bg: #101215;
+      --surface: #181b1f;
+      --line: #2b3037;
+      --text: #e8eaed;
+      --muted: #a8afb8;
+      --polymer: #8ab4f8;
+      --lit: #c9aef5;
+      --ok: #81c995;
+      --warn: #fdd663;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font: 17px/1.58 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+    .slide {
+      display: none;
+      position: absolute;
+      inset: 0;
+      overflow: auto;
+      padding: 56px 8vw 76px;
+    }
+    .slide.on { display: flex; flex-direction: column; }
+    .center { align-items: center; justify-content: center; text-align: center; }
+    h1 { margin: 0; font-size: clamp(38px, 6vw, 64px); line-height: 1.15; }
+    h2 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 40px); line-height: 1.2; }
+    h3 { margin: 0 0 8px; font-size: 16px; color: var(--muted); }
+    p { margin: 0 0 16px; }
+    .lead { color: var(--muted); font-size: 21px; max-width: 68ch; }
+    .center .lead { margin: 16px auto; }
+    strong { color: #fff; }
+    code {
+      background: var(--surface);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font: .88em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    pre {
+      margin: 14px 0;
+      padding: 16px 18px;
+      overflow: auto;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--polymer);
+      border-radius: 8px;
+      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-align: left;
+    }
+    pre.lit { border-left-color: var(--lit); }
+    .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .box {
+      padding: 18px 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .box.ok { border-left: 3px solid var(--ok); }
+    .box.warn { border-left: 3px solid var(--warn); }
+    ul, ol { margin: 4px 0 18px 24px; padding: 0; }
+    li { margin: 7px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+    .tag {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .tag.polymer { color: var(--polymer); background: #8ab4f820; }
+    .tag.lit { color: var(--lit); background: #c9aef520; }
+    .chain { color: var(--ok); font: 20px/1.9 ui-monospace, monospace; }
+    .nav {
+      position: fixed;
+      z-index: 2;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      display: flex;
+      height: 48px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      border-top: 1px solid var(--line);
+      background: #101215ee;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .nav button {
+      margin-left: 6px;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .progress { position: fixed; z-index: 3; top: 0; left: 0; height: 3px; background: var(--polymer); }
+    #overview {
+      display: none;
+      position: fixed;
+      z-index: 4;
+      inset: 0;
+      overflow: auto;
+      padding: 32px;
+      background: #0d0f12fa;
+    }
+    #overview.on { display: block; }
+    #overview h2 { color: var(--muted); font-size: 18px; }
+    .overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+    .overview-card {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+    .overview-card:hover { border-color: var(--polymer); }
+    .overview-number { color: var(--muted); font-size: 12px; }
+    @media (max-width: 760px) {
+      .slide { padding: 40px 24px 68px; }
+      .cols { grid-template-columns: 1fr; }
+      .lead { font-size: 18px; }
+      body { font-size: 16px; }
+    }
+  </style>
 </head>
 <body>
-<div class="bar" id="bar"></div>
+  <div class="progress" id="progress"></div>
 
-<!-- 1 -->
-<section class="slide center" data-toc="Mở đầu">
-  <h1>Mixin</h1>
-  <p class="lead big">Từ cơ bản đến nâng cao — và điều gì đổi<br>khi Polymer được nâng lên Lit</p>
-  <p style="margin-top:30px;color:var(--muted);font-size:14px">
-    <span class="kbd">→</span> / <span class="kbd">Space</span> tiếp ·
-    <span class="kbd">←</span> lùi ·
-    <span class="kbd">O</span> mục lục ·
-    <span class="kbd">F</span> toàn màn hình
-  </p>
-</section>
+  <section class="slide center" data-toc="Mở đầu">
+    <h1>Mixin trong Polymer và Lit</h1>
+    <p class="lead">Hiểu cơ chế JavaScript trước, sau đó mới nói đến framework.</p>
+    <p class="lead" style="font-size:16px">← → hoặc Space để chuyển slide · O để mở mục lục · F để toàn màn hình</p>
+  </section>
 
-<!-- 2 -->
-<section class="slide">
-  <h2>Chúng ta sẽ đi qua</h2>
-  <p class="lead">Mỗi phần trả lời đúng một câu hỏi.</p>
-  <table>
-    <tr><th>Phần</th><th>Câu hỏi</th></tr>
-    <tr><td><strong>1. Định nghĩa</strong></td><td>Mixin là gì? Bắt đầu từ 2 class JavaScript thuần, chưa cần framework.</td></tr>
-    <tr><td><strong>2. Luồng chạy</strong></td><td>Nhìn một chuỗi mixin, nói đúng thứ tự code chạy — không đoán.</td></tr>
-    <tr><td><strong>3. Polymer</strong></td><td>Behaviors, mixins, và Polymer thêm gì lên trên JS thuần?</td></tr>
-    <tr><td><strong>4. Lit</strong></td><td>Khác gì, và vì sao ReactiveController thường tốt hơn mixin?</td></tr>
-    <tr><td><strong>5. So sánh</strong></td><td>Cầm mixin Polymer chuyển sang Lit — đổi những gì?</td></tr>
-  </table>
-  <div class="box warn" style="margin-top:8px">
-    Mọi con số và trace trong slide này đều lấy từ <strong>demo chạy thật</strong> —
-    Polymer 3.5.1 và Lit 3 trong Chromium, không phải chữ viết sẵn.
-  </div>
-</section>
-
-<!-- 3 -->
-<section class="slide">
-  <h2>Bài toán gốc</h2>
-  <p class="lead">Hai component WebUI khác nhau, cùng cần khả năng <strong>mở/đóng</strong>.</p>
-  <pre>class MyPanel extends PolymerElement {
-  static get properties() {
-    return {
-      <b>opened: {type: Boolean, value: false,</b>          <span class="c">// ①</span>
-              <b>reflectToAttribute: true,</b>
-              <b>observer: 'openedChanged_'},</b>
-      tieuDe: {type: String},                       <span class="c">// riêng của MyPanel</span>
-    };
-  }
-  <b>toggle() { this.opened = !this.opened; }</b>           <span class="c">// ②</span>
-  <b>openedChanged_(moi) { /* bắn event */ }</b>            <span class="c">// ③</span>
-}
-
-class MyDropdown extends PolymerElement {
-  static get properties() {
-    return {
-      <b>opened: {...}</b>,                                 <span class="c">// ① y hệt</span>
-      danhSach: {type: Array},                      <span class="c">// riêng của MyDropdown</span>
-    };
-  }
-  <b>toggle() { ... }</b>                                   <span class="c">// ② y hệt</span>
-  <b>openedChanged_(moi) { ... }</b>                        <span class="c">// ③ y hệt</span>
-}</pre>
-  <div class="box bad">
-    Trong <code>chrome://settings</code> có hàng chục thứ mở/đóng được.
-    <strong>Sửa 1 chỗ phải sửa N chỗ</strong>; component thứ 5 có người quên
-    <code>reflectToAttribute</code> thì CSS không ăn mà <strong>không ai báo lỗi</strong>.
-  </div>
-</section>
-
-<!-- 4 -->
-<section class="slide">
-  <h2>Ba cách gom code dùng chung</h2>
-  <table>
-    <tr><th></th><th>Kế thừa</th><th>Behaviors (Polymer 1)</th><th>Mixin (Polymer 3)</th></tr>
-    <tr><td>Property / state riêng mỗi element</td><td>✓</td><td>✓</td><td>✓</td></tr>
-    <tr><td>Gắn <strong>nhiều nguồn</strong> cùng lúc</td><td class="c">✗ JS chỉ cho 1 class cha</td><td>✓</td><td>✓</td></tr>
-    <tr><td>Lifecycle</td><td>✓</td><td>✓ Polymer tự gọi hết</td><td>✓</td></tr>
-    <tr><td><strong>Method trùng tên: gọi được bản trước?</strong></td><td>✓ <code>super</code></td><td class="c">✗ <strong>đè mất, im lặng</strong></td><td>✓ <code>super</code></td></tr>
-  </table>
-  <div class="box bad" style="margin-top:14px">
-    Behavior chỉ là <strong>object thường</strong> — nó không nằm trong chuỗi kế thừa nào,
-    nên <strong>không có <code>super</code> để gọi</strong>. Hai behavior cùng có
-    <code>toggle()</code> thì một cái biến mất không dấu vết.
-  </div>
-  <div class="box ok">
-    Đây chính là lý do <strong>Polymer 3 bỏ Behaviors, chuyển sang Mixin</strong>.
-  </div>
-</section>
-
-<!-- 5 -->
-<section class="slide">
-  <h2>Vì sao không dùng kế thừa thường?</h2>
-  <div class="cols">
-    <div>
-      <h3>Kế thừa giải quyết được…</h3>
-      <pre>class CoMoDong extends PolymerElement {
-  static get properties() {
-    return {opened: {...}};
-  }
-  toggle() { ... }
-}
-
-class MyPanel    extends CoMoDong { }
-class MyDropdown extends CoMoDong { }</pre>
-      <p style="color:var(--ok)">✓ Hết lặp code, có property riêng.</p>
-    </div>
-    <div>
-      <h3>…cho tới khi cần khả năng thứ hai</h3>
-      <pre><span class="c">// giờ cần thêm: vô hiệu hoá được</span>
-class CoVoHieu extends PolymerElement {
-  static get properties() {
-    return {disabled: {...}};
-  }
-}
-
-class MyPanel extends <span class="r">CoMoDong, CoVoHieu</span> { }
-<span class="r">// ✗ SyntaxError</span>
-<span class="r">// JavaScript chỉ cho MỘT class cha</span></pre>
-      <p style="color:var(--err)">Càng thêm khả năng, càng bế tắc.</p>
-    </div>
-  </div>
-  <div class="box warn">Mixin sinh ra để phá đúng bức tường này — mà vẫn giữ được <code>super</code>.</div>
-</section>
-
-<!-- 6 -->
-<section class="slide">
-  <h2>Behaviors hỏng ở đâu</h2>
-  <p class="lead">Polymer 1 gom method vào một <strong>object thường</strong>. Nghe hợp lý, cho tới lúc trùng tên.</p>
-  <pre>const OpenableBehavior   = { toggle() { <span class="c">/* mở/đóng */</span> } };
-const DisableableBehavior = { toggle() { <span class="c">/* kiểm tra disabled rồi mở/đóng */</span> } };
-
-Polymer({
-  is: 'my-panel',
-  behaviors: [OpenableBehavior, DisableableBehavior],
-});
-
-<span class="r">// panel.toggle() → chỉ chạy bản của DisableableBehavior.</span>
-<span class="r">// Bản của OpenableBehavior BIẾN MẤT. Không một lời cảnh báo.</span></pre>
-  <div class="cols tight">
-    <div class="box bad">
-      <h3>Vấn đề gốc</h3>
-      <p><code>DisableableBehavior</code> muốn "kiểm tra <code>disabled</code> rồi
-      <strong>gọi tiếp</strong> bản gốc" — nhưng nó là object thường, không nằm trong
-      chuỗi kế thừa nào, nên <strong>không có <code>super</code> để gọi</strong>.</p>
-    </div>
-    <div class="box">
-      <h3>Cùng vấn đề với…</h3>
-      <p><code>Object.assign(MyPanel.prototype, behavior)</code> — cách "mixin cổ điển"
-      thời jQuery. Đó là <strong>ghi đè phẳng</strong>: không có khái niệm
-      "chạy tiếp cái trước đó".</p>
-    </div>
-  </div>
-</section>
-
-<!-- 7 -->
-<section class="slide center" data-toc="Định nghĩa mixin">
-  <h3>Định nghĩa</h3>
-  <h1 style="font-size:34px;max-width:22ch;line-height:1.35">Mixin là một hàm nhận vào một class và trả về một class con mới của nó, đã được bổ sung tính năng.</h1>
-  <pre style="margin-top:26px;text-align:left;display:inline-block">export const <b>OpenableMixin</b> = dedupingMixin(<b>(superClass)</b> =&gt; {
-  class OpenableMixinImpl <b>extends superClass</b> {
-    static get properties() {
-      return {opened: {type: Boolean, value: false,
-                       reflectToAttribute: true}};
-    }
-    toggle() { this.opened = !this.opened; }
-    open()   { this.opened = true; }
-    close()  { this.opened = false; }
-  }
-  return OpenableMixinImpl;
-});
-
-class MyPanel extends <b>OpenableMixin(PolymerElement)</b> { }</pre>
-</section>
-
-<!-- 8 -->
-<section class="slide">
-  <h2>Ba tính chất bắt buộc</h2>
-  <p class="lead">Thiếu một cái thì không còn là mixin.</p>
-  <table>
-    <tr><th>Tính chất</th><th>Vì sao cần</th></tr>
-    <tr><td><strong>Nhận <code>Base</code> làm tham số</strong></td>
-        <td>Hard-code <code>extends PolymerElement</code> → chỉ dùng được cho Polymer, không xếp chồng được</td></tr>
-    <tr><td><strong>Trả class mới, không sửa <code>Base</code></strong></td>
-        <td><code>Base</code> giữ nguyên → dùng lại được chỗ khác, không ô nhiễm toàn cục</td></tr>
-    <tr><td><strong>Bên trong dùng <code>extends Base</code></strong></td>
-        <td>Đây là thứ tạo ra <code>super</code> — khác biệt cốt lõi với <code>Object.assign</code></td></tr>
-  </table>
-  <div class="box warn">
-    Tên chính xác hơn là <strong>"subclass factory"</strong>: nó không <em>trộn</em> method vào class bạn —
-    nó là nhà máy sản xuất class con. Đưa vào <code>A</code>, nhận về <code>B extends A</code>.
-  </div>
-</section>
-
-<!-- 9 -->
-<section class="slide">
-  <h2>Nó thực sự làm gì: chèn một mắt xích</h2>
-  <div class="cols">
-    <div>
-      <pre class="plain">class MyEl extends A(B(C(HTMLElement))) { }</pre>
-      <pre class="plain">MyEl.prototype
-     │
-     ▼
-   A.prototype      ← gần bạn nhất
-     │
-     ▼
-   B.prototype
-     │
-     ▼
-   C.prototype      ← gần base nhất
-     │
-     ▼
-HTMLElement.prototype
-     │
-     ▼
-Element → Node → EventTarget</pre>
-    </div>
-    <div>
-      <h3>Hai quy tắc rút ra</h3>
-      <div class="box">
-        <strong>Đọc từ trong ra ngoài.</strong><br>
-        <code>C</code> áp trước (gần base), rồi <code>B</code>, rồi <code>A</code> (gần bạn).
-      </div>
-      <div class="box">
-        <strong>Gần bạn hơn thì thắng.</strong><br>
-        Cả A, B, C đều có <code>whoAmI()</code> → <code>A</code> thắng,
-        vì JS tra từ trên xuống và dừng ở cái đầu tiên tìm thấy.
-      </div>
-      <p style="color:var(--muted)">Đây là toàn bộ "phép thuật" của mixin. Không có gì hơn.<br>
-      → Demo 1 in ra chuỗi này từ element thật.</p>
-    </div>
-  </div>
-</section>
-
-<!-- 10 -->
-<section class="slide">
-  <h2>Thứ tự constructor — JS ép buộc</h2>
-  <p class="lead"><code>super()</code> phải xong trước khi dùng <code>this</code> → base luôn chạy trước.</p>
-  <div class="cols">
-    <div>
-      <pre class="plain">class MyEl extends A(B(HTMLElement)) {
-  constructor() { super(); log('MyEl'); }
-}</pre>
-      <div class="box ok">
-        <h3>Trace thật</h3>
-        <pre class="plain" style="margin:0"><span class="g">B body</span>       ← trong cùng, chạy trước
-<span class="g">A body</span>
-<span class="g">MyEl body</span>    ← ngoài cùng, chạy sau</pre>
-      </div>
-    </div>
-    <div>
-      <pre class="plain">   ĐI XUỐNG          ĐI LÊN
- (gọi super())    (chạy thân hàm)
-
-  MyEl                MyEl   ← (4)
-    │                   ▲
-    ▼                   │
-    A                   A    ← (3)
-    │                   ▲
-    ▼                   │
-    B                   B    ← (2)
-    │                   ▲
-    ▼                   │
- HTMLElement ───────────┘    ← (1)</pre>
-    </div>
-  </div>
-  <p><strong>Constructor: luôn base-first. Không có ngoại lệ.</strong></p>
-</section>
-
-<!-- 11 -->
-<section class="slide">
-  <h2>Method thường — <em>bạn</em> quyết thứ tự</h2>
-  <div class="cols">
-    <div>
-      <span class="tag p">SETUP</span>
-      <pre class="plain">connectedCallback() {
-  <b>super.connectedCallback();</b>   <span class="c">// ĐẦU</span>
-  this.doMyThing();
-}</pre>
-      <pre class="plain" style="border-left-color:var(--ok)"><span class="g">Mixin C → B → A → MyEl</span>
-base-first, giống constructor</pre>
-      <p style="color:var(--muted)">Dùng khi logic của bạn <strong>phụ thuộc</strong> việc base đã khởi tạo xong.</p>
-    </div>
-    <div>
-      <span class="tag l">TEARDOWN</span>
-      <pre class="plain">disconnectedCallback() {
-  this.cleanUp();
-  <b>super.disconnectedCallback();</b>  <span class="c">// CUỐI</span>
-}</pre>
-      <pre class="plain" style="border-left-color:var(--ok)"><span class="g">MyEl → A → B → C</span>
-đảo ngược</pre>
-      <p style="color:var(--muted)">Bạn dọn dẹp <strong>trước khi</strong> base tháo dỡ mọi thứ.</p>
-    </div>
-  </div>
-  <div class="box warn">
-    <strong>Quy tắc nhớ:</strong> vào thì base vào trước, ra thì base ra sau — như xếp chồng đĩa.
-  </div>
-</section>
-
-<!-- 12 -->
-<section class="slide">
-  <h2>Bug tốn thời gian nhất: quên <code>super</code></h2>
-  <pre class="plain">const M = (Base) =&gt; class extends Base {
-  connectedCallback() {
-    console.log('M chạy');
-    <span class="r">// quên super.connectedCallback()</span>
-  }
-};</pre>
-  <div class="box bad">
-    <p class="big"><strong>Mọi thứ nằm dưới <code>M</code> trong chuỗi đều không chạy.</strong></p>
-    <p style="margin-top:8px">Với Lit: element không bao giờ render. Màn hình trắng.
-    <strong>Không có lỗi nào được ném ra.</strong></p>
-  </div>
-  <div class="box ok">
-    <strong>Thói quen:</strong> viết <code>super.x()</code> <em>trước</em> khi viết thân hàm.
-    Luôn luôn, mọi lifecycle method.
-  </div>
-</section>
-
-<!-- 13 -->
-<section class="slide">
-  <h2>Bài toán kim cương</h2>
-  <p class="lead">Nhớ lại: <strong>mỗi lần gọi mixin sinh ra một class mới.</strong> <code>M(Base) !== M(Base)</code></p>
-  <div class="cols">
-    <div>
-      <pre class="plain">class Parent extends LoggerMixin(Base) { }
-class Child  extends LoggerMixin(Parent) { }
-                     <span class="r">↑ áp lần 2</span>
-
-Child → Logger#2 → Parent → Logger#1 → Base
-         <span class="r">▲                    ▲</span>
-         <span class="r">└── cùng 1 mixin, 2 bản ──┘</span></pre>
-    </div>
-    <div class="box bad">
-      <h3>Số liệu đo thật</h3>
-      <pre class="plain" style="margin:0">áp 1 lần → ctor chạy <span class="g">1</span> lần
-áp 2 lần → ctor chạy <span class="r">2</span> lần</pre>
-      <p style="margin-top:10px">Listener đăng ký 2 lần. Handler chạy 2 lần.
-      Counter tăng gấp đôi.</p>
-      <p style="margin-top:8px;color:var(--muted)">Code trông hoàn toàn hợp lý → rất khó lần ra.</p>
-    </div>
-  </div>
-</section>
-
-<!-- 14 -->
-<section class="slide">
-  <h2>Chữa deduping — cần <em>hai</em> phần</h2>
-  <pre class="plain">function dedupeMixin(mixin) {
-  const cache  = new WeakMap();
-  const marker = Symbol('mixin-applied');
-
-  return (Base) =&gt; {
-    <b>if (Base[marker]) return Base;</b>                 <span class="c">// (2) chuỗi đã có → không bọc thêm</span>
-    <b>if (cache.has(Base)) return cache.get(Base);</b>   <span class="c">// (1) đã áp lên Base này → dùng lại</span>
-
-    const Klass = mixin(Base);
-    Object.defineProperty(Klass, marker, {value: true}); <span class="c">// static → class con kế thừa dấu</span>
-    cache.set(Base, Klass);
-    return Klass;
-  };
-}</pre>
-  <table>
-    <tr><th></th><th>Chỉ WeakMap</th><th>WeakMap + dấu</th></tr>
-    <tr><td><code>M(Base) === M(Base)</code></td><td style="color:var(--ok)">true</td><td style="color:var(--ok)">true</td></tr>
-    <tr><td><code>M(M(Base)) === M(Base)</code></td><td style="color:var(--err)">false</td><td style="color:var(--ok)">true</td></tr>
-    <tr><td>Ca kim cương <code>Child</code></td><td style="color:var(--err)"><strong>chạy 2 lần</strong></td><td style="color:var(--ok)">chạy 1 lần</td></tr>
-  </table>
-  <div class="box warn">Bản "chỉ WeakMap" hay được chép trên blog <strong>vẫn hỏng</strong> đúng ở ca vừa nói.</div>
-</section>
-
-<!-- 15 -->
-<section class="slide">
-  <h2>Polymer: hai thế hệ</h2>
-  <div class="cols">
-    <div>
-      <span class="tag p">POLYMER 1/2 — BEHAVIORS</span>
-      <pre>const OpenableBehavior = {
-  properties: {
-    opened: {type: Boolean, value: false},
-  },
-  <b>attached()</b> { ... },      <span class="c">// tên P1</span>
-  toggle() { ... },
-};
-
-Polymer({
-  is: 'my-panel',
-  <b>behaviors: [OpenableBehavior]</b>,
-});</pre>
-      <ul style="font-size:15px">
-        <li>Object literal, <strong>không có <code>super</code></strong></li>
-        <li>Lifecycle: Polymer gọi <em>tất cả</em></li>
-        <li>Method trùng tên: <span style="color:var(--err)">đè nhau im lặng</span></li>
-      </ul>
-    </div>
-    <div>
-      <span class="tag p">POLYMER 3 — MIXINS</span>
-      <pre>const OpenableMixin = <b>dedupingMixin</b>((sc) =&gt; {
-  class OpenableMixinImpl extends sc {
-    connectedCallback() {
-      <b>super.connectedCallback();</b>
-      ...
-    }
-    toggle() { this.opened = !this.opened; }
-  }
-  return OpenableMixinImpl;
-});
-
-class MyPanel extends
-    <b>OpenableMixin(PolymerElement)</b> { }</pre>
-      <ul style="font-size:15px">
-        <li>Subclass factory ES6 chuẩn</li>
-        <li><code>super</code> thật</li>
-      </ul>
-    </div>
-  </div>
-  <div class="box">Behaviors <strong>vẫn còn</strong> trong code Chromium cũ → đọc hiểu là đủ, <strong>đừng viết mới</strong>.</div>
-</section>
-
-<!-- 16 -->
-<section class="slide">
-  <h2>Mixin Polymer là một <em>mảnh component</em>, không phải túi method</h2>
-  <div class="cols tight">
-    <div>
-      <pre>const OpenableMixin = dedupingMixin((sc) =&gt;
-  class extends sc {
-    static get properties() {
-      return {
-        opened: {type: Boolean, value: false,
-                 <b>reflectToAttribute: true</b>,
-                 <b>observer: 'openedChanged_'</b>},
-        nhan: {<b>computed: 'tinhNhan_(opened)'</b>},
-      };
-    }
-    <b>connectedCallback()</b> {
-      super.connectedCallback();
-      <span class="c">// nghe phím Escape</span>
-    }
-    toggle() { this.opened = !this.opened; }
-  });</pre>
-    </div>
-    <div>
-      <div class="box ok">
-        <h3>Chạy thật</h3>
-        <pre class="plain" style="margin:0">panel.nhan        → <span class="g">"Đang đóng"</span>
-panel.toggle()
-panel.opened      → <span class="g">true</span>
-panel.nhan        → <span class="g">"Đang mở"</span>
-[opened] attribute → <span class="g">có</span>
-event opened-changed → <span class="g">đã bắn</span>
-template render   → <span class="g">"Đang mở"</span></pre>
-      </div>
-      <ol style="margin-left:20px;font-size:16px">
-        <li><code>properties</code> gộp tự động qua chain</li>
-        <li><code>computed</code>, <code>observer</code>, <code>reflectToAttribute</code> chạy <strong>từ trong mixin</strong></li>
-        <li>Template bind <code>[[nhan]]</code> và <code>on-click="toggle"</code> như thường</li>
+  <section class="slide" data-toc="Phạm vi">
+    <h2>Phạm vi tài liệu</h2>
+    <div class="box ok">
+      <ol>
+        <li>Mixin tạo thêm lớp nào trong chuỗi kế thừa?</li>
+        <li>Nếu hai mixin cùng có một method, <code>super</code> quyết định thứ tự chạy ra sao?</li>
+        <li>Khi chuyển từ Polymer sang Lit, phần nào giữ nguyên và phần nào phải kiểm tra lại?</li>
       </ol>
     </div>
-  </div>
-</section>
+    <p class="lead">Không cần nhớ nhiều cú pháp. Cần hiểu rõ lớp nào đang chạy và framework cập nhật state vào lúc nào.</p>
+  </section>
 
-<!-- 17 -->
-<section class="slide">
-  <h2>Luồng Polymer — trace thật</h2>
-  <div class="cols">
-    <div>
-      <pre><span class="c">── createElement + appendChild ──</span>
-  mixin.constructor
-element.ready — trước super
-  mixin.ready — trước super
-  mixin.ready — sau super
-element.ready — sau super
-  mixin.connectedCallback
-element.connectedCallback</pre>
-      <pre><span class="c">── gỡ rồi GẮN LẠI ──</span>
-  mixin.connectedCallback
-element.connectedCallback
-<span class="r">→ ready() KHÔNG chạy lại</span></pre>
-    </div>
-    <div>
+  <section class="slide" data-toc="Bài toán">
+    <h2>Bài toán: nhiều element cần cùng một khả năng</h2>
+    <div class="cols">
       <div class="box">
-        <strong><code>ready()</code> chạy đúng một lần</strong>, bên trong
-        <code>connectedCallback</code> đầu tiên.
+        <h3>my-panel</h3>
+        <p>Hiển thị hoặc ẩn nội dung.</p>
+        <p><code>opened</code>, <code>open()</code>, <code>close()</code>, <code>toggle()</code></p>
       </div>
-      <div class="box warn">
-        <strong>Hệ quả thực chiến:</strong> listener gắn lên <code>document</code> phải đặt ở
-        <code>connectedCallback</code>, không phải <code>ready()</code> — nếu không, gỡ rồi
-        gắn lại element sẽ mất listener.
-      </div>
-      <div class="box ok">
-        Phần <em>trước</em> <code>super.ready()</code> đi từ ngoài vào;
-        phần <em>sau</em> đi từ trong ra. Mixin <strong>bọc</strong> quanh logic của base.
+      <div class="box">
+        <h3>my-dropdown</h3>
+        <p>Hiển thị hoặc ẩn danh sách lựa chọn.</p>
+        <p><code>opened</code>, <code>open()</code>, <code>close()</code>, <code>toggle()</code></p>
       </div>
     </div>
-  </div>
-</section>
+    <p class="lead" style="margin-top:22px">Không nên sao chép toàn bộ logic mở/đóng vào từng component. Mixin đóng gói khả năng dùng chung này thành một lớp tái sử dụng.</p>
+  </section>
 
-<!-- 18 -->
-<section class="slide">
-  <h2>Lit: cơ chế mixin <em>y hệt</em></h2>
-  <p class="lead">Cùng <code>OpenableMixin</code>, hai bản. Khác biệt chỉ ở phần khai báo property.</p>
-  <div class="cols">
-    <div>
-      <span class="tag p">POLYMER</span>
-      <pre>const OpenableMixin = (sc) =&gt; class extends sc {
-  <b>static get properties()</b> {
-    return {
-      opened: {
-        type: Boolean,
-        <b>value: false</b>,
-        <b>reflectToAttribute: true</b>,
-        <b>observer: 'openedChanged_'</b>,
-      },
-      nhan: {<b>computed: 'tinhNhan_(opened)'</b>},
-    };
-  }
+  <section class="slide center" data-toc="Định nghĩa">
+    <h2>Mixin là gì?</h2>
+    <p class="lead"><strong>Một hàm nhận lớp cơ sở và trả về lớp con đã được bổ sung chức năng.</strong></p>
+    <pre>const OpenableMixin = (Base) =&gt; class extends Base {
+  open()   { this.opened = true; }
+  close()  { this.opened = false; }
   toggle() { this.opened = !this.opened; }
 };</pre>
+  </section>
+
+  <section class="slide" data-toc="Lớp trung gian">
+    <h2>Mixin tạo một lớp trung gian</h2>
+    <pre>class MyPanel extends OpenableMixin(HTMLElement) {}</pre>
+    <p>Không có method nào được sao chép vào <code>MyPanel</code>. JavaScript tạo một lớp con tạm thời rồi cho <code>MyPanel</code> kế thừa từ lớp đó.</p>
+    <p class="chain">MyPanel → OpenableMixinImpl → HTMLElement</p>
+    <div class="box ok">
+      <p><strong>Hệ quả:</strong> đây là quan hệ kế thừa thật, nên <code>super</code> hoạt động bình thường.</p>
     </div>
-    <div>
-      <span class="tag l">LIT</span>
-      <pre class="lit">const OpenableMixin = (Base) =&gt; class extends Base {
-  <b>static properties = {</b>
-    opened: {
-      type: Boolean,
-      <b>reflect: true</b>,
-    },
-  <b>};</b>
+  </section>
 
-  <b>constructor() { super(); this.opened = false; }</b>
-  <b>get nhan()</b> { return this.opened ? 'Đang mở' : 'Đang đóng'; }
-  <b>updated(ch)</b> { <span class="c">/* thay observer */</span> }
+  <section class="slide" data-toc="Xếp chồng mixin">
+    <h2>Xếp chồng nhiều mixin</h2>
+    <pre>class MyPanel extends DisableableMixin(
+  OpenableMixin(HTMLElement)
+) {}</pre>
+    <p class="chain">MyPanel → DisableableMixinImpl → OpenableMixinImpl → HTMLElement</p>
+    <p>Lời gọi được đọc từ trong ra ngoài: <code>OpenableMixin</code> áp dụng trước, sau đó tới <code>DisableableMixin</code>. Khi trùng tên method, lớp gần <code>MyPanel</code> hơn được tìm thấy trước.</p>
+  </section>
 
-  toggle() { this.opened = !this.opened; }   <span class="c">// giống hệt</span>
+  <section class="slide" data-toc="super">
+    <h2><code>super</code> cho phép mở rộng thay vì thay thế</h2>
+    <pre>const DisableableMixin = (Base) =&gt; class extends Base {
+  toggle() {
+    if (this.disabled) return;
+    super.toggle();
+  }
 };</pre>
-    </div>
-  </div>
-  <div class="box ok">
-    <code>toggle/open/close</code>, <code>connectedCallback</code> + <code>super</code>,
-    và cả khung <code>(Base) =&gt; class extends Base</code> — <strong>không đổi một chữ</strong>.
-  </div>
-</section>
+    <ol>
+      <li><code>DisableableMixin.toggle()</code> chạy trước.</li>
+      <li>Nếu element đang disabled, method kết thúc.</li>
+      <li>Nếu không, <code>super.toggle()</code> gọi <code>OpenableMixin.toggle()</code>.</li>
+    </ol>
+    <p class="lead">Mixin này có một hợp đồng: lớp phía dưới phải cung cấp <code>toggle()</code>.</p>
+  </section>
 
-<!-- 19 -->
-<section class="slide">
-  <h2>Lit: lifecycle nhiều hook hơn — trace thật</h2>
-  <div class="cols">
-    <div>
-      <pre class="lit"><span class="c">── tạo + gắn ──</span>
-  mixin.constructor
-element.constructor
-  mixin.connectedCallback
-element.connectedCallback
-  mixin.willUpdate  <b>[opened,tieuDe]</b>
-element.willUpdate
-element.render()
-element.firstUpdated
-  mixin.updated     <b>[opened,tieuDe]</b>
-element.updated
-
-<span class="c">── gọi toggle() ──</span>
-  mixin.willUpdate  <b>[opened]</b>
-element.willUpdate
-element.render()
-  mixin.updated     <b>[opened]</b>
-element.updated</pre>
-    </div>
-    <div>
-      <table>
-        <tr><th>Hook</th><th>Thay cho</th></tr>
-        <tr><td><code>shouldUpdate</code></td><td>— (chặn render)</td></tr>
-        <tr><td><code>willUpdate</code></td><td>Polymer <code>computed</code></td></tr>
-        <tr><td><code>render</code></td><td>template</td></tr>
-        <tr><td><code>firstUpdated</code></td><td>một phần của <code>ready()</code></td></tr>
-        <tr><td><code>updated</code></td><td>Polymer <code>observers</code></td></tr>
-      </table>
-      <div class="box ok">
-        <code>changedProperties</code> chứa property của <strong>cả mixin lẫn element</strong>
-        → Lit gộp khai báo qua cả chuỗi, y như Polymer.
+  <section class="slide" data-toc="Constructor và method">
+    <h2>Hai loại thứ tự cần phân biệt</h2>
+    <div class="cols">
+      <div class="box">
+        <h3>Constructor</h3>
+        <pre>class X extends A(B(Base)) {}</pre>
+        <p class="chain" style="font-size:17px">Base → B → A → X</p>
+        <p>Luôn chạy từ lớp cơ sở lên lớp cuối vì constructor phải gọi <code>super()</code> trước khi dùng <code>this</code>.</p>
       </div>
-    </div>
-  </div>
-</section>
-
-<!-- 20 -->
-<section class="slide">
-  <h2><code>ready()</code> <span class="arrow">≠</span> <code>firstUpdated()</code></h2>
-  <p class="lead">Khác biệt tinh tế, gây bug thật.</p>
-  <table>
-    <tr><th></th><th>Polymer <code>ready()</code></th><th>Lit <code>firstUpdated()</code></th></tr>
-    <tr><td>Chạy khi nào</td><td>Trong <code>connectedCallback</code> <strong>đầu tiên</strong></td><td>Sau vòng render <strong>đầu tiên</strong></td></tr>
-    <tr><td>Shadow DOM đã có?</td><td>Có</td><td>Có</td></tr>
-    <tr><td><strong>Đồng bộ với connect?</strong></td><td style="color:var(--ok)"><strong>Có</strong></td><td style="color:var(--err)"><strong>Không</strong> — microtask sau</td></tr>
-  </table>
-  <div class="box bad">
-    Mixin cần làm gì đó <em>ngay khi element vào DOM</em> — đăng ký vào registry toàn cục,
-    gắn <code>scroll</code> listener — mà đặt ở <code>firstUpdated()</code> thì
-    <strong>bỏ lỡ mọi thứ xảy ra trước lúc render xong</strong>.
-  </div>
-  <div class="box ok">
-    <code>ready()</code> → <strong><code>connectedCallback()</code></strong> trong đa số trường hợp,
-    không phải <code>firstUpdated()</code>.
-  </div>
-</section>
-
-<!-- 21 -->
-<section class="slide">
-  <h2>Khác biệt lớn nhất: đồng bộ vs bất đồng bộ</h2>
-  <pre class="plain">el.result = '777';
-const text = el.shadowRoot.getElementById('r').textContent;</pre>
-  <div class="cols tight">
-    <div>
-      <span class="tag p">POLYMER</span>
-      <pre style="font-size:20px;text-align:center"><span class="g">text = "777"</span></pre>
-      <p style="color:var(--muted)">Setter chặn lại → cập nhật thẳng binding. <strong>Đồng bộ.</strong></p>
-    </div>
-    <div>
-      <span class="tag l">LIT</span>
-      <pre class="lit" style="font-size:20px;text-align:center"><span class="r">text = "—"</span>  <span class="c">← giá trị CŨ</span></pre>
-      <p style="color:var(--muted)">Gom thay đổi, render ở microtask sau. <strong>Bất đồng bộ.</strong></p>
-    </div>
-  </div>
-  <div class="box bad">
-    <strong>Bẫy migrate số 1.</strong> Mọi mixin đọc DOM ngay sau khi set property đều phải thêm
-    <code>await this.updateComplete</code>. Bug này <strong>không ném lỗi</strong> —
-    chỉ âm thầm đọc giá trị cũ.
-  </div>
-  <p style="color:var(--muted)">→ Demo 4, mục 3: hai cột chạy song song trên cùng một trang.</p>
-</section>
-
-<!-- 22 -->
-<section class="slide">
-  <h2>Lit không có <code>dedupingMixin</code></h2>
-  <div class="cols">
-    <div>
-      <pre class="lit">M(M(LitElement)) === M(LitElement)
-<span class="r">→ false</span></pre>
-      <table>
-        <tr><th>Mixin ctor chạy</th><th>Không<br>dedupe</th><th>Chỉ<br>WeakMap</th><th>WeakMap<br>+ dấu</th></tr>
-        <tr><td>áp 1 lần</td><td>1</td><td>1</td><td>1</td></tr>
-        <tr><td>áp 2 lần (kế thừa)</td>
-            <td style="color:var(--err)"><strong>2</strong></td>
-            <td style="color:var(--err)"><strong>2</strong></td>
-            <td style="color:var(--ok)"><strong>1</strong></td></tr>
-      </table>
-    </div>
-    <div>
-      <h3>Ba lựa chọn</h3>
-      <ul>
-        <li>Tự viết <code>dedupeMixin</code> — WeakMap <strong>+</strong> dấu đánh (slide 14)</li>
-        <li>Dùng <code>@open-wc/dedupe-mixin</code></li>
-        <li><strong>Không xếp chồng sâu</strong> — dùng ReactiveController thay thế</li>
-      </ul>
-      <div class="box warn" style="margin-top:14px">
-        Chromium chọn cách thứ ba cho code Lit mới.
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- 23 -->
-<section class="slide">
-  <h2>ReactiveController — cách làm "đúng Lit"</h2>
-  <div class="cols">
-    <div>
-      <pre class="lit">class ClickOutsideController {
-  constructor(host, khiRaNgoai) {
-    this.host = host;
-    this.khiRaNgoai = khiRaNgoai;
-    <b>host.addController(this);</b>
-  }
-  <b>hostConnected()</b> {
-    this.xuLy_ = (e) =&gt; {
-      if (!e.composedPath().includes(this.host))
-        this.khiRaNgoai();
-    };
-    document.addEventListener('click', this.xuLy_);
-  }
-  <b>hostDisconnected()</b> {
-    document.removeEventListener('click', this.xuLy_);
-  }
-}
-
-class MyPanel extends <span class="c">OpenableMixin(</span>LitElement<span class="c">)</span> {
-  ngoai = <b>new ClickOutsideController(this, () =&gt; this.close())</b>;
+      <div class="box">
+        <h3>Method thông thường</h3>
+        <pre>action() {
+  // code trước super
+  super.action();
+  // code sau super
 }</pre>
-    </div>
-    <div>
-      <div class="box ok">
-        <h3>Phân vai rất rõ</h3>
-        <p><strong>Mixin</strong> cho <code>opened</code>, <code>toggle()</code>, <code>close()</code> —
-        thứ <em>phải nằm trên chính element</em>, vì template và component cha gọi <code>panel.close()</code>.</p>
-        <p style="margin-top:8px"><strong>Controller</strong> chỉ cần lifecycle + một callback.
-        Nó <em>không cần</em> thêm gì lên element.</p>
+        <p>Thứ tự do vị trí của <code>super</code> quyết định.</p>
       </div>
-      <table>
-        <tr><th></th><th>Mixin</th><th>Controller</th></tr>
-        <tr><td>Đụng prototype chain</td><td style="color:var(--err)">Có</td><td style="color:var(--ok)">Không</td></tr>
-        <tr><td>Trùng tên method</td><td style="color:var(--err)">Đè nhau</td><td style="color:var(--ok)">Không thể</td></tr>
-        <tr><td>Cần deduping</td><td style="color:var(--err)">Có</td><td style="color:var(--ok)">Không</td></tr>
-        <tr><td><strong>Nhiều bản trong 1 element</strong></td><td style="color:var(--err)"><strong>Không</strong></td><td style="color:var(--ok)"><strong>Được</strong></td></tr>
-        <tr><td>Thêm API lên element</td><td style="color:var(--ok)">Có</td><td style="color:var(--muted)">Không (cố ý)</td></tr>
-      </table>
-      <p style="color:var(--muted);font-size:14px">Controller là <strong>composition</strong>, mixin là <strong>inheritance</strong>.</p>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- 24 -->
-<section class="slide center" data-toc="Chọn mixin hay controller">
-  <h3>Chọn cái nào</h3>
-  <pre class="plain" style="text-align:left;display:inline-block;font-size:15px;margin-top:10px">Thứ này có cần thêm method/property lên <b>CHÍNH element</b> không?
-(để template, hoặc component cha, gọi được el.foo())
+  <section class="slide" data-toc="Lifecycle và super">
+    <h2>Override lifecycle: luôn kiểm tra <code>super</code></h2>
+    <pre>connectedCallback() {
+  super.connectedCallback();
+  // phần việc của mixin
+}</pre>
+    <div class="box warn">
+      <p>Nếu quên <code>super</code>, implementation của các lớp phía dưới không chạy. Với Polymer hoặc Lit, lỗi này thường khó truy nguyên vì nguyên nhân nằm ở một lớp trung gian.</p>
+    </div>
+    <p>Polymer yêu cầu gọi lifecycle của lớp cha ở đầu callback. Với Lit, callback chuẩn của custom element cũng phải gọi <code>super</code>; vị trí lời gọi quyết định thứ tự các lớp trong chain.</p>
+  </section>
 
-        │
-        ├── CÓ ─────────►  <b>Mixin</b>
-        │                  vd: opened + toggle() — template bind [[opened]],
-        │                      component cha gọi panel.close()
-        │
-        └── KHÔNG ──────►  <b>ReactiveController</b>
-                           vd: click ra ngoài, theo dõi kích thước, timer,
-                               fetch state, kết nối WebSocket</pre>
-  <div class="box warn" style="margin-top:22px;max-width:72ch;text-align:left">
-    Câu hỏi phụ chốt nhanh: <strong>"Có khi nào tôi cần HAI bản của thứ này trong một element không?"</strong>
-    Nếu có → chắc chắn là controller. Mixin chỉ cho một bản.
-  </div>
-</section>
+  <section class="slide" data-toc="Deduping">
+    <h2>Khi nào cần deduping?</h2>
+    <pre>class Parent extends LoggerMixin(HTMLElement) {}
+class Child extends LoggerMixin(Parent) {}</pre>
+    <p>Chuỗi của <code>Child</code> có thể chứa hai lớp do <code>LoggerMixin</code> tạo ra. Nếu mixin đăng ký listener hoặc override lifecycle, logic có thể chạy hai lần.</p>
+    <div class="cols">
+      <div class="box">
+        <span class="tag polymer">POLYMER</span>
+        <p>Dùng helper có sẵn <code>dedupingMixin</code> khi mixin có thể đi vào chain qua nhiều đường.</p>
+      </div>
+      <div class="box">
+        <span class="tag lit">LIT</span>
+        <p>Không có helper tích hợp. Chỉ tự thiết kế dedupe khi kiến trúc thực sự có nguy cơ áp dụng lặp.</p>
+      </div>
+    </div>
+  </section>
 
-<!-- 25 -->
-<section class="slide">
-  <h2>Migrate: 7 bước</h2>
-  <pre class="plain">1. <b>dedupingMixin</b> của Polymer      →  dedupeMixin tự viết (WeakMap + dấu)
-2. <b>static get properties()</b>        →  static properties = {...}
-3. <b>value: X</b>                       →  gán this.x = X trong constructor
-4. <b>reflectToAttribute</b>             →  reflect
-5. <b>readOnly</b> + this._setX()        →  getter + #private + requestUpdate()
-6. <b>ready()</b>                        →  connectedCallback()  <span class="c">(thường đúng hơn firstUpdated)</span>
-7. <b>computed</b> / <b>observers</b>           →  getter / willUpdate() / updated()</pre>
-  <div class="box bad">
-    <h3>Rồi rà 3 bẫy</h3>
-    <p>☐ Đọc DOM ngay sau khi set property? → thêm <code>await this.updateComplete</code></p>
-    <p>☐ Dùng <code>this.set('a.b', v)</code>? → gán object mới: <code>this.a = {...this.a, b: v}</code></p>
-    <p>☐ Property nào <code>notify: true</code>? → thêm <code>dispatchEvent</code> thủ công</p>
-  </div>
-</section>
-
-<!-- 26 -->
-<section class="slide">
-  <h2>Bẫy migrate hay gặp</h2>
-  <table>
-    <tr><th>Bẫy</th><th>Triệu chứng</th><th>Sửa</th></tr>
-    <tr><td>Đọc DOM ngay sau khi set</td><td>Lấy giá trị cũ, <em>không có lỗi</em></td><td><code>await this.updateComplete</code></td></tr>
-    <tr><td><code>this.set('a.b', v)</code></td><td>Không render lại</td><td><code>this.a = {...this.a, b: v}</code></td></tr>
-    <tr><td>Sửa item trong mảng</td><td>Không render lại</td><td><code>this.list = [...this.list]</code></td></tr>
-    <tr><td><code>ready()</code> → <code>firstUpdated()</code> máy móc</td><td>Bỏ lỡ event sớm</td><td>Cân nhắc <code>connectedCallback()</code></td></tr>
-    <tr><td>Quên giá trị mặc định</td><td>Render ra <code>undefined</code></td><td>Gán trong <code>constructor</code></td></tr>
-    <tr><td>Quên deduping</td><td>Listener nhân đôi</td><td>WeakMap + dấu đánh</td></tr>
-    <tr><td>Set property trong <code>updated()</code></td><td>Thêm vòng render, có thể lặp vô hạn</td><td>Chuyển sang <code>willUpdate()</code></td></tr>
-  </table>
-  <div class="box warn">
-    Polymer theo dõi được <strong>path con</strong> (<code>user.name</code>);
-    Lit chỉ theo <strong>tham chiếu</strong>. Đây là nguồn gốc của 3 bẫy đầu bảng.
-  </div>
-</section>
-
-<!-- 27 -->
-<section class="slide">
-  <h2>Tổng kết so sánh</h2>
-  <table>
-    <tr><th>Tiêu chí</th><th>Polymer 3</th><th>Lit 3</th></tr>
-    <tr><td><strong>Khái niệm mixin</strong></td><td colspan="2" style="color:var(--ok)">Giống hệt — subclass factory ES6</td></tr>
-    <tr><td>Deduping</td><td style="color:var(--ok)">có sẵn</td><td>tự viết</td></tr>
-    <tr><td>Khai báo property</td><td>nhiều tính năng</td><td>tối giản, dễ hiểu</td></tr>
-    <tr><td>Giá trị dẫn xuất</td><td><code>computed</code></td><td style="color:var(--ok)">getter — JS thuần, debug dễ</td></tr>
-    <tr><td>Theo dõi thay đổi</td><td style="color:var(--ok)">path con</td><td>chỉ tham chiếu</td></tr>
-    <tr><td>Luồng cập nhật</td><td>đồng bộ, từng binding</td><td style="color:var(--ok)">gom nhóm, hiệu quả hơn</td></tr>
-    <tr><td>Thay thế mixin</td><td>không có</td><td style="color:var(--ok)"><strong>ReactiveController</strong></td></tr>
-    <tr><td>Kích thước</td><td>~30 KB</td><td style="color:var(--ok)">~5–7 KB</td></tr>
-  </table>
-  <div class="box">
-    <strong>Vì sao Chromium migrate:</strong> không phải vì mixin Polymer tệ — mà vì Lit
-    nhỏ hơn 5 lần, gần JavaScript chuẩn hơn (ít DSL phải học), và có ReactiveController:
-    công cụ giải quyết đúng bài toán của mixin <em>mà không kèm bẫy trùng tên và deduping</em>.
-  </div>
-</section>
-
-<!-- 28 -->
-<section class="slide">
-  <h2>Mang về ba điều</h2>
-  <div class="box ok">
-    <p class="big"><strong>1. Mixin không copy method — nó chèn một mắt xích vào prototype chain.</strong></p>
-    <p style="color:var(--muted)">Mọi hành vi, mọi bug, mọi khác biệt giữa hai framework đều suy ra được từ câu này.</p>
-  </div>
-  <div class="box ok">
-    <p class="big"><strong>2. Khái niệm mixin không đổi khi lên Lit. Chỉ đổi 3 thứ.</strong></p>
-    <p style="color:var(--muted)">Khai báo property · tên hook lifecycle · tự lo deduping.
-    Phần khó thật sự là <em>đồng bộ → bất đồng bộ</em>.</p>
-  </div>
-  <div class="box ok">
-    <p class="big"><strong>3. Ở Lit, hỏi trước: cái này có nên là ReactiveController không?</strong></p>
-    <p style="color:var(--muted)">Thường là có. Chỉ dùng mixin khi cần thêm API lên chính element.</p>
-  </div>
-  <p style="margin-top:6px;color:var(--muted)">
-    Tài liệu đầy đủ: <code>mixin/</code> ·
-    4 demo chạy thật trong <code>demo/</code>
-  </p>
-</section>
-
-<div class="nav">
-  <span class="deck">Mixin: Polymer → Lit</span>
-  <span>
-    <span id="counter">1 / 28</span>
-    <button id="b-prev">←</button>
-    <button id="b-next">→</button>
-    <button id="b-ov">Mục lục</button>
-    <button id="b-fs">⛶</button>
-  </span>
-</div>
-
-<div id="ov"><h4>Mục lục — bấm để nhảy tới</h4><div class="ovgrid" id="ovgrid"></div></div>
-
-<script>
-  const slides = [...document.querySelectorAll('.slide')];
-  const bar = document.getElementById('bar');
-  const counter = document.getElementById('counter');
-  const ov = document.getElementById('ov');
-  let i = 0;
-
-  function show(n) {
-    i = Math.max(0, Math.min(slides.length - 1, n));
-    slides.forEach((s, k) => s.classList.toggle('on', k === i));
-    bar.style.width = ((i + 1) / slides.length * 100) + '%';
-    counter.textContent = `${i + 1} / ${slides.length}`;
-    location.hash = i + 1;
-    slides[i].scrollTop = 0;
+  <section class="slide" data-toc="Polymer: property">
+    <h2>Mixin trong Polymer</h2>
+    <span class="tag polymer">POLYMER 3</span>
+    <pre>export const OpenableMixin = dedupingMixin((Base) =&gt; {
+  class OpenableMixinImpl extends Base {
+    static get properties() {
+      return {
+        opened: {
+          type: Boolean,
+          value: false,
+          reflectToAttribute: true,
+        },
+      };
+    }
+    toggle() { this.opened = !this.opened; }
   }
-  const next = () => show(i + 1);
-  const prev = () => show(i - 1);
+  return OpenableMixinImpl;
+});</pre>
+    <p>Property khai báo trong mixin được Polymer xử lý như property của element. Template và CSS của lớp cuối vẫn dùng được <code>opened</code>, ví dụ <code>:host([opened])</code>.</p>
+  </section>
 
-  // Mục lục
-  document.getElementById('ovgrid').innerHTML = slides.map((s, k) => {
-    const h = s.querySelector('h1, h2');
-    const label = s.dataset.toc || (h ? h.textContent.trim() : '—');
-    return `<div class="ovcard" data-i="${k}">
-              <div class="n">${k + 1}</div>
-              <div class="t">${label}</div>
-            </div>`;
-  }).join('');
-  document.getElementById('ovgrid').onclick = (e) => {
-    const card = e.target.closest('.ovcard');
-    if (card) { show(+card.dataset.i); ov.classList.remove('on'); }
+  <section class="slide" data-toc="Polymer: lifecycle">
+    <h2>Lifecycle trong Polymer</h2>
+    <table>
+      <tr><th>Hook</th><th>Ý nghĩa</th></tr>
+      <tr><td><code>connectedCallback()</code></td><td>Có thể chạy nhiều lần; đăng ký tài nguyên gắn với document.</td></tr>
+      <tr><td><code>disconnectedCallback()</code></td><td>Có thể chạy nhiều lần; gỡ tài nguyên đã tạo lúc connect.</td></tr>
+      <tr><td><code>ready()</code></td><td>Chạy một lần khi Polymer khởi tạo element lần đầu; sau <code>super.ready()</code>, template và data system sẵn sàng.</td></tr>
+    </table>
+    <div class="box ok" style="margin-top:18px">
+      <p>Không dùng <code>ready()</code> cho listener trên <code>document</code>. Listener kiểu này cần cặp <code>connectedCallback()</code> và <code>disconnectedCallback()</code>.</p>
+    </div>
+  </section>
+
+  <section class="slide" data-toc="Behavior legacy">
+    <h2>Behavior legacy: chỉ cần nhận diện</h2>
+    <pre>const OpenableBehavior = {
+  properties: {opened: {type: Boolean, value: false}},
+  toggle() { this.opened = !this.opened; },
+};</pre>
+    <p>Behavior là object cấu hình. Polymer có thể gộp <code>properties</code> và một số lifecycle callback, nhưng Behavior không phải lớp trong chuỗi kế thừa.</p>
+    <div class="box warn">
+      <p>Nếu hai Behavior có cùng method thông thường, không có <code>super</code> để nối hai implementation. Đọc để bảo trì mã cũ; ưu tiên class mixin cho mã mới.</p>
+    </div>
+  </section>
+
+  <section class="slide" data-toc="Lit: property">
+    <h2>Mixin trong Lit</h2>
+    <span class="tag lit">LIT</span>
+    <pre class="lit">const OpenableMixin = (Base) =&gt; class extends Base {
+  static properties = {
+    opened: {type: Boolean, reflect: true},
   };
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next(); }
-    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
-    else if (e.key === 'Home') show(0);
-    else if (e.key === 'End') show(slides.length - 1);
-    else if (e.key.toLowerCase() === 'o') ov.classList.toggle('on');
-    else if (e.key === 'Escape') ov.classList.remove('on');
-    else if (e.key.toLowerCase() === 'f') {
-      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  constructor() {
+    super();
+    this.opened = false;
+  }
+
+  toggle() { this.opened = !this.opened; }
+};</pre>
+    <p>Lit kế thừa cấu hình reactive property từ lớp cha. Giá trị mặc định thường được gán trong constructor sau <code>super()</code>.</p>
+  </section>
+
+  <section class="slide" data-toc="Lit: update cycle">
+    <h2>Lit cập nhật theo chu kỳ bất đồng bộ</h2>
+    <p class="chain" style="font-size:17px">property thay đổi → willUpdate → render → updated → updateComplete</p>
+    <ul>
+      <li>Lit gom các thay đổi trước khi update bắt đầu.</li>
+      <li><code>willUpdate()</code> phù hợp để tính dữ liệu cho lần render sắp tới.</li>
+      <li><code>updated()</code> phù hợp khi cần DOM sau render.</li>
+      <li>Gán reactive property trong <code>updated()</code> sẽ tạo một vòng update tiếp theo.</li>
+    </ul>
+    <pre class="lit">async openAndFocus() {
+  this.opened = true;
+  await this.updateComplete;
+  this.renderRoot.querySelector('button')?.focus();
+}</pre>
+  </section>
+
+  <section class="slide" data-toc="Controller">
+    <h2>ReactiveController: composition thay vì inheritance</h2>
+    <div class="cols">
+      <div class="box">
+        <h3>Mixin</h3>
+        <p>Trở thành một phần của prototype chain.</p>
+        <p>Phù hợp khi feature cần API công khai hoặc cần kiểm soát thứ tự <code>super</code>.</p>
+      </div>
+      <div class="box">
+        <h3>ReactiveController</h3>
+        <p>Là object được host sở hữu qua <code>addController()</code>.</p>
+        <p>Phù hợp cho listener, timer, observer và state nội bộ.</p>
+      </div>
+    </div>
+    <pre class="lit">class ClickOutsideController {
+  constructor(host, onOutsideClick) {
+    this.host = host;
+    this.onOutsideClick = onOutsideClick;
+    host.addController(this);
+  }
+  // hostConnected / hostDisconnected ...
+}</pre>
+  </section>
+
+  <section class="slide" data-toc="Chọn công cụ">
+    <h2>Chọn mixin hay controller?</h2>
+    <table>
+      <tr><th>Nhu cầu</th><th>Lựa chọn thường phù hợp</th></tr>
+      <tr><td>Cần <code>element.open()</code> hoặc <code>element.opened</code></td><td>Mixin hoặc host bọc API cho controller</td></tr>
+      <tr><td>Chỉ có listener, timer, ResizeObserver, state nội bộ</td><td>ReactiveController</td></tr>
+      <tr><td>Cần nhiều instance độc lập trong một element</td><td>ReactiveController</td></tr>
+      <tr><td>Cần override method/lifecycle theo thứ tự chain</td><td>Mixin</td></tr>
+      <tr><td>Chỉ là xử lý dữ liệu không giữ state</td><td>Hàm thuần</td></tr>
+    </table>
+  </section>
+
+  <section class="slide" data-toc="Chuyển Polymer sang Lit">
+    <h2>Chuyển Polymer sang Lit: bản đồ nhanh</h2>
+    <table>
+      <tr><th>Polymer</th><th>Lit</th></tr>
+      <tr><td><code>value: false</code></td><td>Gán giá trị trong constructor</td></tr>
+      <tr><td><code>reflectToAttribute: true</code></td><td><code>reflect: true</code></td></tr>
+      <tr><td><code>computed</code></td><td>Getter hoặc <code>willUpdate()</code></td></tr>
+      <tr><td><code>observer</code></td><td><code>willUpdate()</code> hoặc <code>updated()</code></td></tr>
+      <tr><td><code>this.set('user.name', value)</code></td><td><code>this.user = {...this.user, name: value}</code></td></tr>
+      <tr><td><code>ready()</code></td><td>Chọn hook theo mục đích, không đổi máy móc</td></tr>
+    </table>
+  </section>
+
+  <section class="slide" data-toc="Checklist">
+    <h2>Checklist khi chuyển một mixin</h2>
+    <ol>
+      <li>Liệt kê API công khai: property, method, event, attribute và CSS contract.</li>
+      <li>Chuyển property, giá trị mặc định và attribute reflection.</li>
+      <li>Phân loại <code>computed</code> và <code>observer</code> theo getter, <code>willUpdate</code> hoặc <code>updated</code>.</li>
+      <li>Rà cập nhật object/array và đoạn code đọc DOM sau khi set property.</li>
+      <li>Rà lifecycle, <code>super</code> và khả năng mixin xuất hiện hai lần trong chain.</li>
+      <li>Viết test cho hành vi công khai, connect/disconnect và thứ tự override.</li>
+    </ol>
+  </section>
+
+  <section class="slide center" data-toc="Kết luận">
+    <h2>Ba ý cần nhớ</h2>
+    <div class="box ok" style="max-width:850px; text-align:left">
+      <p><strong>1.</strong> Mixin là lớp trung gian trong prototype chain; vì vậy <code>super</code> quyết định cách các lớp phối hợp.</p>
+      <p><strong>2.</strong> Polymer và Lit dùng cùng cơ chế mixin JavaScript, nhưng khác reactive system và thời điểm DOM cập nhật.</p>
+      <p><strong>3.</strong> Với Lit, ưu tiên controller cho logic nội bộ; dùng mixin khi cần API công khai hoặc kiểm soát inheritance chain.</p>
+    </div>
+    <p class="lead">Tài liệu chi tiết và demo nằm trong thư mục <code>mixin/</code>.</p>
+  </section>
+
+  <nav class="nav">
+    <span>Mixin · Polymer → Lit</span>
+    <span>
+      <span id="counter"></span>
+      <button type="button" id="previous" aria-label="Slide trước">←</button>
+      <button type="button" id="next" aria-label="Slide sau">→</button>
+      <button type="button" id="open-overview">Mục lục</button>
+      <button type="button" id="fullscreen">⛶</button>
+    </span>
+  </nav>
+  <aside id="overview">
+    <h2>Mục lục — bấm để chuyển slide</h2>
+    <div class="overview-grid" id="overview-grid"></div>
+  </aside>
+
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    const progress = document.getElementById('progress');
+    const counter = document.getElementById('counter');
+    const overview = document.getElementById('overview');
+    let current = 0;
+
+    function show(index) {
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      slides.forEach((slide, i) => slide.classList.toggle('on', i === current));
+      slides[current].scrollTop = 0;
+      progress.style.width = ((current + 1) / slides.length * 100) + '%';
+      counter.textContent = (current + 1) + ' / ' + slides.length;
+      location.hash = current + 1;
     }
-  });
 
-  document.getElementById('b-next').onclick = next;
-  document.getElementById('b-prev').onclick = prev;
-  document.getElementById('b-ov').onclick = () => ov.classList.toggle('on');
-  document.getElementById('b-fs').onclick = () =>
-    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    document.getElementById('overview-grid').innerHTML = slides.map((slide, i) => {
+      const title = slide.dataset.toc || slide.querySelector('h1, h2')?.textContent || 'Slide';
+      return '<div class="overview-card" data-index="' + i + '">' +
+        '<div class="overview-number">' + (i + 1) + '</div>' +
+        '<strong>' + title + '</strong></div>';
+    }).join('');
 
-  show(Math.max(0, (parseInt(location.hash.slice(1), 10) || 1) - 1));
-</script>
+    document.getElementById('previous').onclick = () => show(current - 1);
+    document.getElementById('next').onclick = () => show(current + 1);
+    document.getElementById('open-overview').onclick = () => overview.classList.toggle('on');
+    document.getElementById('fullscreen').onclick = () => {
+      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    };
+    document.getElementById('overview-grid').onclick = (event) => {
+      const card = event.target.closest('.overview-card');
+      if (card) {
+        show(Number(card.dataset.index));
+        overview.classList.remove('on');
+      }
+    };
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'PageDown') {
+        event.preventDefault();
+        show(current + 1);
+      } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+        event.preventDefault();
+        show(current - 1);
+      } else if (event.key === 'Home') {
+        show(0);
+      } else if (event.key === 'End') {
+        show(slides.length - 1);
+      } else if (event.key.toLowerCase() === 'o') {
+        overview.classList.toggle('on');
+      } else if (event.key === 'Escape') {
+        overview.classList.remove('on');
+      } else if (event.key.toLowerCase() === 'f') {
+        document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+      }
+    });
+
+    show((Number(location.hash.slice(1)) || 1) - 1);
+  </script>
 </body>
 </html>
