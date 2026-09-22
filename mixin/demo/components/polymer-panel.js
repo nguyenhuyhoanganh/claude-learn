@@ -1,7 +1,7 @@
 import {
   PolymerElement,
   html,
-} from 'https://cdn.jsdelivr.net/npm/@polymer/polymer@3.5.1/polymer-element.js';
+} from '@polymer/polymer/polymer-element.js';
 import {OpenableMixin} from '../mixins/polymer-openable-mixin.js';
 
 export class PolymerPanel extends OpenableMixin(PolymerElement) {

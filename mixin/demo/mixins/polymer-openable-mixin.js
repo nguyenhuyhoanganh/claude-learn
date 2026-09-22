@@ -1,4 +1,4 @@
-import {dedupingMixin} from 'https://cdn.jsdelivr.net/npm/@polymer/polymer@3.5.1/lib/utils/mixin.js';
+import {dedupingMixin} from '@polymer/polymer/lib/utils/mixin.js';
 
 function emitLog(host, message) {
   host.dispatchEvent(new CustomEvent('demo-log', {detail: message}));

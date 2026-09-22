@@ -1,7 +1,7 @@
 import {
   LitElement,
   html,
-} from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+} from 'lit';
 import {CounterController} from '../controllers/counter-controller.js';
 import {OpenableMixin} from '../mixins/lit-openable-mixin.js';
 

@@ -444,6 +444,10 @@ panel.addEventListener('opened-changed', (event) => {
 });
 ```
 
+Giá trị mặc định cũng đi qua property effects. Vì vậy, nếu listener đã được
+gắn trước lúc element khởi tạo xong, nó có thể nhận event cho giá trị mặc định
+trước những lần thay đổi do người dùng tạo ra.
+
 Event do `notify` tạo không bubble. Nếu cần một event nghiệp vụ đi qua shadow
 boundary, phải phát rõ ràng:
 
@@ -935,6 +939,12 @@ host connected      → controller.hostConnected()
 host disconnected   → controller.hostDisconnected()
 ```
 
+Nếu một mixin gọi `super.connectedCallback()` hoặc
+`super.disconnectedCallback()` trước phần logic riêng, callback tương ứng của
+controller chạy trong lời gọi `super` đó. Thứ tự cụ thể giữa log của mixin và
+controller vì thế phụ thuộc vào vị trí gọi `super`, không chỉ phụ thuộc tên
+lifecycle.
+
 ### Ví dụ reactive đơn giản
 
 ```js
@@ -1214,6 +1224,25 @@ JavaScript thuần, Polymer và Lit trên trang demo chung.
 `main.js` chỉ nối các nút trên trang với component và hiển thị log. Property,
 method, lifecycle và template cần trình bày nằm trong các thư mục
 `mixins/`, `components/` và `controllers/`.
+
+### Kiểm tra hành vi của demo
+
+Các test chạy trực tiếp mã nguồn trong thư mục `demo/` với Lit 3.3.3,
+Polymer 3.5.2 và một môi trường DOM. Test kiểm tra:
+
+- prototype chain và thứ tự gọi `super` của JavaScript mixin;
+- Polymer property effects, binding, observer, notify event, phản chiếu attribute,
+  `ready()`, `connectedCallback()` và `disconnectedCallback()`;
+- Lit reactive property, `updateComplete`, thứ tự hook của ReactiveController,
+  `firstUpdated()` và hành vi khi controller gọi `requestUpdate()`.
+
+Chạy test bằng hai lệnh:
+
+```bash
+cd mixin
+npm install
+npm test
+```
 
 ### Muốn thử thay đổi thì sửa file nào?
 
