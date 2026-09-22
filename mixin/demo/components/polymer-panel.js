@@ -2,9 +2,9 @@ import {
   PolymerElement,
   html,
 } from 'https://cdn.jsdelivr.net/npm/@polymer/polymer@3.5.1/polymer-element.js';
-import {PolymerOpenableMixin} from '../mixins/polymer-openable-mixin.js';
+import {OpenableMixin} from '../mixins/polymer-openable-mixin.js';
 
-export class PolymerPanel extends PolymerOpenableMixin(PolymerElement) {
+export class PolymerPanel extends OpenableMixin(PolymerElement) {
   static get is() {
     return 'polymer-panel';
   }

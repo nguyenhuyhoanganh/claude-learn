@@ -1,5 +1,5 @@
-export const JavaScriptOpenableMixin = (BaseClass) =>
-  class JavaScriptOpenableMixinImpl extends BaseClass {
+export const OpenableMixin = (BaseClass) =>
+  class OpenableMixinImpl extends BaseClass {
     constructor() {
       super();
       this.opened = false;

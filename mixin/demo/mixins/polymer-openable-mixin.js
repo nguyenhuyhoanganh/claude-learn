@@ -4,8 +4,8 @@ function emitLog(host, message) {
   host.dispatchEvent(new CustomEvent('demo-log', {detail: message}));
 }
 
-export const PolymerOpenableMixin = dedupingMixin((BaseClass) =>
-  class PolymerOpenableMixinImpl extends BaseClass {
+export const OpenableMixin = dedupingMixin((BaseClass) =>
+  class OpenableMixinImpl extends BaseClass {
     static get properties() {
       return {
         opened: {

@@ -2,8 +2,8 @@ function emitLog(host, message) {
   host.dispatchEvent(new CustomEvent('demo-log', {detail: message}));
 }
 
-export const LitOpenableMixin = (BaseClass) =>
-  class LitOpenableMixinImpl extends BaseClass {
+export const OpenableMixin = (BaseClass) =>
+  class OpenableMixinImpl extends BaseClass {
     static properties = {
       opened: {type: Boolean, reflect: true},
     };

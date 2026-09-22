@@ -3,9 +3,9 @@ import {
   html,
 } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
 import {CounterController} from '../controllers/counter-controller.js';
-import {LitOpenableMixin} from '../mixins/lit-openable-mixin.js';
+import {OpenableMixin} from '../mixins/lit-openable-mixin.js';
 
-export class LitPanel extends LitOpenableMixin(LitElement) {
+export class LitPanel extends OpenableMixin(LitElement) {
   constructor() {
     super();
     this.counter = new CounterController(this);

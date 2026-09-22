@@ -1175,14 +1175,14 @@ python3 -m http.server 8000
 ```
 
 Mở [`demo/index.html`](demo/index.html). Ba phần nằm trên cùng một trang và có
-thể mở trực tiếp bằng anchor:
+liên kết riêng để mở trực tiếp:
 
 1. [`#javascript-mixin`](demo/index.html#javascript-mixin): bản chất của mixin,
    prototype chain và `super`.
 2. [`#polymer-mixin`](demo/index.html#polymer-mixin): property, observer,
    event và lifecycle Polymer.
 3. [`#lit-controller`](demo/index.html#lit-controller): Lit mixin,
-   ReactiveController và thứ tự update.
+   ReactiveController và thứ tự cập nhật.
 
 ### Cấu trúc file demo
 
@@ -1199,13 +1199,21 @@ demo/
 
   mixins/
     javascript-openable-mixin.js     mixin JavaScript thuần
-    logging-mixin.js                 minh họa super chain
+    logging-mixin.js                 minh họa chuỗi gọi super
     polymer-openable-mixin.js        property và lifecycle Polymer
     lit-openable-mixin.js            reactive property và lifecycle Lit
 
   controllers/
     counter-controller.js            ReactiveController
 ```
+
+Ba file `*-openable-mixin.js` đều export cùng tên `OpenableMixin`, đúng với
+các đoạn code trong tài liệu. Tiền tố trong tên file chỉ dùng để phân biệt bản
+JavaScript thuần, Polymer và Lit trên trang demo chung.
+
+`main.js` chỉ nối các nút trên trang với component và hiển thị log. Property,
+method, lifecycle và template cần trình bày nằm trong các thư mục
+`mixins/`, `components/` và `controllers/`.
 
 ### Muốn thử thay đổi thì sửa file nào?
 

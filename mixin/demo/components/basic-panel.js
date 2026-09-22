@@ -1,8 +1,8 @@
-import {JavaScriptOpenableMixin} from '../mixins/javascript-openable-mixin.js';
+import {OpenableMixin} from '../mixins/javascript-openable-mixin.js';
 import {LoggingMixin} from '../mixins/logging-mixin.js';
 
 export class BasicPanel extends LoggingMixin(
-  JavaScriptOpenableMixin(HTMLElement)
+  OpenableMixin(HTMLElement)
 ) {
   connectedCallback() {
     this.render();
