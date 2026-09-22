@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo Mixin và ReactiveController</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "@webcomponents/shadycss/": "https://cdn.jsdelivr.net/npm/@webcomponents/shadycss@1.11.2/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <h1>Demo Mixin và ReactiveController</h1>
+
+  <nav aria-label="Các phần demo">
+    <a href="#javascript-mixin">1. JavaScript mixin</a>
+    <a href="#polymer-mixin">2. Polymer mixin</a>
+    <a href="#lit-controller">3. Lit và ReactiveController</a>
+  </nav>
+
+  <section id="javascript-mixin">
+    <h2>1. JavaScript mixin và <code>super</code></h2>
+    <p>
+      Sửa mixin tại <code>mixins/javascript-openable-mixin.js</code> và
+      <code>mixins/logging-mixin.js</code>.
+    </p>
+    <p>Prototype chain:</p>
+    <pre id="js-chain"></pre>
+    <basic-panel id="js-panel"></basic-panel>
+    <div class="actions">
+      <button id="js-toggle">Gọi toggle()</button>
+      <button id="js-clear">Xóa log</button>
+    </div>
+    <pre id="js-log">Chưa gọi toggle().</pre>
+  </section>
+
+  <section id="polymer-mixin">
+    <h2>2. Mixin trong Polymer</h2>
+    <p>
+      Sửa property và lifecycle tại
+      <code>mixins/polymer-openable-mixin.js</code>; sửa template tại
+      <code>components/polymer-panel.js</code>.
+    </p>
+    <p id="polymer-status">Đang tải Polymer…</p>
+    <div class="actions">
+      <button id="polymer-mount" disabled>Gắn element</button>
+      <button id="polymer-unmount" disabled>Gỡ element</button>
+      <button id="polymer-toggle" disabled>Gọi toggle()</button>
+    </div>
+    <div id="polymer-host"></div>
+    <pre id="polymer-log">Chưa có dữ liệu.</pre>
+  </section>
+
+  <section id="lit-controller">
+    <h2>3. Lit mixin và ReactiveController</h2>
+    <p>
+      Sửa mixin tại <code>mixins/lit-openable-mixin.js</code>, controller tại
+      <code>controllers/counter-controller.js</code> và template tại
+      <code>components/lit-panel.js</code>.
+    </p>
+    <p id="lit-status">Đang tải Lit…</p>
+    <div class="actions">
+      <button id="lit-mount" disabled>Gắn element</button>
+      <button id="lit-unmount" disabled>Gỡ element</button>
+    </div>
+    <div id="lit-host"></div>
+    <pre id="lit-log">Chưa có dữ liệu.</pre>
+  </section>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

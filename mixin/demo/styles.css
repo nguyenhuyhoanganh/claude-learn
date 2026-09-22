@@ -1,0 +1,60 @@
+body {
+  max-width: 840px;
+  margin: 32px auto;
+  padding: 0 16px 48px;
+  color: #222;
+  font: 16px/1.5 system-ui, sans-serif;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+section {
+  padding: 24px 0;
+  border-top: 1px solid #ccc;
+}
+
+pre,
+code {
+  font-family: ui-monospace, monospace;
+}
+
+pre {
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #ccc;
+  background: #f7f7f7;
+  white-space: pre-wrap;
+}
+
+.actions {
+  margin: 12px 0;
+}
+
+button {
+  margin: 0 8px 8px 0;
+  padding: 6px 10px;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+basic-panel,
+polymer-panel,
+lit-panel {
+  display: block;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #999;
+}
+
+polymer-panel[opened],
+lit-panel[opened] {
+  border-color: #111;
+  border-width: 2px;
+}
