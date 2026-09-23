@@ -13,8 +13,9 @@ trình tự:
 
 Ở mỗi cơ chế, tài liệu mô tả ba nội dung:
 
-- thành phần được cung cấp: property, state, method, event, style, lifecycle;
-- cách element dùng lại, cấu hình và ghi đè các thành phần đó;
+- mixin hoặc controller cung cấp những gì: property, state, method, event,
+  style, lifecycle;
+- element dùng lại, cấu hình và ghi đè những thứ đó như thế nào;
 - ảnh hưởng qua lại giữa lifecycle của element và của phần được tái sử dụng.
 
 Mọi hành vi nêu trong tài liệu đều có test tương ứng, chạy với Lit 3.3.3 và
@@ -145,8 +146,8 @@ element.toggle()
 ```
 
 Vị trí gọi `super` quyết định thứ tự: phần code trước `super` chạy trước logic
-của lớp dưới, phần code sau `super` chạy khi lớp dưới đã xong. Không gọi
-`super` đồng nghĩa với việc bỏ qua toàn bộ logic của lớp dưới.
+của class bên dưới, phần code sau `super` chạy khi class bên dưới đã xong.
+Không gọi `super` đồng nghĩa với bỏ qua toàn bộ logic của class bên dưới.
 
 Mỗi framework có yêu cầu riêng về `super`:
 
@@ -158,8 +159,8 @@ Mỗi framework có yêu cầu riêng về `super`:
 
 ### 1.6. Xung đột tên và mixin áp dụng lặp
 
-Khi hai mixin khai báo cùng tên property hoặc method, thành phần của mixin
-được áp dụng sau che thành phần của mixin trước. Method có thể nối với nhau
+Khi hai mixin khai báo cùng tên property hoặc method, mixin được áp dụng sau
+che property hoặc method của mixin trước. Method có thể nối với nhau
 bằng `super`; cấu hình property thì bị ghi đè và khó phát hiện. Trạng thái nội
 bộ của mixin cần tên đủ riêng để tránh xung đột.
 
@@ -182,14 +183,15 @@ export const OpenableMixin = dedupingMixin(
 
 Lit không có hàm tương đương tích hợp sẵn.
 
-### 1.7. Hợp đồng của mixin
+### 1.7. Những điều cần ghi rõ khi viết mixin
 
-Tài liệu của một mixin cần nêu rõ:
+Element dùng mixin cần biết mixin thêm gì và yêu cầu gì. Tài liệu hoặc comment
+của mixin nên ghi rõ:
 
 - property và method được thêm;
 - API mà class đầu vào bắt buộc phải có;
 - lifecycle bị override và yêu cầu gọi `super`;
-- listener, timer, observer hoặc subscription được tạo, và vị trí giải phóng;
+- listener, timer, observer hoặc subscription được tạo, và nơi cleanup chúng;
 - các event được phát.
 
 Ví dụ sau chỉ hoạt động khi class đầu vào đã có `toggle()`:
@@ -231,12 +233,12 @@ Trình duyệt gọi các callback sau:
 |---|---|---|
 | `constructor()` | Khi element được tạo, một lần | Khởi tạo giá trị không cần DOM |
 | `connectedCallback()` | Mỗi lần element được gắn vào document | Đăng ký listener, observer, subscription bên ngoài |
-| `disconnectedCallback()` | Mỗi lần element bị tháo khỏi document | Giải phóng những gì đã đăng ký khi connect |
+| `disconnectedCallback()` | Mỗi lần element bị gỡ khỏi document | Cleanup những gì đã đăng ký khi connect |
 | `attributeChangedCallback()` | Khi attribute được theo dõi thay đổi | Đồng bộ attribute sang property |
 | `adoptedCallback()` | Khi element chuyển sang document khác | Ít dùng |
 
-Một element có thể được gắn và tháo nhiều lần, nên tài nguyên đăng ký trong
-`connectedCallback()` phải được giải phóng trong `disconnectedCallback()`.
+Một element có thể được gắn và gỡ nhiều lần, nên listener, timer đăng ký trong
+`connectedCallback()` phải được cleanup trong `disconnectedCallback()`.
 
 Custom element thuần không tự cập nhật giao diện khi dữ liệu thay đổi:
 
@@ -252,7 +254,7 @@ class CounterBox extends HTMLElement {
 ```
 
 Polymer và Lit bổ sung cơ chế **reactive**: khi property thay đổi, giao diện
-được cập nhật tự động. Hai thư viện cài đặt cơ chế này theo cách khác nhau,
+được cập nhật tự động. Hai thư viện làm việc này theo cách khác nhau,
 và điều đó quyết định cách mixin của từng thư viện hoạt động.
 
 ## 3. Mixin trong Polymer
@@ -340,7 +342,7 @@ customElements.define(PolymerPanel.is, PolymerPanel);
 Element không khai báo lại `opened`, `label` hoặc `toggle()`. Template dùng
 trực tiếp property và method của mixin.
 
-### 3.4. Thành phần mixin cung cấp qua `properties`
+### 3.4. Những gì mixin cung cấp qua `properties`
 
 Mỗi option trong `properties` của mixin tạo ra một hành vi cho mọi element sử
 dụng mixin:
@@ -419,11 +421,12 @@ this.opened = true
 
 Hệ quả:
 
-- Trong observer, template đã được cập nhật và attribute đã được phản chiếu.
+- Trong observer, template đã được cập nhật và attribute đã được reflect.
 - Listener của `opened-changed` chạy sau observer.
-- Mỗi lần gán property là một lượt effect riêng. Observer phụ thuộc hai property
-  (`observers: ['sync_(opened, disabled)']`) sẽ chạy hai lần khi hai property
-  được gán lần lượt. `setProperties()` gộp các thay đổi thành một lượt:
+- Mỗi lần gán property, các effect chạy lại một lần. Observer phụ thuộc hai
+  property (`observers: ['sync_(opened, disabled)']`) sẽ chạy hai lần khi hai
+  property được gán liên tiếp. `setProperties()` gộp các thay đổi để effect chỉ
+  chạy một lần:
 
 ```js
 this.setProperties({opened: true, disabled: false});
@@ -486,7 +489,7 @@ Giá trị mặc định cũng đi qua property effect, nên listener gắn trư
 khởi tạo nhận thêm một event cho giá trị mặc định. Event do `notify` tạo ra
 không bubble.
 
-**Event nghiệp vụ do mixin phát.** Event mô tả hành động, khác với event mô tả
+**Event tự định nghĩa do mixin phát.** Event mô tả hành động, khác với event mô tả
 thay đổi property:
 
 ```js
@@ -529,7 +532,7 @@ Mixin cung cấp trạng thái và attribute; element quyết định cách hi�
 | `constructor()` | Một | Khởi tạo không cần DOM |
 | `connectedCallback()` | Nhiều | Đăng ký listener, subscription bên ngoài |
 | `ready()` | Một | Truy cập template, shadow DOM, `this.$` |
-| `disconnectedCallback()` | Nhiều | Giải phóng listener, subscription |
+| `disconnectedCallback()` | Nhiều | Cleanup listener, subscription |
 
 ```text
 constructor()                    một lần
@@ -565,7 +568,7 @@ Element.ready() – phần sau super
 - Element không gọi `super.ready()` thì template không được tạo (`shadowRoot`
   bằng `null`) và `ready()` của mixin không chạy.
 - Listener do mixin đăng ký trong `connectedCallback()` tồn tại trên mọi element
-  dùng mixin; mixin phải tự giải phóng trong `disconnectedCallback()`.
+  dùng mixin; mixin phải tự cleanup trong `disconnectedCallback()`.
 - Listener không đặt trong `ready()`, vì `ready()` chỉ chạy một lần trong khi
   element có thể được gắn lại nhiều lần.
 
@@ -599,7 +602,7 @@ Demo: [`demo/index.html#polymer-mixin`](demo/index.html#polymer-mixin).
 
 ### 4.1. `HTMLElement`, `ReactiveElement` và `LitElement`
 
-Lit chia cơ chế reactive thành hai lớp:
+Lit chia cơ chế reactive thành hai class:
 
 ```text
 LitElement
@@ -607,10 +610,10 @@ LitElement
   → HTMLElement
 ```
 
-| Lớp | Vai trò | Package |
+| Class | Vai trò | Package |
 |---|---|---|
 | `HTMLElement` | Custom element và lifecycle chuẩn (mục 2) | Trình duyệt |
-| `ReactiveElement` | Quyết định **khi nào** cập nhật: reactive property, `requestUpdate()`, chu trình cập nhật, `updateComplete`, `static styles`, `addController()` | `@lit/reactive-element` |
+| `ReactiveElement` | Quyết định **khi nào** cập nhật: reactive property, `requestUpdate()`, update cycle, `updateComplete`, `static styles`, `addController()` | `@lit/reactive-element` |
 | `LitElement` | Quyết định **cập nhật DOM như thế nào**: gọi `render()` và dùng lit-html vẽ template vào `renderRoot`, chỉ sửa phần thay đổi | `lit` |
 
 Component thường kế thừa `LitElement`. Mọi tính năng reactive, bao gồm
@@ -618,10 +621,10 @@ ReactiveController, được cung cấp bởi `ReactiveElement`.
 
 ### 4.2. So sánh với Polymer
 
-Polymer không có `ReactiveElement`. Các trách nhiệm tương ứng nằm ở những
+Polymer không có `ReactiveElement`. Những việc tương ứng được chia cho các
 mixin nội bộ đã nêu ở mục 3.1:
 
-| Trách nhiệm | Lit | Polymer |
+| Việc | Lit | Polymer |
 |---|---|---|
 | Tạo getter/setter cho property | `ReactiveElement` | `PropertyAccessors` |
 | Gom thay đổi, báo property nào đổi | `ReactiveElement` (`requestUpdate`, `changedProperties`) | `PropertiesChanged` (`_propertiesChanged`) |
@@ -687,14 +690,14 @@ static properties = {
 | Option | Ý nghĩa |
 |---|---|
 | `type` | Chuyển đổi giữa attribute và property |
-| `reflect` | Phản chiếu property thành attribute trong lượt cập nhật |
+| `reflect` | Reflect property thành attribute mỗi lần update |
 | `attribute` | Đổi tên attribute, hoặc `false` để không dùng attribute |
 | `hasChanged` | Quy tắc quyết định giá trị mới có gây cập nhật hay không |
 
-Giá trị mặc định được gán trong constructor. Lit so sánh bằng tham chiếu, nên
-object và array cần được gán tham chiếu mới để tạo cập nhật.
+Giá trị mặc định được gán trong constructor. Lit so sánh object và array theo
+reference, nên cần gán object/array mới thì mới có update.
 
-### 4.5. Chu trình cập nhật
+### 4.5. Update cycle
 
 ```text
 property setter
@@ -704,7 +707,7 @@ property setter
   → shouldUpdate(changedProperties)
   → willUpdate(changedProperties)
   → update(changedProperties)
-      → phản chiếu attribute
+      → reflect attribute
       → render()
       → cập nhật DOM
   → firstUpdated(changedProperties)   chỉ lần đầu
@@ -717,27 +720,27 @@ property setter
 | Hook | DOM đã cập nhật | Mục đích |
 |---|:---:|---|
 | `shouldUpdate()` | Chưa | Quyết định có tiếp tục cập nhật hay không |
-| `willUpdate()` | Chưa | Tính dữ liệu cho lượt render hiện tại |
+| `willUpdate()` | Chưa | Tính dữ liệu cho lần render hiện tại |
 | `render()` | Đang tạo | Trả về template; không chứa side effect |
 | `update()` | Đang cập nhật | Hook mức thấp; override phải gọi `super.update()` |
 | `firstUpdated()` | Rồi | Công việc cần DOM, chỉ sau lần render đầu |
-| `updated()` | Rồi | Side effect cần DOM sau mỗi lượt cập nhật |
+| `updated()` | Rồi | Side effect cần DOM sau mỗi lần update |
 
 Quy tắc khi gán property trong lifecycle:
 
-- Gán từ `shouldUpdate()` đến `render()` không tạo lượt cập nhật mới.
-- Gán trong `firstUpdated()` hoặc `updated()` tạo thêm một lượt cập nhật.
-- Gán vô điều kiện trong `updated()` gây vòng lặp cập nhật.
+- Gán từ `shouldUpdate()` đến `render()` không tạo thêm update.
+- Gán trong `firstUpdated()` hoặc `updated()` tạo thêm một lần update.
+- Gán vô điều kiện trong `updated()` làm update lặp vô hạn.
 
 Lifecycle theo thời gian:
 
 ```text
 constructor()                    một lần
 connectedCallback()
-lượt cập nhật đầu tiên
+update đầu tiên
   → firstUpdated()               một lần
   → updated()
-property đổi → lượt cập nhật → updated()
+property đổi → update → updated()
 disconnectedCallback()
 connectedCallback()              firstUpdated() không chạy lại
 ```
@@ -752,14 +755,14 @@ async openAndFocus() {
 }
 ```
 
-`updateComplete` là Promise của lượt cập nhật hiện tại, không bao gồm các
-component con. Giá trị trả về là `true` nếu không còn lượt cập nhật nào đang
-chờ, `false` nếu lượt vừa xong đã tạo thêm lượt mới.
+`updateComplete` là Promise của lần update hiện tại, không chờ các component
+con. Giá trị trả về là `true` nếu không còn update nào đang chờ, `false` nếu
+lần update vừa xong đã tạo thêm update mới.
 
 ## 5. Mixin trong Lit
 
 Mixin Lit có cùng cấu trúc với mixin JavaScript (mục 1). Khác biệt nằm ở cách
-Lit kế thừa khai báo property, style và ở chu trình cập nhật (mục 4).
+Lit kế thừa khai báo property và style, và ở update cycle (mục 4).
 
 ### 5.1. Viết mixin
 
@@ -800,7 +803,7 @@ customElements.define('lit-panel', LitPanel);
 ```
 
 Lit gộp `static properties` trên toàn bộ class chain. Element không khai báo
-lại `opened`; mọi phép gán `this.opened` đều tạo cập nhật và phản chiếu
+lại `opened`; mọi phép gán `this.opened` đều tạo update và reflect
 attribute theo cấu hình của mixin.
 
 ### 5.3. Dùng lại và thay đổi property của mixin
@@ -822,7 +825,7 @@ Cả hai phép gán xảy ra trước lần render đầu, nên Lit chỉ render
 **Không dùng class field cho property của mixin.** Khai báo
 `opened = true;` dưới dạng class field tạo một property riêng trên instance,
 che accessor mà Lit tạo cho `opened`. Sau đó phép gán `this.opened = false`
-không còn tạo cập nhật. Lit ở chế độ development phát cảnh báo cho trường hợp
+không còn tạo update. Lit ở chế độ development phát cảnh báo cho trường hợp
 này.
 
 **Khai báo lại property thay thế toàn bộ option.** Khác Polymer, Lit không gộp
@@ -864,7 +867,7 @@ updated(changedProperties) {
 }
 ```
 
-`changedProperties` chứa mọi property thay đổi trong lượt cập nhật, của cả
+`changedProperties` chứa mọi property thay đổi trong lần update, của cả
 mixin lẫn element. Mixin chỉ nên xử lý các key thuộc về mình.
 
 ### 5.4. Object và array do mixin quản lý
@@ -894,13 +897,13 @@ Hai yêu cầu:
 
 1. Giá trị mặc định là object hoặc array phải được tạo mới trong constructor.
    Dùng chung một hằng số rồi mutate làm mọi instance cùng thay đổi.
-2. Mutate trực tiếp không tạo cập nhật, và `willUpdate()`/`updated()` của mixin
+2. Mutate trực tiếp không tạo update, và `willUpdate()`/`updated()` của mixin
    cũng không chạy:
 
 ```js
-this.items.push(item);                 // không có cập nhật
-this.addItem(item);                    // có cập nhật
-this.items = [...this.items, item];    // có cập nhật
+this.items.push(item);                 // không có update
+this.addItem(item);                    // có update
+this.items = [...this.items, item];    // có update
 ```
 
 Có thể gọi `this.requestUpdate('items')` sau khi mutate, nhưng khi đó
@@ -925,7 +928,7 @@ export const StyledOpenableMixin = (BaseClass) => class extends BaseClass {
 báo lại `opened` mà bỏ `reflect`, style này không còn tác dụng.
 
 Khi element khai báo `static styles`, style của mixin bị thay thế. Style của
-lớp cha phải được đưa vào mảng:
+class cha phải được đưa vào mảng:
 
 ```js
 const PanelBase = StyledOpenableMixin(LitElement);
@@ -938,9 +941,9 @@ class LitPanel extends PanelBase {
 }
 ```
 
-Style đứng sau trong mảng được ưu tiên khi cùng độ đặc hiệu, nên element có
+Style đứng sau trong mảng được ưu tiên khi cùng specificity, nên element có
 thể ghi đè style của mixin. CSS custom property (`--openable-border-color`)
-cho phép tùy biến mà không cần ghi đè.
+cho phép tùy chỉnh mà không cần ghi đè.
 
 ### 5.6. Event do mixin phát
 
@@ -1008,16 +1011,16 @@ updated(changedProperties) {
 | `connectedCallback()` / `disconnectedCallback()` | Chạy trên mọi element dùng mixin. Element không gọi `super.connectedCallback()` thì Lit không tạo `renderRoot` và không bao giờ cập nhật |
 | `willUpdate()` | Giá trị do mixin tính sẵn dùng được trong `render()` của element |
 | `updated()` | Element không gọi `super.updated()` thì logic của mixin (event, đo DOM) bị mất |
-| `updated()` có gán property | Tạo thêm một lượt cập nhật; `updateComplete` trả về `false` |
+| `updated()` có gán property | Tạo thêm một lần update; `updateComplete` trả về `false` |
 | `firstUpdated()` | Chỉ chạy một lần, không chạy lại khi element được gắn lại |
 | `shouldUpdate()` trả về `false` | Element không render, kể cả khi property của element đổi |
 
 Quy tắc chung:
 
-- Mixin gọi `super.<hook>?.(...)`; toán tử `?.` phòng trường hợp lớp dưới không
+- Mixin gọi `super.<hook>?.(...)`; toán tử `?.` phòng trường hợp class bên dưới không
   định nghĩa hook.
 - Element override hook nào thì gọi `super` của hook đó.
-- Hợp đồng của mixin (mục 1.7) liệt kê các hook bị override.
+- Mixin ghi rõ những hook bị override (mục 1.7).
 
 Demo: [`demo/index.html#lit-controller`](demo/index.html#lit-controller).
 
@@ -1033,8 +1036,8 @@ Mixin đưa property và method trực tiếp vào element. Cách này có các 
 - element phải giữ đúng chuỗi `super` ở mọi hook mà mixin override;
 - cấu hình chỉ truyền được qua property, không truyền được lúc khởi tạo.
 
-ReactiveController tách logic có state và lifecycle thành một object riêng,
-thuộc sở hữu của element.
+ReactiveController tách logic có state và lifecycle thành một object riêng do
+element tạo và giữ.
 
 ```text
 Mixin:       LitPanel → OpenableMixinImpl → LitElement
@@ -1042,7 +1045,7 @@ Mixin:       LitPanel → OpenableMixinImpl → LitElement
 
 Controller:  LitPanel
                └── clock: ClockController
-             (controller là object được element sở hữu)
+             (controller là object do element giữ)
 ```
 
 Tài liệu Lit mô tả quan hệ này như sau: element **là** instance của mixin
@@ -1050,13 +1053,13 @@ Tài liệu Lit mô tả quan hệ này như sau: element **là** instance của
 
 ### 6.2. Host và API của host
 
-Element sở hữu controller được gọi là **host**. Host cung cấp bốn API:
+Element chứa controller được gọi là **host**. Host cung cấp bốn API:
 
 | API | Hành vi trong `ReactiveElement` (Lit 3.3.3) |
 |---|---|
-| `addController(c)` | Thêm `c` vào tập controller. Nếu host đã connected, gọi `c.hostConnected()` ngay |
-| `removeController(c)` | Chỉ xóa `c` khỏi tập controller; không gọi `c.hostDisconnected()` |
-| `requestUpdate()` | Lên lịch cập nhật; lời gọi trong `hostUpdate()` được gộp vào lượt hiện tại |
+| `addController(c)` | Thêm `c` vào danh sách controller. Nếu host đã connected, gọi `c.hostConnected()` ngay |
+| `removeController(c)` | Chỉ xóa `c` khỏi danh sách controller; không gọi `c.hostDisconnected()` |
+| `requestUpdate()` | Lên lịch update; lời gọi trong `hostUpdate()` được gộp vào update hiện tại |
 | `updateComplete` | Promise hoàn tất khi host cập nhật xong |
 
 `LitElement` và `ReactiveElement` là host. Theo tài liệu Lit, host cũng có thể
@@ -1070,11 +1073,11 @@ controller khác, miễn là cung cấp đủ bốn API trên (xem mục 6.11).
 | `hostConnected()` | Host được gắn vào document, sau khi `renderRoot` đã tạo | Đăng ký listener, observer, timer |
 | `hostUpdate()` | Trước `update()` và `render()` của host | Đọc DOM trước khi thay đổi, chuẩn bị dữ liệu |
 | `hostUpdated()` | Sau khi DOM cập nhật, trước `updated()` của host | Đọc DOM sau khi thay đổi |
-| `hostDisconnected()` | Host bị tháo khỏi document | Giải phóng những gì tạo trong `hostConnected()` |
+| `hostDisconnected()` | Host bị gỡ khỏi document | Cleanup những gì tạo trong `hostConnected()` |
 
 Các callback đều không bắt buộc.
 
-Thứ tự trong một lượt cập nhật của host có hai controller:
+Thứ tự trong một lần update của host có hai controller:
 
 ```text
 host.shouldUpdate()          false → dừng, controller không được gọi
@@ -1122,11 +1125,11 @@ export class ClockController {
 
 Các điểm chính:
 
-1. Controller là object thông thường, không kế thừa lớp nào.
+1. Controller là object thông thường, không kế thừa class nào.
 2. `host.addController(this)` đăng ký controller vào lifecycle của host.
 3. State của controller không phải reactive property; controller gọi
    `host.requestUpdate()` sau mỗi thay đổi.
-4. Tài nguyên tạo trong `hostConnected()` được giải phóng trong
+4. Listener, timer tạo trong `hostConnected()` được cleanup trong
    `hostDisconnected()`; cả hai có thể chạy nhiều lần.
 
 Sử dụng trong element:
@@ -1226,9 +1229,9 @@ updated(changedProperties) {
 ```
 
 Nếu controller gọi `requestUpdate()` không tham số, host vẫn cập nhật nhưng
-không biết thành phần nào đã đổi.
+không biết cái gì đã đổi.
 
-**Object và array.** Controller cung cấp method tạo tham chiếu mới và gọi
+**Object và array.** Controller cung cấp method tạo object/array mới và gọi
 `requestUpdate()`:
 
 ```js
@@ -1239,7 +1242,7 @@ addItem(item) {
 ```
 
 State của controller không có setter do Lit tạo, nên mutate trực tiếp
-(`this.toggle.items.push(x)`) không tạo cập nhật. Mọi thay đổi state phải đi qua
+(`this.toggle.items.push(x)`) không tạo update. Mọi thay đổi state phải đi qua
 method hoặc setter của controller.
 
 ### 6.6. Event, style và public API
@@ -1263,7 +1266,7 @@ không thể làm mất event của controller bằng cách override method mà 
 
 **Style.** Controller không có `static styles`. Hai cách cung cấp style:
 
-1. Controller phản chiếu state thành attribute trên host (`toggleAttribute`
+1. Controller reflect state thành attribute trên host (`toggleAttribute`
    trong `hostUpdated()`), element viết CSS `:host([opened])`.
 2. Module của controller export `CSSResult`, element tự thêm vào `styles`:
 
@@ -1277,7 +1280,7 @@ class Panel extends LitElement {
 ```
 
 **Public API.** Method của mixin tự trở thành API của element. Với controller,
-element chọn phần được công khai và có thể giữ controller ở private field:
+element tự chọn phần nào là public và có thể giữ controller ở private field:
 
 ```js
 class Panel extends LitElement {
@@ -1301,7 +1304,7 @@ controller từ bên trong hook của chính nó.
 | Tình huống | Ảnh hưởng |
 |---|---|
 | Element không gọi `super.connectedCallback()` | `hostConnected()` của mọi controller không chạy; element không bao giờ cập nhật |
-| Element không gọi `super.disconnectedCallback()` | `hostDisconnected()` không chạy; timer và listener của controller không được giải phóng |
+| Element không gọi `super.disconnectedCallback()` | `hostDisconnected()` không chạy; timer và listener của controller không được cleanup |
 | Element tính dữ liệu trong `willUpdate()` | Controller đọc được trong `hostUpdate()` |
 | Controller đo DOM trong `hostUpdated()` | Element đọc được kết quả trong `updated()` |
 | Controller cần chặn render | Không thực hiện được; controller không có `shouldUpdate()` |
@@ -1323,7 +1326,7 @@ class TwoClocks extends LitElement {
 `fast` và `slow` có timer và giá trị riêng. Một mixin không cung cấp được hai
 bản độc lập như vậy trong cùng một element.
 
-Controller có thể được ghép từ controller khác bằng cách chuyển tiếp host.
+Controller có thể được ghép từ controller khác bằng cách truyền cùng host cho controller con.
 Controller con tự đăng ký với host; controller cha không cần gọi
 `addController()` nếu không có lifecycle riêng:
 
@@ -1360,7 +1363,7 @@ detach() {
 }
 ```
 
-Controller bị gỡ khi host vẫn connected phải tự giải phóng tài nguyên. Sau khi
+Controller bị gỡ khi host vẫn connected phải tự cleanup. Sau khi
 gỡ, controller không còn nhận `hostUpdate()`, `hostUpdated()` và
 `hostDisconnected()`.
 
@@ -1377,10 +1380,10 @@ render() {
 }
 ```
 
-### 6.10. Tác vụ bất đồng bộ
+### 6.10. Async task
 
-Controller phù hợp để đóng gói input, trạng thái, kết quả, lỗi và việc hủy của
-tác vụ bất đồng bộ. Lit cung cấp controller `Task` trong package `@lit/task`:
+Controller phù hợp để đóng gói input, trạng thái, kết quả, lỗi và việc abort
+của một async task (ví dụ gọi API). Lit cung cấp controller `Task` trong package `@lit/task`:
 
 ```js
 import {Task} from '@lit/task';
@@ -1410,13 +1413,13 @@ class UserCard extends LitElement {
 
 | API | Ý nghĩa |
 |---|---|
-| `args: () => [...]` | Đọc input từ host; task chạy lại khi mảng args đổi (so sánh nông từng phần tử) |
+| `args: () => [...]` | Đọc input từ host; task chạy lại khi mảng args đổi (so sánh từng phần tử bằng `Object.is`) |
 | `task([args], {signal})` | Hàm async thực hiện công việc; `signal` là `AbortSignal` |
 | `status` | `TaskStatus.INITIAL`, `PENDING`, `COMPLETE` hoặc `ERROR` |
 | `value`, `error` | Kết quả hoặc lỗi của lần chạy gần nhất |
 | `render({initial, pending, complete, error})` | Chọn template theo `status` |
 | `autoRun` | `true` (mặc định): chạy trong `hostUpdate()`; `'afterUpdate'`: chạy trong `hostUpdated()`; `false`: chỉ chạy khi gọi `run()` |
-| `run(args?)`, `abort(reason?)` | Chạy thủ công, hủy lần chạy đang chờ |
+| `run(args?)`, `abort(reason?)` | Chạy thủ công, abort lần chạy đang chờ |
 | `taskComplete` | Promise của lần chạy hiện tại |
 | `initialState` | Giá trị task trả về để quay lại trạng thái `INITIAL` |
 
@@ -1426,8 +1429,8 @@ tín hiệu; công việc chỉ dừng khi signal được chuyển cho API hỗ
 `fetch()`) hoặc được kiểm tra bằng `signal.throwIfAborted()` sau mỗi `await`.
 
 Với `autoRun: true`, `run()` gọi `host.requestUpdate()` bên trong
-`hostUpdate()`. Host đang trong lượt cập nhật nên lời gọi này không tạo lượt
-mới; template của lượt hiện tại hiển thị trạng thái `PENDING`. Khi task hoàn
+`hostUpdate()`. Host đang update nên lời gọi này không tạo update mới; template
+của lần update hiện tại hiển thị trạng thái `PENDING`. Khi task hoàn
 tất, `Task` gọi `requestUpdate()` một lần nữa để hiển thị kết quả.
 
 Demo có `SearchController`, một bản rút gọn của cơ chế trên:
@@ -1470,7 +1473,7 @@ hostDisconnected() {
 
 `PolymerElement` không có `addController()` và `requestUpdate()`, nên không dùng
 trực tiếp được ReactiveController. Có thể bổ sung bốn API của host bằng một
-mixin. Đây là giải pháp tự cài đặt, không phải tính năng của Polymer.
+mixin. Đây là code tự viết, không phải tính năng có sẵn của Polymer.
 
 ```js
 export const ControllerHostMixin = dedupingMixin((BaseClass) =>
@@ -1525,7 +1528,7 @@ export const ControllerHostMixin = dedupingMixin((BaseClass) =>
 ```
 
 Polymer không có `render()`; binding chỉ chạy lại khi property thay đổi. Mixin
-tăng property `_hostRevision` sau mỗi lượt cập nhật, và binding đọc state của
+tăng property `_hostRevision` sau mỗi lần update, và binding đọc state của
 controller phải phụ thuộc property này:
 
 ```js
@@ -1571,10 +1574,10 @@ So sánh theo từng nhu cầu:
 | Đổi giá trị mặc định | Gán trong constructor sau `super()` | Truyền option khi tạo controller |
 | Đổi cấu hình property | Khai báo lại đầy đủ option (Lit) hoặc chỉ option cần đổi (Polymer) | Truyền option khác khi tạo |
 | Nhận biết state đổi | `changedProperties.has('opened')` | Controller gọi `requestUpdate('toggle.opened', old)` |
-| Object và array | Method của mixin gán tham chiếu mới | Method của controller gán tham chiếu mới và gọi `requestUpdate()` |
+| Object và array | Method của mixin gán object/array mới | Method của controller gán object/array mới và gọi `requestUpdate()` |
 | Event | Mất nếu element override thiếu `super` | Callback hoặc `host.dispatchEvent`; không bị ảnh hưởng bởi override |
-| Style | `static styles` được kế thừa; element phải giữ style của lớp cha | Element tự thêm `CSSResult` |
-| Public API | Có sẵn trên element | Element tự công khai qua getter, method |
+| Style | `static styles` được kế thừa; element phải giữ style của class cha | Element tự thêm `CSSResult` |
+| Public API | Có sẵn trên element | Element tự mở qua getter, method |
 | Nhiều instance | Không | Có |
 | Can thiệp sâu lifecycle | Có (`shouldUpdate`, vị trí `super`) | Không |
 | Hook element phải gọi `super` | Mọi hook mixin override | `connectedCallback`, `disconnectedCallback` |
@@ -1590,7 +1593,7 @@ Tiêu chí tổng quát:
 | Chỉ tái sử dụng style | `CSSResult` hoặc CSS custom property |
 | Component Polymer | Mixin (hoặc `ControllerHostMixin`, mục 6.11) |
 
-Element vẫn có thể công khai method gọi vào controller, nên nhu cầu có public
+Element vẫn có thể có public method gọi vào controller, nên nhu cầu có public
 method không bắt buộc phải dùng mixin.
 
 ## 8. Chuyển từ Polymer sang Lit
@@ -1613,7 +1616,7 @@ method không bắt buộc phải dùng mixin.
 | `dom-if` | Biểu thức điều kiện hoặc `when()` | |
 | `dom-repeat` | `map()` hoặc `repeat()` | `repeat()` dùng khi cần key ổn định |
 | `this.$.button` | `renderRoot.querySelector()` hoặc `@query` | Chỉ đọc sau render |
-| `this.set('a.b', value)` | `this.a = {...this.a, b: value}` | Gán tham chiếu mới |
+| `this.set('a.b', value)` | `this.a = {...this.a, b: value}` | Gán object mới |
 | `push()`/`splice()` | Gán array mới | `[...items, item]` |
 | `notifyPath()` | Gán object/array mới | `requestUpdate()` chỉ khi cần |
 | `setProperties({...})` | Gán liên tiếp | Lit tự gom trong cùng microtask |
@@ -1679,9 +1682,9 @@ handler.
 ### 8.4. Quy trình chuyển một mixin
 
 1. Liệt kê property, giá trị mặc định và attribute.
-2. Liệt kê method công khai và event đang được sử dụng.
+2. Liệt kê public method và event đang được sử dụng.
 3. Xác định computed, observer và lifecycle.
-4. Tìm listener, timer, observer và subscription cần giải phóng.
+4. Tìm listener, timer, observer và subscription cần cleanup.
 5. Quyết định giữ dạng mixin hay chuyển thành controller (mục 7).
 6. Chuyển khai báo property sang Lit.
 7. Thay path mutation bằng gán object hoặc array mới.
@@ -1695,22 +1698,22 @@ handler.
 
 | Lỗi | Hậu quả | Cách xử lý |
 |---|---|---|
-| Không gọi `super.connectedCallback()` | Lit không cập nhật; controller và mixin không nhận lifecycle | Luôn gọi `super` |
+| Không gọi `super.connectedCallback()` | Lit không update; controller và mixin không nhận lifecycle | Luôn gọi `super` |
 | Không gọi `super.ready()` (Polymer) | Template không được tạo; `ready()` của mixin không chạy | Gọi `super.ready()` ở dòng đầu |
-| Không giải phóng listener bên ngoài | Element bị giữ trong bộ nhớ, handler vẫn chạy | Dùng cặp connect/disconnect |
+| Không cleanup listener bên ngoài | Element bị giữ trong bộ nhớ, handler vẫn chạy | Dùng cặp connect/disconnect |
 | Hai mixin trùng method hoặc property | Mixin áp dụng sau che mixin trước | Đặt tên riêng, dùng `super` |
 | Áp dụng cùng mixin nhiều lần | Lifecycle và listener chạy lặp | `dedupingMixin` hoặc sửa chain |
-| Đưa tag name vào mixin | Mixin gắn chặt với một element | Element sở hữu tag name |
+| Đưa tag name vào mixin | Mixin gắn chặt với một element | Tag name do element quyết định |
 | Khai báo lại property của mixin Lit thiếu option | Mất `type`, `reflect` | Khai báo đầy đủ hoặc dùng option do mixin export |
 | Dùng class field cho reactive property | Accessor bị che, không có cập nhật | Gán trong constructor |
-| Element Lit khai báo `static styles` | Mất style của mixin | Giữ style của lớp cha trong mảng |
-| Mutate object/array | Không có cập nhật, observer không chạy | Gán tham chiếu mới hoặc dùng API của Polymer |
-| Đọc DOM ngay sau khi gán property Lit | Đọc DOM của lượt render cũ | Chờ `updateComplete` |
-| Gán property vô điều kiện trong `updated()` | Vòng lặp cập nhật | Thêm điều kiện hoặc dùng `willUpdate()` |
+| Element Lit khai báo `static styles` | Mất style của mixin | Giữ style của class cha trong mảng |
+| Mutate object/array | Không có cập nhật, observer không chạy | Gán object/array mới hoặc dùng API của Polymer |
+| Đọc DOM ngay sau khi gán property Lit | Đọc DOM của lần render trước | Chờ `updateComplete` |
+| Gán property vô điều kiện trong `updated()` | Update lặp vô hạn | Thêm điều kiện hoặc dùng `willUpdate()` |
 | Controller đổi state không gọi `requestUpdate()` | Template không cập nhật | Gọi `host.requestUpdate()` |
 | Controller tạo listener trong constructor | Listener tồn tại sai vòng đời | Dùng `hostConnected()`/`hostDisconnected()` |
-| Chờ `hostDisconnected()` sau `removeController()` | Tài nguyên không được giải phóng | Giải phóng ngay sau `removeController()` |
-| Tác vụ bất đồng bộ không hủy khi input đổi | Kết quả cũ ghi đè kết quả mới | Dùng `AbortSignal`, bỏ qua kết quả cũ |
+| Chờ `hostDisconnected()` sau `removeController()` | Listener, timer không được cleanup | Cleanup ngay sau `removeController()` |
+| Async task không abort khi input đổi | Kết quả cũ ghi đè kết quả mới | Dùng `AbortSignal`, bỏ qua kết quả cũ |
 | Chuyển mọi `notify` thành event | Giữ API không còn nơi sử dụng | Kiểm tra nơi sử dụng trước |
 
 ## 10. Demo và kiểm chứng
@@ -1730,7 +1733,7 @@ liệu:
 | [`#javascript-mixin`](demo/index.html#javascript-mixin) | Prototype chain và thứ tự `super` | 1 |
 | [`#polymer-mixin`](demo/index.html#polymer-mixin) | Property effect, event, lifecycle Polymer; `ControllerHostMixin` | 3, 6.11 |
 | [`#lit-controller`](demo/index.html#lit-controller) | Mixin Lit, controller cơ bản, thứ tự cập nhật | 5, 6.3 |
-| [`#reactive-controller`](demo/index.html#reactive-controller) | Controller ghép, tác vụ bất đồng bộ, gắn/gỡ controller | 6.8–6.10 |
+| [`#reactive-controller`](demo/index.html#reactive-controller) | Controller ghép, async task, gắn/gỡ controller | 6.8–6.10 |
 
 ### 10.2. Cấu trúc thư mục
 
@@ -1756,9 +1759,9 @@ demo/
 
   controllers/
     counter-controller.js            controller cơ bản
-    clock-controller.js              timer và giải phóng khi disconnect
+    clock-controller.js              timer và cleanup khi disconnect
     dual-clock-controller.js         controller ghép
-    search-controller.js             tác vụ bất đồng bộ có hủy
+    search-controller.js             async task có abort
     probe-controller.js              addController/removeController khi đang chạy
 
   data/
@@ -1787,7 +1790,7 @@ Test chạy trực tiếp mã nguồn trong `demo/` và các ví dụ trong tài
 
 | File | Nội dung kiểm chứng | Mục |
 |---|---|---|
-| `runtime.test.js` | Prototype chain, `super`; property effect và lifecycle Polymer; chu trình cập nhật Lit; thứ tự hook controller; controller ghép; tác vụ bất đồng bộ; `addController`/`removeController` | 1, 3, 4, 6 |
+| `runtime.test.js` | Prototype chain, `super`; property effect và lifecycle Polymer; update cycle Lit; thứ tự hook controller; controller ghép; async task; `addController`/`removeController` | 1, 3, 4, 6 |
 | `mixin-interaction.test.js` | Polymer: khai báo lại `value`, observer của element, `push()`, thiếu `super.ready()`. Lit: đổi default, class field, khai báo lại property, mutate mảng, `static styles`, thiếu `super`, `changedProperties` | 3, 5 |
 | `controller-interaction.test.js` | Cấu hình controller, `requestUpdate(name, old)`, array, callback và event, style, public API, thiếu `super`, thứ tự hook nhiều controller | 6.3–6.7 |
 | `polymer-controller-host.test.js` | Chuỗi mixin của `PolymerElement`, thiếu API host, `ControllerHostMixin` | 3.1, 4.2, 6.11 |
@@ -1805,7 +1808,7 @@ Test chạy trực tiếp mã nguồn trong `demo/` và các ví dụ trong tài
 | Template Lit | `components/lit-panel.js` |
 | Controller cơ bản | `controllers/counter-controller.js` |
 | Timer, controller ghép | `controllers/clock-controller.js`, `controllers/dual-clock-controller.js` |
-| Tác vụ bất đồng bộ | `controllers/search-controller.js`, `data/fruit-api.js` |
+| Async task | `controllers/search-controller.js`, `data/fruit-api.js` |
 | Element dùng nhiều controller | `components/controller-lab.js` |
 | Nút điều khiển | `main.js`, `index.html` |
 | Giao diện | `styles.css` |
