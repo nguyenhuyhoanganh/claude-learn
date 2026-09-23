@@ -55,6 +55,9 @@ async function setupPolymerDemo() {
 
   try {
     await import('./components/polymer-panel.js');
+    await import('./components/polymer-clock.js');
+    document.querySelector('#polymer-clock-host')
+      .append(document.createElement('polymer-clock'));
     status.textContent = 'Đã tải Polymer 3.';
     section.querySelectorAll('button').forEach((button) => {
       button.disabled = false;

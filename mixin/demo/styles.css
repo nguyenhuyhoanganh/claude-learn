@@ -46,6 +46,7 @@ button:disabled {
 
 basic-panel,
 polymer-panel,
+polymer-clock,
 lit-panel,
 controller-lab {
   display: block;

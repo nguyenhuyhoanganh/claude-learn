@@ -822,6 +822,143 @@ source `lit-element` 4.x trong Lit 3.3.3).
 Khi code, gần như luôn `extends LitElement`. Nhưng mọi tính năng reactive,
 kể cả controller, đều đến từ `ReactiveElement`.
 
+#### Polymer có `ReactiveElement` không
+
+**Không.** `ReactiveElement` là lớp riêng của Lit. Polymer có hệ thống reactive
+riêng, và bản thân `PolymerElement` được **ghép từ nhiều mixin**. Chuỗi kế
+thừa thật (in từ Polymer 3.5.2 và Lit 3.3.3, có test kiểm tra):
+
+```text
+Polymer:
+PolymerElement → PropertiesMixin → PropertyEffects → TemplateStamp
+               → PropertyAccessors → PropertiesChanged → HTMLElement
+
+Lit:
+LitElement → ReactiveElement → HTMLElement
+```
+
+Trong source Polymer: `PolymerElement = ElementMixin(HTMLElement)`, và
+`ElementMixin` áp dụng `PropertiesMixin(PropertyEffects(base))`; tiếp tục như
+vậy xuống dưới.
+
+Phần làm việc tương đương `ReactiveElement` nằm ở đâu:
+
+| Việc | Lit | Polymer |
+|---|---|---|
+| Tạo getter/setter cho property | `ReactiveElement` | `PropertyAccessors` |
+| Gom thay đổi, báo property nào đổi | `ReactiveElement` (`requestUpdate`, `changedProperties`) | `PropertiesChanged` (`_propertiesChanged`) |
+| Đọc khai báo property | `ReactiveElement` (`static properties`) | `PropertiesMixin` (`static get properties()`) |
+| Computed, observer, binding, reflect, notify | Không có; dùng `willUpdate`/`updated` | `PropertyEffects` |
+| Tạo DOM từ template | `LitElement` + lit-html | `TemplateStamp` + `ElementMixin` |
+| Gắn ReactiveController | `addController()` | **Không có** |
+
+Khác biệt quan trọng khi tận dụng:
+
+- **Thời điểm:** Polymer chạy property effect **đồng bộ** ngay tại dòng gán.
+  Lit gom thay đổi và cập nhật trong microtask, nên cần `updateComplete` để
+  đọc DOM mới.
+- **Công cụ tái sử dụng:** Polymer chỉ có mixin (và Behavior kiểu cũ).
+  `PolymerElement.prototype` không có `addController()` hay `requestUpdate()`,
+  nên ReactiveController của Lit **không dùng trực tiếp** được.
+
+#### Dùng ReactiveController trong Polymer
+
+Tài liệu Lit cho phép host là base class của thư viện khác, miễn là có đủ bốn
+API: `addController()`, `removeController()`, `requestUpdate()`,
+`updateComplete`. Vì vậy có thể **viết một mixin** bổ sung bốn API này cho
+`PolymerElement`. Đây là cách tự làm, không phải tính năng có sẵn của Polymer.
+
+Mixin trong demo: `demo/mixins/polymer-controller-host-mixin.js`.
+
+```js
+export const ControllerHostMixin = dedupingMixin((BaseClass) =>
+  class extends BaseClass {
+    static get properties() {
+      return {_hostRevision: {type: Number, value: 0}};
+    }
+
+    constructor() {
+      super();
+      this.__controllers = new Set();
+      this.__updatePromise = Promise.resolve(true);
+    }
+
+    addController(controller) {
+      this.__controllers.add(controller);
+      if (this.__hostConnected) controller.hostConnected?.();
+    }
+
+    removeController(controller) {
+      this.__controllers.delete(controller);
+    }
+
+    connectedCallback() {
+      super.connectedCallback();          // ready() lần đầu chạy ở đây
+      this.__hostConnected = true;
+      this.__controllers.forEach((c) => c.hostConnected?.());
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this.__hostConnected = false;
+      this.__controllers.forEach((c) => c.hostDisconnected?.());
+    }
+
+    requestUpdate() {
+      if (this.__updatePending) return;
+      this.__updatePending = true;
+      this.__updatePromise = Promise.resolve().then(() => {
+        this.__updatePending = false;
+        this.__controllers.forEach((c) => c.hostUpdate?.());
+        this._hostRevision += 1;          // binding chạy lại, đồng bộ
+        this.__controllers.forEach((c) => c.hostUpdated?.());
+        return true;
+      });
+    }
+
+    get updateComplete() {
+      return this.__updatePromise;
+    }
+  });
+```
+
+Polymer không có `render()`: binding chỉ chạy lại khi **property** đổi, còn
+state của controller không phải property. Mixin giải quyết bằng cách tăng
+`_hostRevision` mỗi lần update. Binding nào đọc state của controller phải phụ
+thuộc property này:
+
+```js
+class PolymerClock extends ControllerHostMixin(PolymerElement) {
+  static get template() {
+    return html`<p>[[formatTime_(_hostRevision)]]</p>`;
+  }
+
+  constructor() {
+    super();
+    this.clock = new ClockController(this, 1000);   // controller viết cho Lit
+  }
+
+  formatTime_() {
+    return this.clock.value.toLocaleTimeString('vi-VN');
+  }
+}
+```
+
+`test/polymer-controller-host.test.js` kiểm tra:
+
+- `hostConnected()` chạy khi template đã được tạo (`shadowRoot` đã có);
+- nhiều `requestUpdate()` trong cùng tick được gom thành một lần
+  `hostUpdate()`/`hostUpdated()`, và DOM chưa đổi trước khi `updateComplete`
+  hoàn tất;
+- `hostDisconnected()` chạy khi gỡ element, `ClockController` dọn timer;
+- `addController()` khi host đã connected gọi `hostConnected()` ngay.
+
+Giới hạn so với Lit: `changedProperties` của Polymer không biết state của
+controller; và `hostUpdate()` không chạy "trước render" theo nghĩa của Lit, vì
+binding của Polymer có thể chạy bất cứ lúc nào một property đổi. Với dự án
+Polymer mới cần nhiều controller, nên cân nhắc chuyển component sang Lit
+(mục 9).
+
 #### Từ `ReactiveElement` đến ReactiveController
 
 - Controller là một **object bình thường**, không phải element. Nó gọi
@@ -2236,6 +2373,7 @@ demo/
   components/
     basic-panel.js                   custom element JavaScript thuần
     polymer-panel.js                 custom element Polymer
+    polymer-clock.js                 Polymer dùng lại ClockController
     lit-panel.js                     custom element Lit
     controller-lab.js                element Lit dùng nhiều controller
 
@@ -2243,6 +2381,7 @@ demo/
     javascript-openable-mixin.js     mixin JavaScript thuần
     logging-mixin.js                 minh họa chuỗi gọi super
     polymer-openable-mixin.js        property và lifecycle Polymer
+    polymer-controller-host-mixin.js thêm addController() cho Polymer
     lit-openable-mixin.js            reactive property và lifecycle Lit
 
   controllers/
@@ -2291,6 +2430,10 @@ về quan hệ giữa element và mixin:
   `static styles`; override thiếu `super` làm mất event và lifecycle của mixin;
   `changedProperties` chứa property của cả mixin lẫn element.
 
+File `test/polymer-controller-host.test.js` kiểm chứng Polymer không có API
+host của controller, chuỗi mixin tạo nên `PolymerElement`, và
+`ControllerHostMixin` gọi lifecycle của controller đúng như Lit.
+
 File `test/controller-interaction.test.js` kiểm chứng cách element tận dụng
 controller ở mục 7: cấu hình qua constructor, `requestUpdate(name, old)`,
 mảng, callback và event, style, public API, ảnh hưởng khi thiếu `super`, và
@@ -2312,6 +2455,7 @@ npm test
 | Thay đổi thứ tự gọi `super` | `mixins/logging-mixin.js` |
 | Thêm Polymer property, observer hoặc lifecycle | `mixins/polymer-openable-mixin.js` |
 | Sửa template Polymer | `components/polymer-panel.js` |
+| Dùng controller trong Polymer | `mixins/polymer-controller-host-mixin.js`, `components/polymer-clock.js` |
 | Thêm Lit reactive property hoặc lifecycle | `mixins/lit-openable-mixin.js` |
 | Sửa template Lit | `components/lit-panel.js` |
 | Thêm trạng thái hoặc lifecycle cho controller | `controllers/counter-controller.js` |
