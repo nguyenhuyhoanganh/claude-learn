@@ -22,6 +22,7 @@
     <a href="#javascript-mixin">1. JavaScript mixin</a>
     <a href="#polymer-mixin">2. Polymer mixin</a>
     <a href="#lit-controller">3. Lit và ReactiveController</a>
+    <a href="#reactive-controller">4. ReactiveController nâng cao</a>
   </nav>
 
   <section id="javascript-mixin">
@@ -71,6 +72,41 @@
     </div>
     <div id="lit-host"></div>
     <pre id="lit-log">Chưa có dữ liệu.</pre>
+  </section>
+
+  <section id="reactive-controller">
+    <h2>4. ReactiveController nâng cao</h2>
+    <p>
+      Element <code>components/controller-lab.js</code> dùng ba loại controller:
+    </p>
+    <ul>
+      <li>
+        <code>controllers/dual-clock-controller.js</code>: controller ghép từ
+        hai <code>ClockController</code>, mỗi instance có timer riêng và tự dọn
+        timer trong <code>hostDisconnected()</code>.
+      </li>
+      <li>
+        <code>controllers/search-controller.js</code>: tác vụ bất đồng bộ chạy
+        trong <code>hostUpdate()</code> khi input đổi, có abort và trạng thái
+        <code>initial/pending/complete/error</code> (nhập <code>error</code>
+        để thử lỗi).
+      </li>
+      <li>
+        <code>controllers/probe-controller.js</code>: gắn/gỡ controller lúc
+        runtime bằng <code>addController()</code> và
+        <code>removeController()</code>.
+      </li>
+    </ul>
+    <p id="rc-status">Đang tải Lit…</p>
+    <div class="actions">
+      <button id="rc-mount" disabled>Gắn element</button>
+      <button id="rc-unmount" disabled>Gỡ element</button>
+      <button id="rc-attach-probe" disabled>addController(probe)</button>
+      <button id="rc-detach-probe" disabled>removeController(probe)</button>
+      <button id="rc-clear" disabled>Xóa log</button>
+    </div>
+    <div id="rc-host"></div>
+    <pre id="rc-log">Chưa có dữ liệu.</pre>
   </section>
 
   <script type="module" src="./main.js"></script>

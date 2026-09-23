@@ -31,11 +31,13 @@ for (const name of [
 globalThis.JSCompiler_renameProperty = (property) => property;
 window.JSCompiler_renameProperty = globalThis.JSCompiler_renameProperty;
 
-const [{BasicPanel}, {PolymerPanel}, {LitPanel}] = await Promise.all([
-  import('../demo/components/basic-panel.js'),
-  import('../demo/components/polymer-panel.js'),
-  import('../demo/components/lit-panel.js'),
-]);
+const [{BasicPanel}, {PolymerPanel}, {LitPanel}, {ControllerLab}] =
+  await Promise.all([
+    import('../demo/components/basic-panel.js'),
+    import('../demo/components/polymer-panel.js'),
+    import('../demo/components/lit-panel.js'),
+    import('../demo/components/controller-lab.js'),
+  ]);
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -233,4 +235,131 @@ test('Lit mixin và ReactiveController chạy đúng quanh update cycle', async 
     'controller.hostConnected()',
     'mixin.connectedCallback()',
   ]);
+});
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForSearch(lab) {
+  while (lab.search.status === 'pending') {
+    await wait(5);
+  }
+  await lab.updateComplete;
+}
+
+test('Controller ghép tạo nhiều ClockController và dọn timer theo host', async () => {
+  const lab = document.createElement('controller-lab');
+  const logs = collectLogs(lab);
+
+  document.body.append(lab);
+  await lab.updateComplete;
+
+  assert.ok(lab instanceof ControllerLab);
+  assert.notEqual(lab.clocks.fast, lab.clocks.slow);
+  assert.notEqual(lab.clocks.fast.timerId, undefined);
+  assert.notEqual(lab.clocks.slow.timerId, undefined);
+  assert.deepEqual(logs.slice(0, 2), [
+    'fastClock.hostConnected(): bắt đầu timer 1000ms',
+    'slowClock.hostConnected(): bắt đầu timer 3000ms',
+  ]);
+
+  lab.remove();
+
+  assert.equal(lab.clocks.fast.timerId, undefined);
+  assert.equal(lab.clocks.slow.timerId, undefined);
+  assert.ok(logs.includes('fastClock.hostDisconnected(): dừng timer'));
+  assert.ok(logs.includes('slowClock.hostDisconnected(): dừng timer'));
+});
+
+test('SearchController chạy task trong hostUpdate, sau willUpdate', async () => {
+  const lab = document.createElement('controller-lab');
+  lab.delay = 10;
+  const logs = collectLogs(lab);
+
+  document.body.append(lab);
+  await lab.updateComplete;
+  // Lần update đầu chạy task với query rỗng; task trả initialState.
+  await waitForSearch(lab);
+  assert.equal(lab.search.status, 'initial');
+  assert.match(lab.shadowRoot.textContent, /Nhập từ khóa để tìm/);
+
+  logs.length = 0;
+  lab.query = 'ap';
+  await lab.updateComplete;
+
+  assert.deepEqual(logs, [
+    'host.willUpdate(): query = "ap"',
+    'search.run(["ap",10]): pending',
+  ]);
+  assert.equal(lab.search.status, 'pending');
+  assert.match(
+    lab.shadowRoot.textContent,
+    /Đang tìm/,
+    'requestUpdate() trong hostUpdate() được gom vào lần update hiện tại'
+  );
+
+  await waitForSearch(lab);
+  assert.equal(lab.search.status, 'complete');
+  assert.deepEqual(lab.search.value, ['apple', 'apricot', 'grape', 'papaya', 'pineapple']);
+  assert.match(lab.shadowRoot.textContent, /Kết quả: apple, apricot/);
+
+  lab.query = 'error';
+  await lab.updateComplete;
+  await waitForSearch(lab);
+  assert.equal(lab.search.status, 'error');
+  assert.match(lab.shadowRoot.textContent, /Lỗi: API giả lập trả lỗi/);
+});
+
+test('SearchController abort lần chạy cũ và khi host disconnect', async () => {
+  const lab = document.createElement('controller-lab');
+  lab.delay = 30;
+  const logs = collectLogs(lab);
+
+  document.body.append(lab);
+  lab.query = 'a';
+  await lab.updateComplete;
+  lab.query = 'an';
+  await lab.updateComplete;
+
+  assert.ok(logs.includes('search.abort(): có lần chạy mới'));
+  await waitForSearch(lab);
+  assert.deepEqual(lab.search.value, ['banana', 'mango', 'orange']);
+
+  lab.query = 'pe';
+  await lab.updateComplete;
+  lab.remove();
+  assert.ok(logs.includes('search.abort(): host disconnected'));
+
+  document.body.append(lab);
+  await lab.updateComplete;
+  assert.equal(lab.search.status, 'pending', 'task chạy lại khi host connect lại');
+  await waitForSearch(lab);
+  assert.deepEqual(lab.search.value, ['grape', 'peach', 'pear']);
+});
+
+test('addController gọi hostConnected ngay; removeController không gọi hostDisconnected', async () => {
+  const lab = document.createElement('controller-lab');
+  const logs = collectLogs(lab);
+
+  document.body.append(lab);
+  await lab.updateComplete;
+
+  logs.length = 0;
+  lab.attachProbe();
+  assert.deepEqual(logs, ['probe.hostConnected()'], 'gọi đồng bộ trong addController()');
+
+  await lab.updateComplete;
+  assert.deepEqual(logs, ['probe.hostConnected()', 'probe.hostUpdate() #1']);
+  assert.match(lab.shadowRoot.textContent, /probe: đã addController\(\)/);
+
+  logs.length = 0;
+  lab.detachProbe();
+  await lab.updateComplete;
+  assert.deepEqual(logs, ['probe: dọn tài nguyên từ detach()']);
+  assert.match(lab.shadowRoot.textContent, /probe: chưa gắn/);
+
+  lab.remove();
+  assert.ok(
+    !logs.includes('probe: dọn tài nguyên từ hostDisconnected()'),
+    'controller đã gỡ không còn nhận hostDisconnected()'
+  );
 });

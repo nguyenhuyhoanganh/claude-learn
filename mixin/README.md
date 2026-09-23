@@ -898,6 +898,24 @@ cung cấp các API:
 - `requestUpdate()`;
 - `updateComplete`.
 
+`LitElement` và `ReactiveElement` đều là host. Tài liệu Lit cũng cho phép host
+là object khác, ví dụ base class của thư viện web component khác, component
+của framework khác hoặc một controller khác, miễn là cung cấp đủ bốn API trên.
+
+Chi tiết từ source `ReactiveElement` (Lit 3.3.3):
+
+| API | Hành vi |
+|---|---|
+| `addController(c)` | Thêm `c` vào một `Set`. Nếu host **đã connected**, gọi `c.hostConnected()` ngay trong lệnh này |
+| `removeController(c)` | Chỉ xóa `c` khỏi `Set`; **không** gọi `c.hostDisconnected()` |
+| `requestUpdate()` | Lên lịch update bất đồng bộ; gọi trong `hostUpdate()` thì được gom vào lần update đang chạy |
+| `updateComplete` | Promise hoàn tất khi host update xong |
+
+Controller thường được tạo trong constructor hoặc class field của host. Lúc đó
+host chưa connected, nên `hostConnected()` sẽ chạy khi host được gắn vào
+document. Nếu tạo controller sau khi host đã connected, `addController()` tự gọi
+`hostConnected()` để controller không bỏ lỡ callback.
+
 ### Lifecycle của controller
 
 | Callback | Thời điểm |
@@ -910,12 +928,29 @@ cung cấp các API:
 Các callback đều không bắt buộc. Controller chỉ cần khai báo callback phù hợp
 với chức năng của nó.
 
-Trong một lần cập nhật, `hostUpdate()` chạy trước `host.update()` và
-`render()`. `hostUpdated()` chạy sau khi DOM được cập nhật và trước
-`updated()` của host.
+Chi tiết theo tài liệu Lit:
+
+- `hostConnected()` chạy sau khi host tạo `renderRoot`, nên shadow root đã
+  tồn tại. Phù hợp để đăng ký listener, observer, timer.
+- `hostUpdate()` chạy trước `update()` và `render()` của host. Phù hợp để đọc
+  DOM trước khi DOM đổi (ví dụ animation) hoặc chuẩn bị dữ liệu cho render.
+- `hostUpdated()` chạy sau khi DOM cập nhật, trước `updated()` của host. Phù
+  hợp để đọc DOM sau khi đổi.
+- `hostDisconnected()` dọn những gì đã tạo trong `hostConnected()`.
+
+Trong một lần cập nhật, `hostUpdate()` chạy sau `willUpdate()` và trước
+`host.update()`/`render()`. `hostUpdated()` chạy sau khi DOM được cập nhật và
+trước `firstUpdated()`/`updated()` của host. Nếu `shouldUpdate()` trả về
+`false`, cả hai callback này đều không chạy.
 
 ```text
 Host bắt đầu cập nhật
+        │
+        ▼
+host.shouldUpdate()                   [false → dừng, controller không được gọi]
+        │
+        ▼
+host.willUpdate()
         │
         ▼
 controller.hostUpdate()               [trước update/render]
@@ -1017,6 +1052,37 @@ export class MediaQueryController {
 Controller phù hợp với listener, observer, timer, fetch hoặc subscription vì
 phần khởi tạo và cleanup được đặt cạnh nhau.
 
+Ví dụ chuẩn trong tài liệu Lit là `ClockController`: tạo timer trong
+`hostConnected()`, xóa timer trong `hostDisconnected()`, và gọi
+`requestUpdate()` mỗi lần có giá trị mới:
+
+```js
+export class ClockController {
+  constructor(host, timeout = 1000) {
+    this.host = host;
+    this.timeout = timeout;
+    this.value = new Date();
+    host.addController(this);
+  }
+
+  hostConnected() {
+    this.timerId = setInterval(() => {
+      this.value = new Date();
+      this.host.requestUpdate();
+    }, this.timeout);
+  }
+
+  hostDisconnected() {
+    clearInterval(this.timerId);
+    this.timerId = undefined;
+  }
+}
+```
+
+Nếu `hostConnected()` tạo tài nguyên mà `hostDisconnected()` không dọn, element
+bị gỡ vẫn tiếp tục chạy timer và bị giữ trong bộ nhớ. Element có thể được gắn
+lại nhiều lần, nên hai callback này phải chạy được lặp lại.
+
 ### Nhiều instance trong cùng một element
 
 ```js
@@ -1038,14 +1104,193 @@ class ResponsivePanel extends LitElement {
 Hai controller có trạng thái riêng. Mixin không phù hợp với trường hợp cần nhiều
 instance độc lập của cùng một chức năng trong một element.
 
+### Ghép controller từ controller khác
+
+Controller có thể được xây dựng từ controller khác bằng cách chuyển tiếp
+`host` cho controller con. Controller cha không cần tự gọi `addController()`
+nếu nó không có lifecycle riêng; các controller con tự đăng ký với host.
+
+```js
+export class DualClockController {
+  constructor(host, fastTimeout, slowTimeout) {
+    this.fast = new ClockController(host, fastTimeout);
+    this.slow = new ClockController(host, slowTimeout);
+  }
+
+  get fastTime() {
+    return this.fast.value;
+  }
+
+  get slowTime() {
+    return this.slow.value;
+  }
+}
+```
+
+Host chỉ thấy một API (`fastTime`, `slowTime`), còn lifecycle của từng timer
+vẫn do `ClockController` quản lý.
+
+### Gắn và gỡ controller lúc runtime
+
+Controller không bắt buộc phải là field của host: bất kỳ object nào được
+truyền vào `addController()` đều là controller. Có thể gắn hoặc gỡ controller
+khi host đang chạy:
+
+```js
+attach() {
+  // Host đang connected → hostConnected() chạy ngay trong lệnh này.
+  this.host.addController(this);
+}
+
+detach() {
+  // removeController() không gọi hostDisconnected().
+  this.host.removeController(this);
+  this.cleanup();
+}
+```
+
+Vì `removeController()` không gọi `hostDisconnected()`, controller bị gỡ khi
+host vẫn connected phải tự dọn tài nguyên. Sau khi gỡ, controller không còn
+nhận `hostUpdate()`, `hostUpdated()` hay `hostDisconnected()`.
+
+### Controller và directive
+
+Tài liệu Lit mô tả hai cách kết hợp:
+
+- **Controller directive**: directive tự gọi `addController()` để nhận
+  lifecycle của host.
+- **Controller sở hữu directive**: controller có method trả về directive để
+  đặt lên một element cụ thể trong template, ví dụ:
+
+```js
+render() {
+  return html`
+    <textarea ${this.textSize.observe()}></textarea>
+    <p>Width: ${this.textSize.contentRect?.width}</p>
+  `;
+}
+```
+
+Cách thứ hai hữu ích khi controller cần tham chiếu tới một element trong
+template, ví dụ `ResizeController` dùng `ResizeObserver`.
+
 ### Tác vụ bất đồng bộ
 
 Controller có thể đóng gói input, trạng thái `pending`, kết quả, lỗi và
 cancellation của một tác vụ bất đồng bộ. Lit cung cấp `@lit/task`, một
 ReactiveController được thiết kế sẵn cho mục đích này.
 
+Cách dùng `@lit/task` (`npm install @lit/task`):
+
+```js
+import {Task} from '@lit/task';
+
+class UserCard extends LitElement {
+  static properties = {userId: {type: Number}};
+
+  userTask = new Task(this, {
+    task: async ([userId], {signal}) => {
+      const response = await fetch(`/api/users/${userId}`, {signal});
+      if (!response.ok) throw new Error(response.status);
+      return response.json();
+    },
+    args: () => [this.userId],
+  });
+
+  render() {
+    return this.userTask.render({
+      initial: () => html`Chưa tải.`,
+      pending: () => html`Đang tải…`,
+      complete: (user) => html`${user.name}`,
+      error: (error) => html`Lỗi: ${error}`,
+    });
+  }
+}
+```
+
+Các điểm chính của `Task`:
+
+| API | Ý nghĩa |
+|---|---|
+| `args: () => [...]` | Hàm đọc input từ host; task chạy lại khi mảng args đổi (so sánh nông từng phần tử) |
+| `task([args], {signal})` | Hàm async thực hiện công việc; `signal` là `AbortSignal` |
+| `status` | `TaskStatus.INITIAL`, `PENDING`, `COMPLETE` hoặc `ERROR` |
+| `value`, `error` | Kết quả hoặc lỗi của lần chạy gần nhất |
+| `render({initial, pending, complete, error})` | Chọn template theo `status` |
+| `autoRun` | `true` (mặc định) chạy trong `hostUpdate()`; `'afterUpdate'` chạy trong `hostUpdated()`; `false` chỉ chạy khi gọi `run()` |
+| `run(args?)`, `abort(reason?)` | Chạy thủ công hoặc hủy lần chạy đang chờ |
+| `taskComplete` | Promise của lần chạy hiện tại |
+| `initialState` | Task trả giá trị này để quay về `INITIAL` |
+
+Khi một lần chạy mới bắt đầu trong lúc lần trước còn `PENDING`, `Task` gọi
+`abort()` trên `AbortController` của lần trước và bỏ qua kết quả cũ.
+`AbortSignal` chỉ là tín hiệu: cần chuyển tiếp nó vào API như `fetch()`, hoặc
+tự kiểm tra bằng `signal.throwIfAborted()` sau mỗi `await`.
+
+Source của `Task` cho thấy khi `autoRun` là `true`, `run()` gọi
+`host.requestUpdate()` ngay trong `hostUpdate()`. Host đang update nên lệnh này
+không tạo update mới: template của lần update hiện tại đã thấy `PENDING`. Khi
+task xong, `Task` gọi `requestUpdate()` lần nữa để render kết quả.
+
+Demo trong thư mục này có `SearchController`, một bản rút gọn của cùng ý tưởng
+(không cần cài `@lit/task`) để đọc được toàn bộ luồng:
+
+```js
+hostUpdate() {
+  const args = this.args();
+  if (argsChanged(this.previousArgs, args)) {
+    this.run(args);
+  }
+}
+
+async run(args) {
+  this.previousArgs = args;
+  this.abort('có lần chạy mới');
+  const runId = ++this.runId;
+  this.abortController = new AbortController();
+  this.status = 'pending';
+  this.host.requestUpdate();
+
+  try {
+    this.value = await this.task(args, {signal: this.abortController.signal});
+    if (runId !== this.runId) return;   // kết quả cũ, bỏ qua
+    this.status = 'complete';
+  } catch (error) {
+    if (runId !== this.runId) return;
+    this.error = error;
+    this.status = 'error';
+  }
+  this.host.requestUpdate();
+}
+
+hostDisconnected() {
+  this.abort('host disconnected');
+}
+```
+
+### Khi nào dùng controller thay vì mixin
+
+Tài liệu Lit khuyến nghị: nên đóng gói chức năng thành controller, **trừ khi**
+chức năng đó cần:
+
+- thêm public API trực tiếp lên component;
+- truy cập lifecycle của component ở mức rất chi tiết.
+
+Quan hệ giữa hai cách:
+
+- Component **có** controller (has-a). Người dùng component không truy cập
+  controller được, trừ khi component tự mở API.
+- Component **là** instance của mixin (is-a). Field và method public của mixin
+  trở thành API của component.
+- Lifecycle method của controller được gọi **trước** lifecycle method tương
+  ứng của component. Mixin nằm trong prototype chain nên component quyết định
+  được thời điểm gọi `super`.
+
 Mở demo Lit:
-[`demo/index.html#lit-controller`](demo/index.html#lit-controller).
+[`demo/index.html#lit-controller`](demo/index.html#lit-controller) (controller
+cơ bản) và
+[`demo/index.html#reactive-controller`](demo/index.html#reactive-controller)
+(controller ghép, tác vụ bất đồng bộ, gắn/gỡ lúc runtime).
 
 ## 8. Tiêu chí chọn mixin, controller hoặc function
 
@@ -1174,6 +1419,8 @@ handler thường rõ hơn observer.
 | Gán trạng thái vô điều kiện trong `updated()` | Update lặp vô hạn | Dùng điều kiện hoặc chuyển sang `willUpdate()` |
 | Controller đổi trạng thái nhưng không `requestUpdate()` | Template không render lại | Gọi `host.requestUpdate()` |
 | Controller tạo listener trong constructor | Listener tồn tại sai vòng đời | Dùng `hostConnected()` và `hostDisconnected()` |
+| Gọi `removeController()` rồi chờ `hostDisconnected()` | Timer/listener của controller không được dọn | Tự dọn ngay sau `removeController()` |
+| Task bất đồng bộ không abort khi input đổi | Kết quả cũ ghi đè kết quả mới | Dùng `AbortSignal` và bỏ qua kết quả của lần chạy cũ |
 | Chuyển mọi `notify` thành event | Giữ API cũ dù không còn consumer | Kiểm tra nơi sử dụng trước |
 
 ## 11. Chạy demo
@@ -1185,7 +1432,7 @@ cd mixin/demo
 python3 -m http.server 8000
 ```
 
-Mở [`demo/index.html`](demo/index.html). Ba phần nằm trên cùng một trang và có
+Mở [`demo/index.html`](demo/index.html). Bốn phần nằm trên cùng một trang và có
 liên kết riêng để mở trực tiếp:
 
 1. [`#javascript-mixin`](demo/index.html#javascript-mixin): bản chất của mixin,
@@ -1194,6 +1441,9 @@ liên kết riêng để mở trực tiếp:
    event và lifecycle Polymer.
 3. [`#lit-controller`](demo/index.html#lit-controller): Lit mixin,
    ReactiveController và thứ tự cập nhật.
+4. [`#reactive-controller`](demo/index.html#reactive-controller): controller
+   ghép, nhiều instance, tác vụ bất đồng bộ có abort, `addController()` và
+   `removeController()` lúc runtime.
 
 ### Cấu trúc file demo
 
@@ -1207,6 +1457,7 @@ demo/
     basic-panel.js                   custom element JavaScript thuần
     polymer-panel.js                 custom element Polymer
     lit-panel.js                     custom element Lit
+    controller-lab.js                element Lit dùng nhiều controller
 
   mixins/
     javascript-openable-mixin.js     mixin JavaScript thuần
@@ -1215,7 +1466,14 @@ demo/
     lit-openable-mixin.js            reactive property và lifecycle Lit
 
   controllers/
-    counter-controller.js            ReactiveController
+    counter-controller.js            ReactiveController cơ bản
+    clock-controller.js              timer + dọn tài nguyên khi disconnect
+    dual-clock-controller.js         controller ghép từ hai ClockController
+    search-controller.js             tác vụ bất đồng bộ có abort
+    probe-controller.js              addController/removeController lúc runtime
+
+  data/
+    fruit-api.js                     API giả lập có độ trễ và AbortSignal
 ```
 
 Ba file `*-openable-mixin.js` đều export cùng tên `OpenableMixin`, đúng với
@@ -1235,7 +1493,12 @@ Polymer 3.5.2 và một môi trường DOM. Test kiểm tra:
 - Polymer property effects, binding, observer, notify event, phản chiếu attribute,
   `ready()`, `connectedCallback()` và `disconnectedCallback()`;
 - Lit reactive property, `updateComplete`, thứ tự hook của ReactiveController,
-  `firstUpdated()` và hành vi khi controller gọi `requestUpdate()`.
+  `firstUpdated()` và hành vi khi controller gọi `requestUpdate()`;
+- controller ghép và việc dọn timer khi host disconnect;
+- task chạy trong `hostUpdate()` sau `willUpdate()`, abort lần chạy cũ, abort
+  khi disconnect và chạy lại khi connect lại;
+- `addController()` gọi `hostConnected()` ngay khi host đã connected,
+  `removeController()` không gọi `hostDisconnected()`.
 
 Chạy test bằng hai lệnh:
 
@@ -1256,6 +1519,9 @@ npm test
 | Thêm Lit reactive property hoặc lifecycle | `mixins/lit-openable-mixin.js` |
 | Sửa template Lit | `components/lit-panel.js` |
 | Thêm trạng thái hoặc lifecycle cho controller | `controllers/counter-controller.js` |
+| Đổi timer hoặc cách ghép controller | `controllers/clock-controller.js`, `controllers/dual-clock-controller.js` |
+| Đổi logic tác vụ bất đồng bộ | `controllers/search-controller.js`, `data/fruit-api.js` |
+| Sửa template dùng nhiều controller | `components/controller-lab.js` |
 | Thêm nút gọi API | `main.js` và `index.html` |
 | Đổi giao diện trang demo | `styles.css` |
 
@@ -1284,6 +1550,8 @@ Lit:
 - [Class mixins](https://lit.dev/docs/composition/mixins/)
 - [Controllers và mixins](https://lit.dev/docs/composition/overview/)
 - [ReactiveController](https://lit.dev/docs/composition/controllers/)
+- [API `ReactiveController` và `ReactiveControllerHost`](https://lit.dev/docs/api/controllers/)
+- [Source `ReactiveElement`](https://github.com/lit/lit/blob/main/packages/reactive-element/src/reactive-element.ts)
 - [Reactive properties](https://lit.dev/docs/components/properties/)
 - [Lifecycle và reactive update cycle](https://lit.dev/docs/components/lifecycle/)
 - [Events](https://lit.dev/docs/components/events/)

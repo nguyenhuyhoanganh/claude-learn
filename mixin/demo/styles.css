@@ -46,7 +46,8 @@ button:disabled {
 
 basic-panel,
 polymer-panel,
-lit-panel {
+lit-panel,
+controller-lab {
   display: block;
   margin: 12px 0;
   padding: 12px;

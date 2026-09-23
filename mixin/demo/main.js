@@ -125,6 +125,54 @@ async function setupLitDemo() {
   }
 }
 
+async function setupReactiveControllerDemo() {
+  const section = document.querySelector('#reactive-controller');
+  const status = document.querySelector('#rc-status');
+  const host = document.querySelector('#rc-host');
+  const logger = createLogger('#rc-log', 'Chưa có dữ liệu.');
+  let element;
+
+  try {
+    await import('./components/controller-lab.js');
+    status.textContent = 'Đã tải Lit 3.';
+    section.querySelectorAll('button').forEach((button) => {
+      button.disabled = false;
+    });
+
+    document.querySelector('#rc-mount').addEventListener('click', () => {
+      if (!element) {
+        element = document.createElement('controller-lab');
+        element.addEventListener('demo-log', (event) => {
+          logger.write(event.detail);
+        });
+      }
+
+      if (!element.isConnected) {
+        host.append(element);
+      }
+    });
+
+    document.querySelector('#rc-unmount').addEventListener('click', () => {
+      element?.remove();
+    });
+
+    document.querySelector('#rc-attach-probe').addEventListener('click', () => {
+      element?.attachProbe();
+    });
+
+    document.querySelector('#rc-detach-probe').addEventListener('click', () => {
+      element?.detachProbe();
+    });
+
+    document.querySelector('#rc-clear').addEventListener('click', () => {
+      logger.clear();
+    });
+  } catch (error) {
+    status.textContent = `Không tải được Lit: ${error.message}`;
+  }
+}
+
 setupJavaScriptDemo();
 setupPolymerDemo();
 setupLitDemo();
+setupReactiveControllerDemo();
