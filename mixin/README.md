@@ -5,6 +5,15 @@
 
 ## Bắt đầu từ đâu
 
+Mục tiêu của tài liệu: **tận dụng** mixin và ReactiveController, tức là viết
+một lần phần property, state, event, style, lifecycle rồi để nhiều element
+dùng lại, và biết element phải làm gì để không làm hỏng phần dùng lại đó.
+Mỗi mục đều trả lời các câu hỏi:
+
+- element dùng lại property/state có sẵn như thế nào;
+- element đổi default, cấu hình hoặc ghi đè chúng ra sao;
+- event, style và lifecycle của mixin/controller ảnh hưởng element thế nào.
+
 Nếu chưa biết Lit, nên đọc theo thứ tự:
 
 1. Mục 1–2: mixin trong JavaScript thuần.
@@ -265,6 +274,9 @@ Mở demo JavaScript thuần:
 [`demo/index.html#javascript-mixin`](demo/index.html#javascript-mixin).
 
 ## 3. Mixin trong Polymer
+
+Mục tiêu của mục này: tận dụng property, observer, event và lifecycle mà mixin
+Polymer đã khai báo, không phải viết lại trong từng element.
 
 Polymer đọc `properties`, observer và lifecycle trên toàn bộ prototype chain.
 Do đó property do mixin khai báo có thể dùng trực tiếp trong template của
@@ -662,6 +674,11 @@ Mở demo Polymer:
 [`demo/index.html#polymer-mixin`](demo/index.html#polymer-mixin).
 
 ## 4. Mixin trong Lit
+
+Mục tiêu của mục này: tận dụng reactive property, style, event và lifecycle
+mà mixin Lit đã khai báo. Cách tận dụng cùng các nhu cầu đó bằng
+ReactiveController nằm ở
+[Element tận dụng controller như thế nào](#element-tận-dụng-controller-như-thế-nào).
 
 Nếu chưa từng dùng Lit, đọc phần [Kiến thức nền về Lit](#kiến-thức-nền-về-lit)
 trước. Các phần sau dùng lại những khái niệm trong đó.
@@ -1704,6 +1721,219 @@ render() {
 Cách thứ hai hữu ích khi controller cần tham chiếu tới một element trong
 template, ví dụ `ResizeController` dùng `ResizeObserver`.
 
+### Element tận dụng controller như thế nào
+
+Mixin trao property và method **thẳng vào element**. Controller giữ chúng
+**trong một object riêng**, element truy cập qua field (`this.toggle.opened`).
+Vì vậy cách tận dụng khác mixin ở từng điểm. Các ví dụ dưới dùng một
+`ToggleController` làm cùng việc với `OpenableMixin`; mọi hành vi đều được
+kiểm chứng trong `test/controller-interaction.test.js`.
+
+```js
+export class ToggleController {
+  constructor(host, {opened = false, attribute = 'opened', onChange} = {}) {
+    this.host = host;
+    this._opened = opened;
+    this.attribute = attribute;
+    this.onChange = onChange;
+    host.addController(this);
+  }
+
+  get opened() {
+    return this._opened;
+  }
+
+  set opened(value) {
+    const old = this._opened;
+    if (value === old) return;
+    this._opened = value;
+    this.host.requestUpdate('toggle.opened', old);
+    this.onChange?.(value);
+    this.host.dispatchEvent(new CustomEvent('opened-changed', {
+      detail: {value},
+    }));
+  }
+
+  toggle() {
+    this.opened = !this.opened;
+  }
+
+  hostUpdated() {
+    this.host.toggleAttribute(this.attribute, this._opened);
+  }
+}
+```
+
+#### Dùng lại state của controller
+
+Element đọc state qua field chứa controller, ngay trong `render()`:
+
+```js
+class Panel extends LitElement {
+  toggle = new ToggleController(this);
+
+  render() {
+    return html`
+      <button @click=${() => this.toggle.toggle()}>
+        opened = ${this.toggle.opened}
+      </button>
+    `;
+  }
+}
+```
+
+State của controller **không** phải reactive property. Nó chỉ làm element
+render lại vì controller tự gọi `host.requestUpdate()` trong setter. Element
+gán `this.toggle.opened = true` cũng đi qua setter đó nên vẫn render lại.
+
+Dùng class field cho controller là an toàn (khác với class field che property
+của mixin), vì `toggle` không phải reactive property.
+
+#### Cấu hình và đổi default
+
+Với mixin, element đổi default bằng cách gán trong constructor hoặc khai báo
+lại property. Với controller, default và cấu hình được **truyền vào
+constructor**, mỗi element một cấu hình:
+
+```js
+class ExpandedPanel extends LitElement {
+  toggle = new ToggleController(this, {opened: true, attribute: 'expanded'});
+}
+```
+
+Không có rủi ro "khai báo lại làm mất option" như mixin Lit, vì không có gì bị
+khai báo lại. Đổi cấu hình lúc chạy thì controller cần cung cấp setter gọi
+`requestUpdate()`, như setter `opened` ở trên.
+
+#### Phản ứng khi state của controller đổi
+
+`changedProperties` của element chỉ tự chứa reactive property. Controller muốn
+element nhận biết thay đổi của mình thì gọi `requestUpdate` kèm tên và giá trị
+cũ:
+
+```js
+this.host.requestUpdate('toggle.opened', old);
+```
+
+Khi đó element kiểm tra được như với property của mixin:
+
+```js
+updated(changedProperties) {
+  if (changedProperties.has('toggle.opened')) {
+    console.log('giá trị cũ:', changedProperties.get('toggle.opened'));
+  }
+}
+```
+
+Nếu controller chỉ gọi `requestUpdate()` không tham số, element vẫn render lại
+nhưng không biết **cái gì** đã đổi.
+
+#### Object và array trong controller
+
+Giống mixin Lit: controller nên cung cấp method tạo tham chiếu mới và gọi
+`requestUpdate()`:
+
+```js
+addItem(item) {
+  this.items = [...this.items, item];
+  this.host.requestUpdate();
+}
+```
+
+Element mutate thẳng (`this.toggle.items.push(x)`) thì không có update. Khác
+mixin, ở đây không có setter nào để Lit bắt được, nên **mọi** thay đổi state
+của controller đều phải đi qua method hoặc setter của controller.
+
+#### Event và callback từ controller
+
+Controller có hai cách báo cho element và bên ngoài:
+
+| Cách | Ai nhận | Dùng khi |
+|---|---|---|
+| Callback trong option (`onChange`) | Chỉ element đã tạo controller | Element cần phản ứng nội bộ; giống `onComplete`/`onError` của `@lit/task` |
+| `host.dispatchEvent(...)` | Bất kỳ ai nghe trên element | Event thuộc public API của element |
+
+```js
+class Panel extends LitElement {
+  toggle = new ToggleController(this, {
+    onChange: (opened) => this.saveState(opened),
+  });
+}
+```
+
+Khác mixin: element **không thể** vô tình làm mất event của controller bằng
+cách ghi đè method mà quên `super`, vì method nằm trên controller, không nằm
+trong prototype chain của element.
+
+#### Style khi dùng controller
+
+Controller **không** có `static styles`; nó không phải class trong chuỗi kế
+thừa. Có hai cách tận dụng:
+
+1. Controller phản chiếu state thành attribute trên host (như `hostUpdated()`
+   ở trên gọi `toggleAttribute`), element viết CSS `:host([opened])`.
+2. Module của controller export một `CSSResult`, element tự đưa vào `styles`:
+
+```js
+export const toggleStyles = css`:host([opened]) { font-weight: bold; }`;
+
+class Panel extends LitElement {
+  static styles = [toggleStyles, css`:host { display: block; }`];
+  toggle = new ToggleController(this);
+}
+```
+
+Mixin tự gộp style vào element; controller buộc element tự chọn style, nên
+không có lỗi "element ghi đè `static styles` làm mất style của mixin".
+
+#### Public API: element tự quyết định mở gì
+
+Với mixin, mọi method của mixin tự thành API của element. Với controller,
+element chọn phần muốn mở và có thể giấu controller bằng private field:
+
+```js
+class Panel extends LitElement {
+  #toggle = new ToggleController(this);
+
+  get opened() {
+    return this.#toggle.opened;
+  }
+
+  toggle() {
+    this.#toggle.toggle();
+  }
+}
+```
+
+#### Lifecycle của controller ảnh hưởng element thế nào
+
+Controller không override hook nào của element; `ReactiveElement` gọi hook
+của controller từ bên trong các hook của chính nó. Thứ tự trong một lần update
+(test đã kiểm tra với hai controller):
+
+```text
+host.willUpdate()
+first.hostUpdate()        ← controller theo thứ tự addController
+second.hostUpdate()
+host.render()             (trong host.update())
+first.hostUpdated()
+second.hostUpdated()
+host.firstUpdated()       [chỉ lần đầu]
+host.updated()
+```
+
+| Tình huống | Ảnh hưởng |
+|---|---|
+| Element quên `super.connectedCallback()` | `hostConnected()` của **mọi** controller không chạy, element cũng không bao giờ update |
+| Element quên `super.disconnectedCallback()` | `hostDisconnected()` không chạy: timer, listener của controller bị rò rỉ |
+| Controller cần dữ liệu tính trong `willUpdate()` của element | Đọc được trong `hostUpdate()`, vì `willUpdate()` chạy trước |
+| Controller đo DOM trong `hostUpdated()` | Element đọc được kết quả đo trong `updated()` |
+| Controller muốn chặn render | Không làm được: controller không có `shouldUpdate()`; cần mixin nếu thật sự cần |
+
+Điều element phải giữ khi tận dụng controller ít hơn mixin: chỉ cần gọi
+`super.connectedCallback()` và `super.disconnectedCallback()` khi override.
+Không có chuỗi `super` nào giữa controller và element cho các hook update.
+
 ### Tác vụ bất đồng bộ
 
 Controller có thể đóng gói input, trạng thái `pending`, kết quả, lỗi và
@@ -1856,6 +2086,26 @@ class SearchBox extends LitElement {
 ```
 
 Vì vậy, có public method không đồng nghĩa bắt buộc phải dùng mixin.
+
+### Cùng một nhu cầu: tận dụng mixin hay controller
+
+| Nhu cầu của element | Tận dụng mixin | Tận dụng controller |
+|---|---|---|
+| Đọc state | `this.opened` | `this.toggle.opened` |
+| Đổi default | Gán trong constructor sau `super()` | Truyền option: `new ToggleController(this, {opened: true})` |
+| Đổi cấu hình property | Khai báo lại **đầy đủ** option (Lit) hoặc chỉ option cần đổi (Polymer) | Truyền option khác khi tạo |
+| Biết state vừa đổi | `changedProperties.has('opened')` | Controller gọi `requestUpdate('toggle.opened', old)` |
+| Object/array | Method của mixin gán tham chiếu mới | Method của controller gán tham chiếu mới + `requestUpdate()` |
+| Nhận event | Mixin phát; mất nếu element ghi đè thiếu `super` | Callback option hoặc `host.dispatchEvent`; không mất vì override |
+| Style | Mixin gộp `static styles`; element phải giữ `Base.styles` | Element tự thêm `CSSResult` của controller |
+| Public API | Tự có trên element | Element tự mở bằng getter/method |
+| Nhiều bản cùng lúc | Không được | Tạo nhiều instance |
+| Chặn hoặc can thiệp sâu lifecycle | Được (`shouldUpdate`, vị trí `super`) | Không |
+| Element phải giữ `super` ở | Mọi hook mà mixin override | Chỉ `connectedCallback`/`disconnectedCallback` |
+
+Tóm lại: controller dễ tận dụng an toàn hơn vì element ít cách làm hỏng nó.
+Chọn mixin khi thật sự cần API xuất hiện trực tiếp trên element hoặc cần can
+thiệp sâu vào lifecycle.
 
 ## 9. Chuyển từ Polymer sang Lit
 
@@ -2040,6 +2290,11 @@ về quan hệ giữa element và mixin:
   property thay thế toàn bộ option; mutate mảng của mixin; element ghi đè
   `static styles`; override thiếu `super` làm mất event và lifecycle của mixin;
   `changedProperties` chứa property của cả mixin lẫn element.
+
+File `test/controller-interaction.test.js` kiểm chứng cách element tận dụng
+controller ở mục 7: cấu hình qua constructor, `requestUpdate(name, old)`,
+mảng, callback và event, style, public API, ảnh hưởng khi thiếu `super`, và
+thứ tự hook giữa nhiều controller với host.
 
 Chạy test bằng hai lệnh:
 
