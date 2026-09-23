@@ -8,7 +8,8 @@
 1. [Khái niệm mixin](#1-khái-niệm-mixin)
 2. [Chuỗi mixin, thứ tự gọi và `super`](#2-chuỗi-mixin-thứ-tự-gọi-và-super)
 3. [Mixin trong Polymer](#3-mixin-trong-polymer)
-4. [Mixin trong Lit](#4-mixin-trong-lit)
+4. [Mixin trong Lit](#4-mixin-trong-lit) (bắt đầu bằng
+   [Kiến thức nền về Lit](#kiến-thức-nền-về-lit))
 5. [Lifecycle và quá trình cập nhật của Lit](#5-lifecycle-và-quá-trình-cập-nhật-của-lit)
 6. [Ánh xạ `ready()` từ Polymer sang Lit](#6-ánh-xạ-ready-từ-polymer-sang-lit)
 7. [ReactiveController](#7-reactivecontroller)
@@ -541,6 +542,145 @@ Mở demo Polymer:
 
 ## 4. Mixin trong Lit
 
+Nếu chưa từng dùng Lit, đọc phần [Kiến thức nền về Lit](#kiến-thức-nền-về-lit)
+trước. Các phần sau dùng lại những khái niệm trong đó.
+
+### Kiến thức nền về Lit
+
+#### Custom element là gì
+
+Trình duyệt cho phép tự tạo thẻ HTML mới bằng cách viết một class
+`extends HTMLElement` rồi đăng ký tên thẻ:
+
+```js
+class HelloBox extends HTMLElement {
+  connectedCallback() {
+    this.textContent = 'Xin chào';
+  }
+}
+
+customElements.define('hello-box', HelloBox);
+```
+
+Sau đó có thể viết `<hello-box></hello-box>` trong HTML. Đây là Web API chuẩn,
+không cần thư viện nào.
+
+Vấn đề: khi dữ liệu thay đổi, phải **tự tay** cập nhật DOM.
+
+```js
+class CounterBox extends HTMLElement {
+  count = 0;
+
+  increment() {
+    this.count += 1;
+    this.textContent = `count = ${this.count}`;   // tự cập nhật DOM
+  }
+}
+```
+
+Nếu có nhiều dữ liệu và nhiều chỗ hiển thị, việc nhớ cập nhật đúng chỗ, đúng
+lúc trở nên khó.
+
+#### "Reactive" nghĩa là gì
+
+**Reactive** nghĩa là: đổi dữ liệu thì giao diện **tự** cập nhật theo.
+Chỉ cần viết:
+
+```js
+this.count += 1;
+```
+
+và thư viện tự biết phải vẽ lại phần hiển thị `count`. Lit làm điều này cho
+custom element.
+
+#### Ba lớp: `HTMLElement` → `ReactiveElement` → `LitElement`
+
+Khi viết `class MyEl extends LitElement`, element kế thừa qua ba lớp:
+
+```text
+HTMLElement          (trình duyệt)   thẻ HTML tự định nghĩa, lifecycle chuẩn
+    ▲
+ReactiveElement      (Lit)           reactive property, update cycle, controller
+    ▲
+LitElement           (Lit)           render() + template html`...`
+    ▲
+MyEl                 (code của bạn)
+```
+
+| Lớp | Cung cấp | Package |
+|---|---|---|
+| `HTMLElement` | Là một thẻ HTML; `connectedCallback()`, `disconnectedCallback()`, attribute | Có sẵn trong trình duyệt |
+| `ReactiveElement` | Reactive property (`static properties`), `requestUpdate()`, update cycle (`willUpdate`, `update`, `updated`…), `updateComplete`, `static styles`, `addController()` | `@lit/reactive-element` |
+| `LitElement` | Method `render()` trả về template `` html`...` ``; mỗi lần update, Lit so sánh và chỉ sửa phần DOM thay đổi | `lit` |
+
+Nói ngắn gọn:
+
+- **`ReactiveElement`** lo phần "khi nào cần cập nhật": theo dõi property, gom
+  các thay đổi, gọi các hook theo đúng thứ tự.
+- **`LitElement`** lo phần "cập nhật DOM như thế nào": gọi `render()` và vẽ
+  template vào shadow root.
+
+Trong thực tế hầu như luôn dùng `LitElement`. `ReactiveElement` quan trọng vì
+**mọi** tính năng reactive (kể cả ReactiveController ở mục 7) nằm ở lớp này.
+
+#### Element Lit tối thiểu
+
+```js
+import {LitElement, html} from 'lit';
+
+class CounterBox extends LitElement {
+  // 1. Khai báo reactive property.
+  static properties = {
+    count: {type: Number},
+  };
+
+  constructor() {
+    super();
+    this.count = 0;              // 2. Giá trị mặc định.
+  }
+
+  // 3. Mô tả giao diện theo dữ liệu hiện tại.
+  render() {
+    return html`
+      <button @click=${() => this.count++}>
+        count = ${this.count}
+      </button>
+    `;
+  }
+}
+
+customElements.define('counter-box', CounterBox);
+```
+
+Điều xảy ra khi bấm nút:
+
+```text
+this.count++                     gán vào reactive property
+   → setter do Lit tạo nhận ra giá trị đổi
+   → requestUpdate()             lên lịch cập nhật (chưa vẽ ngay)
+   → (chờ microtask)             gom các thay đổi khác nếu có
+   → render()                    tạo template mới
+   → Lit chỉ sửa text "count = …" trong DOM
+```
+
+Không có dòng nào tự sửa DOM. Chỉ đổi dữ liệu, Lit lo phần còn lại.
+
+#### Các thuật ngữ sẽ gặp
+
+| Thuật ngữ | Nghĩa |
+|---|---|
+| Reactive property | Property khai báo trong `static properties`; gán giá trị mới sẽ tự kích hoạt cập nhật |
+| Update / update cycle | Một lượt Lit tính lại và vẽ lại element sau khi có thay đổi |
+| `render()` | Method trả về template mô tả giao diện; Lit gọi trong mỗi lần update |
+| `` html`...` `` | Template của Lit; `${...}` là chỗ chèn dữ liệu |
+| `requestUpdate()` | Tự yêu cầu một lần update, dùng khi dữ liệu đổi nhưng không phải reactive property |
+| `updateComplete` | Promise hoàn tất khi lần update hiện tại vẽ xong DOM |
+| Lifecycle | Các method Lit/trình duyệt tự gọi ở từng giai đoạn: gắn vào trang, cập nhật, gỡ khỏi trang |
+| Shadow root / `renderRoot` | Vùng DOM riêng của element, nơi `render()` vẽ vào; CSS bên trong không lọt ra ngoài |
+| Host | Element "chủ" đang sở hữu một controller (dùng ở mục 7) |
+
+### Cấu trúc mixin trong Lit
+
 Cấu trúc mixin trong Lit vẫn là JavaScript mixin thông thường. Điểm khác nằm
 ở cách Lit theo dõi property và cập nhật DOM.
 
@@ -866,6 +1006,79 @@ Nếu đoạn code phụ thuộc vào light DOM children, không nên mặc đ�
 `firstUpdated()`. Cần theo dõi `slotchange` vì children có thể thay đổi sau đó.
 
 ## 7. ReactiveController
+
+### Vấn đề controller giải quyết
+
+Giả sử nhiều element cần hiển thị đồng hồ. Nếu viết thẳng trong element, mỗi
+element phải lặp lại cùng một đoạn:
+
+```js
+class MyClock extends LitElement {
+  connectedCallback() {
+    super.connectedCallback();
+    this.timer = setInterval(() => {
+      this.now = new Date();
+      this.requestUpdate();
+    }, 1000);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearInterval(this.timer);
+  }
+}
+```
+
+Đoạn code này có trạng thái riêng (`timer`, `now`) và cần lifecycle
+(connect/disconnect). Function thường không làm được vì không nhận được
+lifecycle. Mixin làm được, nhưng mỗi element chỉ có một bản, và property của
+mixin bị trộn vào element.
+
+ReactiveController tách đoạn đó ra thành **một object riêng**:
+
+```js
+class ClockController {
+  constructor(host) {
+    this.host = host;              // element chủ
+    this.now = new Date();
+    host.addController(this);      // đăng ký để nhận lifecycle
+  }
+
+  hostConnected() {                // element gắn vào trang
+    this.timer = setInterval(() => {
+      this.now = new Date();
+      this.host.requestUpdate();   // báo element vẽ lại
+    }, 1000);
+  }
+
+  hostDisconnected() {             // element bị gỡ khỏi trang
+    clearInterval(this.timer);
+  }
+}
+
+class MyClock extends LitElement {
+  clock = new ClockController(this);
+
+  render() {
+    return html`${this.clock.now.toLocaleTimeString()}`;
+  }
+}
+```
+
+Ba ý cần nhớ:
+
+1. Controller là một **object bình thường**, không phải element, không kế thừa
+   gì.
+2. `host.addController(this)` là bước nối controller vào element. Từ đó, mỗi
+   khi element connect, update, disconnect, Lit gọi method tương ứng của
+   controller (`hostConnected`, `hostUpdate`, `hostUpdated`,
+   `hostDisconnected`).
+3. Dữ liệu trong controller **không** phải reactive property, nên controller
+   phải tự gọi `host.requestUpdate()` khi dữ liệu đổi.
+
+`addController()` và `requestUpdate()` đều là method của `ReactiveElement`
+(xem [Kiến thức nền về Lit](#kiến-thức-nền-về-lit)), nên mọi `LitElement` đều
+dùng được controller.
 
 ### Khái niệm ReactiveController
 
@@ -1547,6 +1760,8 @@ Polymer:
 
 Lit:
 
+- [Lit: Components overview](https://lit.dev/docs/components/overview/)
+- [API `ReactiveElement`](https://lit.dev/docs/api/ReactiveElement/)
 - [Class mixins](https://lit.dev/docs/composition/mixins/)
 - [Controllers và mixins](https://lit.dev/docs/composition/overview/)
 - [ReactiveController](https://lit.dev/docs/composition/controllers/)
