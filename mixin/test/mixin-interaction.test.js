@@ -1,4 +1,4 @@
-// Kiểm chứng các khẳng định trong README (mục 3 và 4) về cách element dùng lại,
+// Kiểm chứng các khẳng định trong README (mục 3 và 5) về cách element dùng lại,
 // thay đổi property, event, style và lifecycle do mixin cung cấp.
 import assert from 'node:assert/strict';
 import {afterEach, test} from 'node:test';

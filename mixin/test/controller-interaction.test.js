@@ -1,4 +1,4 @@
-// Kiểm chứng các khẳng định trong README (mục 7) về cách element tận dụng
+// Kiểm chứng các khẳng định trong README (mục 6) về cách element tận dụng
 // state, cấu hình, event, style và lifecycle do ReactiveController cung cấp.
 import assert from 'node:assert/strict';
 import {afterEach, test} from 'node:test';
