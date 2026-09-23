@@ -5,20 +5,20 @@
 
 ## Mục lục
 
-1. [Mixin là gì?](#1-mixin-là-gì)
+1. [Khái niệm mixin](#1-khái-niệm-mixin)
 2. [Chuỗi mixin, thứ tự gọi và `super`](#2-chuỗi-mixin-thứ-tự-gọi-và-super)
 3. [Mixin trong Polymer](#3-mixin-trong-polymer)
 4. [Mixin trong Lit](#4-mixin-trong-lit)
 5. [Lifecycle và quá trình cập nhật của Lit](#5-lifecycle-và-quá-trình-cập-nhật-của-lit)
-6. [`ready()` của Polymer chuyển sang Lit như thế nào?](#6-ready-của-polymer-chuyển-sang-lit-như-thế-nào)
+6. [Ánh xạ `ready()` từ Polymer sang Lit](#6-ánh-xạ-ready-từ-polymer-sang-lit)
 7. [ReactiveController](#7-reactivecontroller)
-8. [Khi nào dùng mixin, controller hoặc function?](#8-khi-nào-dùng-mixin-controller-hoặc-function)
+8. [Tiêu chí chọn mixin, controller hoặc function](#8-tiêu-chí-chọn-mixin-controller-hoặc-function)
 9. [Chuyển từ Polymer sang Lit](#9-chuyển-từ-polymer-sang-lit)
 10. [Các lỗi thường gặp](#10-các-lỗi-thường-gặp)
 11. [Chạy demo](#11-chạy-demo)
 12. [Tài liệu tham khảo](#12-tài-liệu-tham-khảo)
 
-## 1. Mixin là gì?
+## 1. Khái niệm mixin
 
 ### Cấu trúc tối thiểu
 
@@ -34,12 +34,13 @@ const SomeMixin = (BaseClass) => class extends BaseClass {
 };
 ```
 
-Đọc đoạn code trên theo bốn bước:
+Cấu trúc trên gồm:
 
-1. `SomeMixin` là một function.
-2. `BaseClass` là class được truyền vào.
-3. Function trả về một class mới.
-4. Class mới `extends BaseClass`, nên vẫn có toàn bộ API của `BaseClass`.
+- `SomeMixin`: function định nghĩa mixin;
+- `BaseClass`: class đầu vào;
+- giá trị trả về: class mới kế thừa `BaseClass`;
+- API của class kết quả: toàn bộ API từ `BaseClass` cùng các thành phần do mixin
+  bổ sung.
 
 `BaseClass` không phải tên của một class cụ thể. Nó có thể là `HTMLElement`,
 `PolymerElement`, `LitElement` hoặc một class đã được áp dụng mixin khác.
@@ -75,7 +76,7 @@ console.log(panel.opened); // true
 `BasicPanel` có `opened` và `toggle()` dù các API này không được viết trực tiếp
 trong `BasicPanel`.
 
-### JavaScript thực sự tạo ra gì?
+### Class được tạo sau khi áp dụng mixin
 
 Khi gọi:
 
@@ -102,16 +103,16 @@ BasicPanel
 
 Đây là lý do `super` vẫn hoạt động bình thường trong mixin.
 
-### Một mixin nên nói rõ những gì?
+### Hợp đồng của mixin
 
-Trước khi dùng lại một mixin, cần biết:
+Tài liệu của mixin cần xác định:
 
-- Mixin thêm property và method nào?
-- Mixin cần API nào từ class được truyền vào?
-- Mixin có override lifecycle hay không?
-- Mixin có tạo listener, timer, observer hoặc subscription không?
-- Tài nguyên đó được dọn ở đâu?
-- Mixin phát event nào?
+- property và method được thêm;
+- API bắt buộc trên class đầu vào;
+- lifecycle bị override;
+- listener, timer, observer hoặc subscription được tạo;
+- vị trí giải phóng tài nguyên;
+- các event được phát.
 
 Ví dụ sau chỉ hoạt động khi `BaseClass` đã có `toggle()`:
 
@@ -130,7 +131,7 @@ cần được ghi rõ trong tài liệu của mixin vì JavaScript không tự 
 
 ## 2. Chuỗi mixin, thứ tự gọi và `super`
 
-### Cách đọc một chain
+### Thứ tự áp dụng trong một chain
 
 ```js
 class MyElement extends LoggingMixin(OpenableMixin(HTMLElement)) {}
@@ -151,7 +152,7 @@ MyElement
   → HTMLElement
 ```
 
-### Method nào được ưu tiên?
+### Quy tắc ưu tiên method
 
 JavaScript tìm method từ trên xuống theo prototype chain và dừng ở method đầu
 tiên tìm thấy. Nếu cả hai mixin đều có `toggle()`, method của
@@ -369,7 +370,7 @@ hiển thị như thế nào.
 | `computed` | Tính property từ các property khác |
 | `observer` | Gọi method khi property thay đổi |
 
-### Property effects chạy theo thứ tự nào?
+### Thứ tự chạy property effects
 
 Khi một property hoặc path thay đổi, Polymer xử lý theo thứ tự:
 
@@ -733,7 +734,7 @@ disconnectedCallback() {
 }
 ```
 
-### Lit cập nhật giao diện theo thứ tự nào?
+### Thứ tự cập nhật giao diện của Lit
 
 Khi reactive property thay đổi:
 
@@ -764,9 +765,9 @@ updated(changedProperties) {
 }
 ```
 
-### Chọn hook nào?
+### Tiêu chí chọn lifecycle hook
 
-| Hook | DOM đã cập nhật? | Dùng cho |
+| Hook | Trạng thái DOM | Dùng cho |
 |---|:---:|---|
 | `shouldUpdate()` | Chưa | Quyết định có tiếp tục update hay không |
 | `willUpdate()` | Chưa | Tính dữ liệu cần cho lần render hiện tại |
@@ -829,10 +830,10 @@ const MeasureMixin = (BaseClass) => class extends BaseClass {
 };
 ```
 
-## 6. `ready()` của Polymer chuyển sang Lit như thế nào?
+## 6. Ánh xạ `ready()` từ Polymer sang Lit
 
-Lit không có `ready()`. Không nên đổi tên `ready()` thành một hook cố định.
-Cần nhìn vào công việc bên trong để chọn vị trí mới.
+Lit không có `ready()` và không tồn tại một hook thay thế tương ứng cho mọi
+trường hợp. Vị trí thay thế phụ thuộc vào công việc bên trong `ready()`.
 
 | Công việc trong Polymer `ready()` | Vị trí phù hợp trong Lit |
 |---|---|
@@ -866,7 +867,7 @@ Nếu đoạn code phụ thuộc vào light DOM children, không nên mặc đ�
 
 ## 7. ReactiveController
 
-### ReactiveController là gì?
+### Khái niệm ReactiveController
 
 ReactiveController là một object thuộc về một Lit element. Lit gọi lifecycle
 method của controller trong quá trình element connect, update và disconnect.
@@ -1046,7 +1047,7 @@ ReactiveController được thiết kế sẵn cho mục đích này.
 Mở demo Lit:
 [`demo/index.html#lit-controller`](demo/index.html#lit-controller).
 
-## 8. Khi nào dùng mixin, controller hoặc function?
+## 8. Tiêu chí chọn mixin, controller hoặc function
 
 | Nhu cầu | Lựa chọn phù hợp |
 |---|---|
@@ -1109,7 +1110,7 @@ Vì vậy, có public method không đồng nghĩa bắt buộc phải dùng mix
 | `afterNextRender()` | `updateComplete`, sau đó `requestAnimationFrame()` nếu cần chờ paint | Hai API không hoàn toàn giống nhau |
 | Polymer CSS mixin | CSS custom properties chuẩn | Không tiếp tục dùng `@apply` cho code mới |
 
-### Observer nên chuyển đi đâu?
+### Vị trí thay thế observer
 
 Polymer:
 
@@ -1244,9 +1245,9 @@ npm install
 npm test
 ```
 
-### Muốn thử thay đổi thì sửa file nào?
+### Vị trí chỉnh sửa demo
 
-| Muốn thay đổi | File cần mở |
+| Nội dung thay đổi | File |
 |---|---|
 | Thêm method hoặc trạng thái cho mixin JavaScript | `mixins/javascript-openable-mixin.js` |
 | Thay đổi thứ tự gọi `super` | `mixins/logging-mixin.js` |
@@ -1255,7 +1256,7 @@ npm test
 | Thêm Lit reactive property hoặc lifecycle | `mixins/lit-openable-mixin.js` |
 | Sửa template Lit | `components/lit-panel.js` |
 | Thêm trạng thái hoặc lifecycle cho controller | `controllers/counter-controller.js` |
-| Thêm nút để gọi thử API | `main.js` và `index.html` |
+| Thêm nút gọi API | `main.js` và `index.html` |
 | Đổi giao diện trang demo | `styles.css` |
 
 ## 12. Tài liệu tham khảo
