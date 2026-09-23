@@ -372,86 +372,154 @@ Nếu CSS nằm trong shadow DOM của element, có thể dùng:
 Mixin cung cấp trạng thái và attribute. Element quyết định trạng thái đó được
 hiển thị như thế nào.
 
-### Các option thường dùng trong `properties`
+### Mixin cấu hình những gì cho property
 
-| Option | Ý nghĩa |
+Mỗi option trong `properties` của mixin tạo ra một hành vi mà **mọi element**
+dùng mixin đều nhận được:
+
+| Option trong mixin | Element dùng mixin nhận được |
 |---|---|
-| `type` | Chuyển đổi giá trị giữa attribute và property |
-| `value` | Giá trị mặc định; object và array phải dùng function trả về giá trị mới |
-| `reflectToAttribute` | Phản chiếu property thành attribute |
-| `notify` | Phát event `<property>-changed` |
-| `readOnly` | Chỉ cho phép thay đổi qua setter nội bộ do Polymer tạo |
-| `computed` | Tính property từ các property khác |
-| `observer` | Gọi method khi property thay đổi |
+| `type` | Attribute `opened` trên thẻ được chuyển thành Boolean |
+| `value` | Giá trị mặc định khi element khởi tạo |
+| `reflectToAttribute` | Attribute `opened` xuất hiện/mất đi theo property, dùng được trong CSS |
+| `notify` | Event `opened-changed` mỗi khi property đổi |
+| `readOnly` | Chỉ mixin (qua setter nội bộ `_setOpened`) được đổi giá trị |
+| `computed` | Property tính sẵn (`label`) để element dùng trong template |
+| `observer` | Method của mixin chạy mỗi khi property đổi, dù ai là người đổi |
 
-### Thứ tự chạy property effects
+Điểm quan trọng: element **không cần biết** các hành vi này tồn tại. Element chỉ
+gán `this.opened = true`; reflect, notify, observer của mixin tự chạy.
 
-Khi một property hoặc path thay đổi, Polymer xử lý theo thứ tự:
+### Element dùng lại và thay đổi property của mixin
+
+**Đọc và gán như property của chính element.** Template dùng `[[opened]]`,
+method của element gán `this.opened = ...`. Mọi effect mixin đã cấu hình đều
+chạy.
+
+**Đổi giá trị mặc định.** Element khai báo lại property, chỉ ghi option cần đổi:
+
+```js
+class ExpandedPanel extends OpenableMixin(PolymerElement) {
+  static get properties() {
+    return {
+      opened: {value: true},   // chỉ đổi default
+    };
+  }
+}
+```
+
+Polymer gộp property effect qua cả class chain, nên `reflectToAttribute`,
+`notify` và `observer` của mixin **vẫn giữ nguyên**. Test đã kiểm tra:
+`ExpandedPanel` khởi tạo với `opened = true`, attribute `opened` có mặt và
+event `opened-changed` vẫn được phát.
+
+**Theo dõi property của mixin từ element.** Element có thể thêm observer riêng
+mà không đụng vào mixin:
+
+```js
+class PolymerPanel extends OpenableMixin(PolymerElement) {
+  static get observers() {
+    return ['trackOpened_(opened)'];
+  }
+
+  trackOpened_(opened) {
+    // Logic riêng của element; observer của mixin vẫn chạy.
+  }
+}
+```
+
+**Ghi đè observer của mixin.** Nếu element định nghĩa method trùng tên
+`openedChanged_`, method của element thay thế method của mixin (quy tắc
+prototype chain ở mục 2). Muốn giữ logic của mixin, phải gọi `super`:
+
+```js
+openedChanged_(opened, oldOpened) {
+  super.openedChanged_(opened, oldOpened);
+  this.updateAria_(opened);
+}
+```
+
+### Khi element đổi property của mixin: effect chạy theo thứ tự nào
+
+Khi element (hoặc bên ngoài) gán `this.opened = true`, Polymer chạy các effect
+mà mixin và element đã khai báo, theo thứ tự:
 
 ```text
-Property hoặc path thay đổi
-            │
-            ▼
-  1. Computed properties
-            │
-            ▼
-  2. Data bindings
-            │
-            ▼
-  3. Phản chiếu attribute
-            │
-            ▼
-  4. Observers
-            │
-            ▼
-  5. Change notification events
+this.opened = true
+      │
+      ▼
+1. Computed      label của mixin được tính lại
+      │
+      ▼
+2. Binding       template của element cập nhật [[opened]], [[label]]
+      │
+      ▼
+3. Reflect       attribute opened (do mixin bật reflectToAttribute)
+      │
+      ▼
+4. Observer      openedChanged_ của mixin, observer riêng của element
+      │
+      ▼
+5. Notify        event opened-changed (do mixin bật notify)
 ```
 
-Các bước này chạy đồng bộ. Nếu gán hai property riêng biệt, observer phụ thuộc
-cả hai có thể chạy nhiều lần:
+Hệ quả thực tế:
+
+- Trong observer của mixin, template của element **đã** cập nhật và attribute
+  đã được phản chiếu (test kiểm tra `label`, attribute và nội dung shadow DOM
+  ngay trong observer).
+- Listener của `opened-changed` chạy **sau** observer.
+- Các bước chạy đồng bộ. Nếu mixin có observer phụ thuộc hai property
+  (`observers: ['sync_(opened, disabled)']`) và element gán lần lượt hai
+  property, observer chạy hai lần. Element nên gán cùng lúc:
 
 ```js
-this.firstName = 'An';
-this.lastName = 'Nguyen';
+this.setProperties({opened: true, disabled: false});
 ```
 
-Khi cần cập nhật cùng lúc trong Polymer, dùng:
+### Object và array do mixin sở hữu
+
+Giả sử mixin quản lý danh sách và theo dõi thay đổi của nó:
 
 ```js
-this.setProperties({
-  firstName: 'An',
-  lastName: 'Nguyen',
-});
+export const ListMixin = (BaseClass) => class extends BaseClass {
+  static get properties() {
+    return {
+      items: {type: Array, value: () => []},   // mỗi instance một mảng mới
+    };
+  }
+
+  static get observers() {
+    return ['itemsChanged_(items.splices)'];
+  }
+
+  itemsChanged_(splices) {
+    // Mixin cập nhật số lượng, đồng bộ trạng thái…
+  }
+};
 ```
 
-### Object, array và path trong Polymer
+Hai điểm element cần tuân thủ:
 
-Thay đổi trực tiếp một giá trị nằm sâu bên trong object không tự tạo property
-effect:
+1. `value` của object/array trong mixin **phải** là function. Nếu viết
+   `value: []`, mọi element dùng mixin dùng chung một mảng.
+2. Element phải sửa mảng qua API của Polymer thì observer của mixin mới chạy:
 
 ```js
-this.user.name = 'An'; // Polymer không biết path này vừa đổi.
+this.push('items', item);        // observer items.splices của mixin chạy
+this.items.push(item);           // mảng đổi nhưng mixin KHÔNG biết
 ```
 
-Dùng API của Polymer:
+Tương tự với object: `this.set('user.name', 'An')` thay vì
+`this.user.name = 'An'`. Cách tốt hơn là mixin cung cấp sẵn method như
+`addItem(item)` để element không cần biết mixin đang theo dõi path nào.
 
-```js
-this.set('user.name', 'An');
-this.push('items', newItem);
-this.splice('items', index, 1);
-this.notifyPath('user.name');
-```
+### Event do mixin phát
 
-### Event trong Polymer
+Mixin có thể phát hai loại event, element và bên ngoài dùng khác nhau.
 
-Event handler trong template:
-
-```html
-<button on-click="toggle">Toggle</button>
-```
-
-Với `notify: true`, khi `opened` thay đổi, Polymer phát event
-`opened-changed`. Giá trị mới nằm ở `event.detail.value`:
+**Event từ `notify: true`.** Mixin không cần viết dòng `dispatchEvent` nào.
+Bên ngoài nghe được mọi thay đổi của `opened`:
 
 ```js
 panel.addEventListener('opened-changed', (event) => {
@@ -459,25 +527,43 @@ panel.addEventListener('opened-changed', (event) => {
 });
 ```
 
-Giá trị mặc định cũng đi qua property effects. Vì vậy, nếu listener đã được
-gắn trước lúc element khởi tạo xong, nó có thể nhận event cho giá trị mặc định
-trước những lần thay đổi do người dùng tạo ra.
+Element cha dùng two-way binding `{{...}}` cũng dựa vào event này:
 
-Event do `notify` tạo không bubble. Nếu cần một event nghiệp vụ đi qua shadow
-boundary, phải phát rõ ràng:
-
-```js
-this.dispatchEvent(new CustomEvent('panel-opened', {
-  detail: {source: 'keyboard'},
-  bubbles: true,
-  composed: true,
-}));
+```html
+<polymer-panel opened="{{panelOpened}}"></polymer-panel>
 ```
 
-Không nên tự động đặt mọi event thành `bubbles: true` và `composed: true`.
-Đây phải là một phần trong API của component.
+Lưu ý: giá trị mặc định cũng đi qua property effects, nên listener gắn trước
+khi element khởi tạo nhận thêm một event cho giá trị mặc định. Event này
+**không** bubble.
 
-### Lifecycle Polymer
+**Event nghiệp vụ do mixin tự phát.** Ví dụ mixin muốn báo "người dùng vừa mở
+panel", khác với "property đổi":
+
+```js
+toggle() {
+  this.opened = !this.opened;
+  this.dispatchEvent(new CustomEvent('panel-toggled', {
+    detail: {opened: this.opened},
+    bubbles: true,
+    composed: true,
+  }));
+}
+```
+
+Event này nằm trong `toggle()` của mixin. Nếu element ghi đè `toggle()` mà
+**không** gọi `super.toggle()`, event biến mất. Đây là lý do mixin nên ghi rõ
+event nào thuộc hợp đồng (mục 1) và method nào element phải gọi `super`.
+
+Event handler trong template của element có thể gọi thẳng method của mixin:
+
+```html
+<button on-click="toggle">Toggle</button>
+```
+
+### Lifecycle của mixin ảnh hưởng element thế nào
+
+Lifecycle Polymer:
 
 | Callback | Số lần | Dùng cho |
 |---|---:|---|
@@ -512,18 +598,43 @@ Gắn lại
 connectedCallback()                   [ready() không chạy lại]
 ```
 
-Polymer yêu cầu gọi lifecycle tương ứng qua `super` ở dòng đầu tiên:
+Khi cả mixin và element cùng override một callback, chúng tạo thành chuỗi
+`super` (mục 2). Thứ tự chạy khi element override `ready()`:
 
 ```js
+// Element
 ready() {
+  console.log('element: trước super');
   super.ready();
-  this.$.button.focus();
+  console.log('element: sau super');
 }
 ```
 
-Listener trên `window` hoặc `document` phải được quản lý theo cặp:
+```text
+element: trước super
+  → super.ready() của mixin
+      → super.ready() của PolymerElement
+          tạo shadow DOM từ template, chạy effect cho giá trị ban đầu
+          (observer của mixin chạy lần đầu ở đây)
+      → phần còn lại trong ready() của mixin
+element: sau super
+```
+
+Hệ quả:
+
+- Code element đặt **trước** `super.ready()` chưa có shadow DOM, `this.$`
+  chưa có, observer của mixin chưa chạy. Vì vậy Polymer yêu cầu gọi `super`
+  ở dòng đầu.
+- Nếu element **quên** `super.ready()`: `ready()` của mixin không chạy,
+  template không được tạo, `shadowRoot` là `null` (test đã kiểm tra).
+- Mixin đăng ký listener trong `connectedCallback()` thì **mọi** element dùng
+  mixin đều có listener đó. Mixin phải tự gỡ trong `disconnectedCallback()`;
+  element không thể biết để gỡ thay.
+- Không đặt listener của mixin trong `ready()`: `ready()` chỉ chạy một lần,
+  trong khi element có thể bị gỡ ra và gắn lại nhiều lần.
 
 ```js
+// Trong mixin
 connectedCallback() {
   super.connectedCallback();
   this.resizeListener ??= () => this.handleResize();
@@ -535,9 +646,6 @@ disconnectedCallback() {
   window.removeEventListener('resize', this.resizeListener);
 }
 ```
-
-Không nên đặt listener loại này trong `ready()` vì `ready()` chỉ chạy một lần,
-trong khi element có thể bị tháo ra và gắn lại nhiều lần.
 
 ### Class mixin, Behavior và CSS mixin không giống nhau
 
@@ -776,47 +884,147 @@ customElements.define('lit-panel', LitPanel);
 Khi `toggle()` đổi `opened`, setter do Lit tạo sẽ yêu cầu cập nhật. Lit không
 render ngay tại dòng gán; các thay đổi được gom lại và xử lý trong microtask.
 
-### Reactive property trong Lit
+### Mixin cấu hình những gì cho property
+
+Option của `static properties` trong mixin quyết định element dùng mixin nhận
+được gì:
+
+| Option trong mixin | Element dùng mixin nhận được |
+|---|---|
+| `type: Boolean` | Attribute `opened` trên thẻ được chuyển thành `true`/`false` |
+| `reflect: true` | Attribute `opened` xuất hiện/mất đi theo property, dùng được trong CSS |
+| `attribute` | Tên attribute (hoặc `false` để không dùng attribute) |
+| `hasChanged` | Quy tắc quyết định giá trị mới có gây update hay không |
+| Gán trong constructor của mixin | Giá trị mặc định |
+
+Lit gộp `static properties` qua class chain. Element dùng mixin không cần khai
+báo lại `opened`; gán `this.opened = true` ở bất kỳ đâu trong element đều tạo
+update, phản chiếu attribute theo cấu hình của mixin.
+
+### Element dùng lại và thay đổi property của mixin
+
+**Đổi giá trị mặc định: gán trong constructor, sau `super()`.**
+
+```js
+class ExpandedPanel extends OpenableMixin(LitElement) {
+  constructor() {
+    super();              // mixin gán opened = false
+    this.opened = true;   // element ghi đè default
+  }
+}
+```
+
+Cả hai lần gán xảy ra trước lần render đầu nên Lit chỉ render một lần với
+`opened = true`.
+
+**Không dùng class field để đổi default.**
+
+```js
+class WrongPanel extends OpenableMixin(LitElement) {
+  opened = true;   // SAI
+}
+```
+
+Class field tạo một property riêng trên instance, **che mất** accessor mà Lit
+tạo cho `opened`. Sau đó `this.opened = false` không còn gây update: test đã
+kiểm tra template vẫn hiển thị `true`. Lit ở chế độ development cũng cảnh báo
+lỗi này.
+
+**Khai báo lại property: option mới thay thế toàn bộ option của mixin.**
+
+```js
+class ExpandedPanel extends OpenableMixin(LitElement) {
+  static properties = {
+    opened: {attribute: 'expanded'},   // SAI: mất type: Boolean và reflect
+  };
+}
+```
+
+Khác Polymer, Lit **không** gộp từng option. Khai báo trên làm `opened` mất
+`type: Boolean`: đặt attribute `expanded` cho ra chuỗi `""` thay vì `true`
+(test đã kiểm tra). Nếu cần đổi option, khai báo lại đầy đủ:
 
 ```js
 static properties = {
-  opened: {
-    type: Boolean,
-    reflect: true,
-    attribute: 'opened',
-    hasChanged: (value, oldValue) => value !== oldValue,
-  },
+  opened: {type: Boolean, reflect: true, attribute: 'expanded'},
 };
 ```
 
-- `type` dùng để chuyển đổi giữa attribute và property.
-- `reflect` phản chiếu property thành attribute trong lần cập nhật.
-- `attribute` đổi tên attribute hoặc tắt attribute bằng `false`.
-- `hasChanged` quyết định giá trị mới có cần update hay không.
-- Giá trị mặc định thường được gán trong constructor.
-
-### Object và array trong Lit
-
-Lit mặc định kiểm tra thay đổi bằng tham chiếu. Nên tạo object hoặc array mới:
+Cách an toàn hơn là mixin export option để element dùng lại:
 
 ```js
-this.user = {...this.user, name: 'An'};
-this.items = [...this.items, newItem];
+export const openedProperty = {type: Boolean, reflect: true};
+
+// Trong element
+static properties = {
+  opened: {...openedProperty, attribute: 'expanded'},
+};
 ```
 
-Không nên chỉ mutate giá trị cũ:
+Việc khai báo lại chỉ ảnh hưởng property đó. Các property khác của mixin vẫn
+giữ nguyên.
+
+**Phản ứng khi property của mixin đổi.** Element không cần observer: kiểm tra
+`changedProperties` trong `willUpdate()` hoặc `updated()` của element.
 
 ```js
-this.user.name = 'An';
+updated(changedProperties) {
+  super.updated(changedProperties);   // giữ logic updated() của mixin
+  if (changedProperties.has('opened')) {
+    this.renderRoot.querySelector('.content')?.scrollIntoView();
+  }
+}
 ```
 
-Có thể gọi `requestUpdate()` sau khi mutate, nhưng gán một tham chiếu mới dễ
-theo dõi hơn và phù hợp với luồng dữ liệu một chiều.
+`changedProperties` chứa **mọi** property đổi trong lần update, cả của mixin
+lẫn của element. Mixin cũng nhìn thấy property của element, nên mixin chỉ nên
+kiểm tra những key mà nó sở hữu.
 
-### Style trong Lit mixin
+### Object và array do mixin sở hữu
 
-Mixin có thể cung cấp `static styles`. Nếu element tự khai báo `static styles`,
-cần đưa styles của mixin vào mảng để không làm mất chúng.
+```js
+export const ListMixin = (BaseClass) => class extends BaseClass {
+  static properties = {
+    items: {type: Array},
+  };
+
+  constructor() {
+    super();
+    this.items = [];   // mỗi instance một mảng mới
+  }
+
+  addItem(item) {
+    this.items = [...this.items, item];   // tham chiếu mới → update
+  }
+
+  removeItem(index) {
+    this.items = this.items.filter((_, i) => i !== index);
+  }
+};
+```
+
+Hai điểm element cần tuân thủ:
+
+1. Default là object/array phải tạo mới trong constructor của mixin. Nếu dùng
+   một hằng số chung (`const EMPTY = []; this.items = EMPTY;`) rồi mutate, mọi
+   instance cùng đổi.
+2. Lit so sánh bằng tham chiếu. Element mutate trực tiếp thì **không** có
+   update, và `willUpdate()`/`updated()` của mixin cũng không chạy:
+
+```js
+this.items.push(item);          // mảng đổi, nhưng không có update
+this.addItem(item);             // dùng method của mixin → có update
+this.items = [...this.items, item];   // hoặc tự gán tham chiếu mới
+```
+
+Nếu buộc phải mutate, gọi `this.requestUpdate('items')` sau đó. Khi đó
+`changedProperties.get('items')` là `undefined` (test đã kiểm tra), nên
+`updated()` của mixin không biết giá trị cũ để so sánh.
+
+### Style do mixin cung cấp
+
+Mixin cung cấp `static styles` để mọi element dùng mixin có cùng giao diện cho
+trạng thái của mixin:
 
 ```js
 const openableStyles = css`
@@ -825,42 +1033,120 @@ const openableStyles = css`
   }
 `;
 
-const StyledOpenableMixin = (BaseClass) => class extends BaseClass {
+export const StyledOpenableMixin = (BaseClass) => class extends BaseClass {
   static styles = [BaseClass.styles ?? [], openableStyles];
 };
+```
 
+`:host([opened])` dùng được vì mixin bật `reflect: true` cho `opened`. Style và
+property phụ thuộc nhau: nếu element khai báo lại `opened` mà bỏ `reflect`,
+style này không còn tác dụng.
+
+Khi element tự khai báo `static styles`, style của mixin **bị thay thế** (test
+kiểm tra số style còn lại). Phải đưa style của lớp cha vào mảng:
+
+```js
 const PanelBase = StyledOpenableMixin(LitElement);
 
 class LitPanel extends PanelBase {
   static styles = [
-    PanelBase.styles ?? [],
-    css`:host { display: block; }`,
+    PanelBase.styles,                 // giữ style của mixin
+    css`:host { display: block; }`,   // style riêng của element
   ];
 }
 ```
 
-Nếu style không cần kế thừa, xuất một `CSSResult` riêng thường dễ dùng và
-dễ kiểm soát hơn. Theme theo từng instance nên dùng CSS custom properties.
+Style đứng sau trong mảng thắng khi cùng độ ưu tiên, nên element ghi đè được
+style của mixin. Nếu mixin muốn cho phép tùy biến mà không cần ghi đè, dùng CSS
+custom property:
 
-### Event trong Lit
-
-Lit không có `notify: true`. Component phải tự xác định event nào thuộc API:
-
-```js
-this.dispatchEvent(new CustomEvent('opened-changed', {
-  detail: {value: this.opened},
-  bubbles: true,
-  composed: true,
-}));
+```css
+:host([opened]) {
+  border-color: var(--openable-border-color, currentColor);
+}
 ```
 
-Nếu listener cần nhìn thấy DOM đã cập nhật, chờ update hoàn tất trước khi phát:
+### Event do mixin phát
+
+Lit không có `notify: true`. Mixin phải tự phát event, và **vị trí** phát
+quyết định khi nào element nhận được.
+
+**Phát trong method của mixin**: chỉ khi method đó được gọi.
 
 ```js
-this.opened = true;
-await this.updateComplete;
-this.dispatchEvent(new CustomEvent('panel-opened'));
+toggle() {
+  this.opened = !this.opened;
+  this.dispatchEvent(new CustomEvent('opened-changed', {
+    detail: {value: this.opened},
+    bubbles: true,
+    composed: true,
+  }));
+}
 ```
+
+- Element gán `this.opened = true` trực tiếp thì **không** có event.
+- Element ghi đè `toggle()` mà không gọi `super.toggle()` thì event biến mất
+  (test đã kiểm tra: 0 event).
+
+**Phát trong `updated()` của mixin**: mọi thay đổi của `opened`, dù ai gán.
+
+```js
+updated(changedProperties) {
+  super.updated?.(changedProperties);
+  if (changedProperties.has('opened') &&
+      changedProperties.get('opened') !== undefined) {
+    this.dispatchEvent(new CustomEvent('opened-changed', {
+      detail: {value: this.opened},
+    }));
+  }
+}
+```
+
+- Kiểm tra giá trị cũ khác `undefined` để bỏ qua lần gán default.
+- Event phát sau khi DOM đã cập nhật, listener đọc được DOM mới.
+- Element ghi đè `updated()` mà quên `super.updated()` thì event biến mất.
+
+Chọn cách nào là quyết định về API: event chỉ báo thao tác người dùng thì phát
+trong method, event báo mọi thay đổi trạng thái thì phát trong `updated()`.
+Cả hai cách đều yêu cầu element gọi `super` khi override.
+
+### Lifecycle của mixin ảnh hưởng element thế nào
+
+Mixin và element cùng override một hook tạo thành chuỗi `super`. Vị trí gọi
+`super` trong element quyết định code của ai chạy trước:
+
+```js
+// Mixin
+updated(changedProperties) {
+  super.updated?.(changedProperties);
+  console.log('mixin.updated');
+}
+
+// Element
+updated(changedProperties) {
+  super.updated(changedProperties);   // mixin chạy trước
+  console.log('element.updated');
+}
+```
+
+Những ảnh hưởng cần biết:
+
+| Mixin làm gì | Ảnh hưởng tới element |
+|---|---|
+| Override `connectedCallback()` / `disconnectedCallback()` | Chạy cho **mọi** element dùng mixin; element quên `super` thì Lit không tạo `renderRoot` và không bắt đầu update |
+| Override `willUpdate()` để tính property phụ | Element đọc được giá trị đã tính trong `render()` |
+| Override `updated()` để phát event hoặc đo DOM | Element quên `super.updated()` thì logic này mất (test đã kiểm tra) |
+| Gán property trong `updated()` | Tạo thêm một lần update cho element; `updateComplete` trả về `false` |
+| Override `firstUpdated()` | Chỉ chạy một lần, không chạy lại khi element được gắn lại |
+| Override `shouldUpdate()` trả về `false` | Element **không** render, dù property của element đổi |
+
+Quy tắc cho cả hai phía:
+
+- Mixin: luôn gọi `super.<hook>?.(...)` (dùng `?.` vì lớp dưới có thể không
+  định nghĩa hook đó).
+- Element: override hook nào cũng gọi `super` tương ứng.
+- Mixin nên ghi rõ trong hợp đồng (mục 1) những hook nó override để element
+  biết cần giữ `super` ở đâu.
 
 ## 5. Lifecycle và quá trình cập nhật của Lit
 
@@ -996,23 +1282,10 @@ Không cần chờ `updateComplete` khi code chỉ thay trạng thái và không
 
 ### Lifecycle trong Lit mixin
 
-Mixin nên gọi hook đã có qua `super` để không làm mất logic của mixin khác:
-
-```js
-const MeasureMixin = (BaseClass) => class extends BaseClass {
-  firstUpdated(changedProperties) {
-    super.firstUpdated?.(changedProperties);
-    this.measure();
-  }
-
-  updated(changedProperties) {
-    super.updated?.(changedProperties);
-    if (changedProperties.has('opened')) {
-      this.measure();
-    }
-  }
-};
-```
+Cách mixin và element cùng override hook, và ảnh hưởng của từng hook do mixin
+override, xem
+[Lifecycle của mixin ảnh hưởng element thế nào](#lifecycle-của-mixin-ảnh-hưởng-element-thế-nào-1)
+ở mục 4.
 
 ## 6. Ánh xạ `ready()` từ Polymer sang Lit
 
@@ -1756,6 +2029,17 @@ Polymer 3.5.2 và một môi trường DOM. Test kiểm tra:
   khi disconnect và chạy lại khi connect lại;
 - `addController()` gọi `hostConnected()` ngay khi host đã connected,
   `removeController()` không gọi `hostDisconnected()`.
+
+File `test/mixin-interaction.test.js` kiểm chứng các khẳng định ở mục 3 và 4
+về quan hệ giữa element và mixin:
+
+- Polymer: khai báo lại `value` vẫn giữ reflect/notify/observer của mixin;
+  observer riêng của element và ghi đè observer; `this.push()` so với
+  `items.push()`; element quên `super.ready()`;
+- Lit: đổi default trong constructor; class field che accessor; khai báo lại
+  property thay thế toàn bộ option; mutate mảng của mixin; element ghi đè
+  `static styles`; override thiếu `super` làm mất event và lifecycle của mixin;
+  `changedProperties` chứa property của cả mixin lẫn element.
 
 Chạy test bằng hai lệnh:
 
