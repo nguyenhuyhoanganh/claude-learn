@@ -3,6 +3,19 @@
 > Polymer hiện chỉ được duy trì để hỗ trợ các dự án cũ. Với component mới,
 > nên sử dụng Lit hoặc Web Components chuẩn.
 
+## Bắt đầu từ đâu
+
+Nếu chưa biết Lit, nên đọc theo thứ tự:
+
+1. Mục 1–2: mixin trong JavaScript thuần.
+2. [Kiến thức nền về Lit](#kiến-thức-nền-về-lit): custom element, "reactive",
+   `ReactiveElement` và `LitElement`.
+3. Mục 5: các bước Lit cập nhật một element.
+4. Mục 7: ReactiveController.
+
+Mục 3 (Polymer) và mục 9 (chuyển từ Polymer sang Lit) chỉ cần khi làm việc với
+dự án Polymer cũ.
+
 ## Mục lục
 
 1. [Khái niệm mixin](#1-khái-niệm-mixin)
@@ -664,6 +677,37 @@ this.count++                     gán vào reactive property
 ```
 
 Không có dòng nào tự sửa DOM. Chỉ đổi dữ liệu, Lit lo phần còn lại.
+
+#### Tóm tắt: `ReactiveElement` là gì
+
+`ReactiveElement` là lớp nền của Lit, nằm giữa `HTMLElement` và `LitElement`.
+Nó lo phần **khi nào** element cần cập nhật:
+
+- `static properties`: khai báo reactive property;
+- `requestUpdate()`: yêu cầu một lần cập nhật;
+- các bước cập nhật `shouldUpdate` → `willUpdate` → `update` →
+  `firstUpdated` → `updated` (chi tiết ở mục 5);
+- `updateComplete`: Promise báo lần cập nhật đã xong;
+- `addController()` / `removeController()`: gắn controller.
+
+`LitElement` thêm phần **như thế nào**: trong `update()`, nó gọi `render()` rồi
+dùng lit-html vẽ template vào `renderRoot`, chỉ sửa phần DOM thay đổi (theo
+source `lit-element` 4.x trong Lit 3.3.3).
+
+Khi code, gần như luôn `extends LitElement`. Nhưng mọi tính năng reactive,
+kể cả controller, đều đến từ `ReactiveElement`.
+
+#### Từ `ReactiveElement` đến ReactiveController
+
+- Controller là một **object bình thường**, không phải element. Nó gọi
+  `host.addController(this)`, trong đó **host** là element sở hữu nó.
+- Từ đó, khi host được gắn vào trang, cập nhật hoặc bị gỡ khỏi trang,
+  `ReactiveElement` gọi `hostConnected()`, `hostUpdate()`, `hostUpdated()`,
+  `hostDisconnected()` của controller.
+- Dữ liệu trong controller **không** phải reactive property, nên controller
+  phải tự gọi `host.requestUpdate()` khi dữ liệu đổi.
+
+Chi tiết ở [mục 7](#7-reactivecontroller).
 
 #### Các thuật ngữ sẽ gặp
 
