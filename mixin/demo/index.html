@@ -1,121 +1,198 @@
 <!doctype html>
 <html lang="vi">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Demo Mixin và ReactiveController</title>
-  <link rel="stylesheet" href="./styles.css">
-  <script type="importmap">
-    {
-      "imports": {
-        "lit": "https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js",
-        "@polymer/polymer/": "https://cdn.jsdelivr.net/npm/@polymer/polymer@3.5.2/",
-        "@webcomponents/shadycss/": "https://cdn.jsdelivr.net/npm/@webcomponents/shadycss@1.11.2/"
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mixin & Reactive Controller Demo</title>
+    <link rel="icon" href="data:," />
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@polymer/polymer/": "https://cdn.jsdelivr.net/npm/@polymer/polymer@3.5.2/",
+          "lit": "https://esm.sh/lit@3.3.3"
+        }
       }
-    }
-  </script>
-</head>
-<body>
-  <h1>Demo Mixin và ReactiveController</h1>
+    </script>
 
-  <nav aria-label="Các phần demo">
-    <a href="#javascript-mixin">1. JavaScript mixin</a>
-    <a href="#polymer-mixin">2. Polymer mixin</a>
-    <a href="#lit-controller">3. Lit và ReactiveController</a>
-    <a href="#reactive-controller">4. ReactiveController nâng cao</a>
-  </nav>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
 
-  <section id="javascript-mixin">
-    <h2>1. JavaScript mixin và <code>super</code></h2>
-    <p>
-      Sửa mixin tại <code>mixins/javascript-openable-mixin.js</code> và
-      <code>mixins/logging-mixin.js</code>.
-    </p>
-    <p>Prototype chain:</p>
-    <pre id="js-chain"></pre>
-    <basic-panel id="js-panel"></basic-panel>
-    <div class="actions">
-      <button id="js-toggle">Gọi toggle()</button>
-      <button id="js-clear">Xóa log</button>
-    </div>
-    <pre id="js-log">Chưa gọi toggle().</pre>
-  </section>
+      body {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 24px 16px 64px;
+        color: #172033;
+        background: #f4f6fb;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
 
-  <section id="polymer-mixin">
-    <h2>2. Mixin trong Polymer</h2>
-    <p>
-      Sửa property và lifecycle tại
-      <code>mixins/polymer-openable-mixin.js</code>; sửa template tại
-      <code>components/polymer-panel.js</code>.
-    </p>
-    <p id="polymer-status">Đang tải Polymer…</p>
-    <div class="actions">
-      <button id="polymer-mount" disabled>Gắn element</button>
-      <button id="polymer-unmount" disabled>Gỡ element</button>
-      <button id="polymer-toggle" disabled>Gọi toggle()</button>
-    </div>
-    <div id="polymer-host"></div>
-    <pre id="polymer-log">Chưa có dữ liệu.</pre>
-    <p>
-      Polymer không có <code>addController()</code>.
-      <code>mixins/polymer-controller-host-mixin.js</code> bổ sung API đó để
-      <code>components/polymer-clock.js</code> dùng lại
-      <code>ClockController</code> viết cho Lit:
-    </p>
-    <div id="polymer-clock-host"></div>
-  </section>
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        padding: 12px;
+        border-radius: 10px;
+        background: #e9eef9;
+      }
 
-  <section id="lit-controller">
-    <h2>3. Lit mixin và ReactiveController</h2>
-    <p>
-      Sửa mixin tại <code>mixins/lit-openable-mixin.js</code>, controller tại
-      <code>controllers/counter-controller.js</code> và template tại
-      <code>components/lit-panel.js</code>.
-    </p>
-    <p id="lit-status">Đang tải Lit…</p>
-    <div class="actions">
-      <button id="lit-mount" disabled>Gắn element</button>
-      <button id="lit-unmount" disabled>Gỡ element</button>
-    </div>
-    <div id="lit-host"></div>
-    <pre id="lit-log">Chưa có dữ liệu.</pre>
-  </section>
+      nav a {
+        color: #2457d6;
+      }
 
-  <section id="reactive-controller">
-    <h2>4. ReactiveController nâng cao</h2>
-    <p>
-      Element <code>components/controller-lab.js</code> dùng ba loại controller:
-    </p>
-    <ul>
-      <li>
-        <code>controllers/dual-clock-controller.js</code>: controller ghép từ
-        hai <code>ClockController</code>, mỗi instance có timer riêng và tự dọn
-        timer trong <code>hostDisconnected()</code>.
-      </li>
-      <li>
-        <code>controllers/search-controller.js</code>: tác vụ bất đồng bộ chạy
-        trong <code>hostUpdate()</code> khi input đổi, có abort và trạng thái
-        <code>initial/pending/complete/error</code> (nhập <code>error</code>
-        để thử lỗi).
-      </li>
-      <li>
-        <code>controllers/probe-controller.js</code>: gắn/gỡ controller lúc
-        runtime bằng <code>addController()</code> và
-        <code>removeController()</code>.
-      </li>
-    </ul>
-    <p id="rc-status">Đang tải Lit…</p>
-    <div class="actions">
-      <button id="rc-mount" disabled>Gắn element</button>
-      <button id="rc-unmount" disabled>Gỡ element</button>
-      <button id="rc-attach-probe" disabled>addController(probe)</button>
-      <button id="rc-detach-probe" disabled>removeController(probe)</button>
-      <button id="rc-clear" disabled>Xóa log</button>
-    </div>
-    <div id="rc-host"></div>
-    <pre id="rc-log">Chưa có dữ liệu.</pre>
-  </section>
+      section {
+        margin-top: 32px;
+      }
 
-  <script type="module" src="./main.js"></script>
-</body>
+      article {
+        margin-top: 16px;
+        padding: 20px;
+        border: 1px solid #dce2ee;
+        border-left: 5px solid #6366f1;
+        border-radius: 12px;
+        background: white;
+      }
+
+      article h3 {
+        margin: 0 0 4px;
+      }
+
+
+
+      .controls {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .hint {
+        margin: 12px 0 0;
+        color: #64748b;
+        font-size: 0.85rem;
+      }
+
+      .attrs {
+        display: block;
+        margin-top: 8px;
+        color: #7c3aed;
+      }
+
+      .log {
+        min-height: 60px;
+        max-height: 200px;
+        overflow: auto;
+        margin: 12px 0 0;
+        padding: 10px 12px;
+        border-radius: 8px;
+        color: #d8e2ff;
+        background: #111827;
+        font-size: 0.85rem;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <h1>Mixin & Reactive Controller</h1>
+    </header>
+
+    <nav aria-label="Mục lục demo">
+      <a href="#demo-1-2">1.2</a>
+      <a href="#demo-1-3">1.3</a>
+      <a href="#demo-1-4">1.4</a>
+      <a href="#demo-1-5">1.5</a>
+      <a href="#demo-2-2">2.2</a>
+      <a href="#demo-2-3">2.3</a>
+      <a href="#demo-2-4">2.4</a>
+      <a href="#demo-3-3">3.2</a>
+      <a href="#demo-3-4">3.4</a>
+      <a href="#demo-3-5">3.5</a>
+      <a href="#demo-3-6">3.6</a>
+    </nav>
+
+    <main>
+      <section>
+        <h2>1. Mixin trong Polymer</h2>
+
+        <article id="demo-1-2">
+          <h3>1.2. OpenableMixin</h3>
+          <my-dialog id="my-dialog" data-show-attrs></my-dialog>
+        </article>
+
+        <article id="demo-1-3">
+          <h3>1.3. Thêm EscapeCloseMixin vào chain</h3>
+          <escape-dialog id="escape-dialog"></escape-dialog>
+          <p class="hint">Esc đóng mọi dialog đang mở trên trang, vì listener gắn trên document.</p>
+        </article>
+
+        <article id="demo-1-4">
+          <h3>1.4. ModalMixin và dedupingMixin()</h3>
+          <modal-dialog id="modal-dialog"></modal-dialog>
+        </article>
+
+        <article id="demo-1-5">
+          <h3>1.5. Tùy biến phần kế thừa</h3>
+          <confirm-dialog id="confirm-dialog"></confirm-dialog>
+        </article>
+      </section>
+
+      <section>
+        <h2>2. Mixin trong Lit</h2>
+
+        <article id="demo-2-2">
+          <h3>2.2. OpenableMixin cho Lit</h3>
+          <lit-dialog id="lit-dialog" data-show-attrs></lit-dialog>
+        </article>
+
+        <article id="demo-2-3">
+          <h3>2.3. Custom property (trên: đúng · dưới: class field sai)</h3>
+          <expanded-dialog id="expanded-dialog" data-show-attrs></expanded-dialog>
+          <hr />
+          <wrong-dialog id="wrong-dialog" data-show-attrs></wrong-dialog>
+        </article>
+
+        <article id="demo-2-4">
+          <h3>2.4. Lifecycle, style và event</h3>
+          <escape-lit-dialog id="escape-lit-dialog"></escape-lit-dialog>
+          <pre class="log" data-log-for="escape-lit-dialog"></pre>
+        </article>
+      </section>
+
+      <section>
+        <h2>3. Reactive Controller</h2>
+
+        <article id="demo-3-3">
+          <h3>3.2–3.3. OpenableController + EscapeController</h3>
+          <ctrl-dialog id="ctrl-dialog" data-show-attrs></ctrl-dialog>
+        </article>
+
+        <article id="demo-3-4">
+          <h3>3.4. Custom controller</h3>
+          <private-ctrl-dialog id="private-ctrl-dialog"></private-ctrl-dialog>
+          <pre class="log" data-log-for="private-ctrl-dialog"></pre>
+        </article>
+
+        <article id="demo-3-5">
+          <h3>3.5. Nhiều instance</h3>
+          <two-dialogs id="two-dialogs"></two-dialogs>
+        </article>
+
+        <article id="demo-3-6">
+          <h3>3.6. Cleanup</h3>
+          <auto-close-dialog id="auto-close-dialog"></auto-close-dialog>
+          <div class="controls">
+            <button data-remount="auto-close-dialog">Gỡ khỏi DOM</button>
+            <button data-clear-log="auto-close-dialog">Xóa log</button>
+          </div>
+          <pre class="log" data-log-for="auto-close-dialog"></pre>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
 </html>
