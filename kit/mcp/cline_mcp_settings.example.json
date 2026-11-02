@@ -1,0 +1,31 @@
+{
+  "$comment": "Manual registration examples for Cline's cline_mcp_settings.json (keep only ONE \"rea\" entry). Replace the /ABS/... paths. VS Code: <VS Code user dir>/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json; Cline CLI/JetBrains: ~/.cline/data/settings/cline_mcp_settings.json",
+  "mcpServers": {
+    "rea": {
+      "type": "stdio",
+      "command": "/ABS/PATH/TO/node",
+      "args": [
+        "/ABS/PATH/TO/rea-cline-kit/kit/mcp/rea-gateway.mjs",
+        "--",
+        "/ABS/PATH/TO/node",
+        "/ABS/PATH/TO/node_modules/rea-agents/scripts/rea.mjs",
+        "mcp"
+      ],
+      "env": {},
+      "timeout": 450,
+      "autoApprove": ["rea_find_tools"],
+      "disabled": false
+    },
+    "rea-full-mode-example (rename to rea to use)": {
+      "type": "stdio",
+      "command": "/ABS/PATH/TO/node",
+      "args": ["/ABS/PATH/TO/node_modules/rea-agents/scripts/rea.mjs", "mcp"],
+      "env": {
+        "REA_MCP_INPUT_SCHEMA_PROFILE": "compact"
+      },
+      "timeout": 450,
+      "autoApprove": ["see kit/mcp/autoapprove.json -> safe"],
+      "disabled": true
+    }
+  }
+}
