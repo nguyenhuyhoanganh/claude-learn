@@ -100,7 +100,8 @@ test("gateway fills standard Windows variables when Cline's whitelist dropped th
 
 test("install + uninstall in an isolated home (fake REA entry)", () => {
   const home = mkdtempSync(join(tmpdir(), "rea-home-"));
-  const vs = join(home, ".config", "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "settings");
+  const userDir = process.platform === "win32" ? join(home, "AppData", "Roaming") : process.platform === "darwin" ? join(home, "Library", "Application Support") : join(home, ".config");
+  const vs = join(userDir, "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "settings");
   mkdirSync(vs, { recursive: true });
   writeFileSync(join(vs, "cline_mcp_settings.json"), JSON.stringify({ mcpServers: { other: { command: "o" } } }));
   const fakeRea = join(ROOT, "tests", "fixtures", "fake-mcp.mjs");
@@ -118,6 +119,7 @@ test("install + uninstall in an isolated home (fake REA entry)", () => {
   assert.ok(existsSync(join(home, "Documents", "Cline", "Rules", "rea-reverse-engineering.md")));
   assert.ok(existsSync(join(home, "Documents", "Cline", "Workflows", "rea-investigate-feature.md")));
   if (process.platform !== "win32") assert.ok(statSync(join(home, "Documents", "Cline", "Hooks", "PreToolUse")).mode & 0o100);
+  else assert.equal(readFileSync(join(home, "Documents", "Cline", "Hooks", "PreToolUse.ps1"), "utf8").charCodeAt(0), 0xfeff, "BOM");
 
   // doctor starts the configured server
   const doc = JSON.parse(execFileSync(process.execPath, [INSTALL, "--doctor", "--json"], { env, encoding: "utf8" }));

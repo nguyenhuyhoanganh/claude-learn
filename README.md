@@ -12,6 +12,13 @@ Kit vẫn chạy được với Cursor, Windsurf, VSCodium, JetBrains, Cline CLI
 
 ---
 
+## 0. Máy công ty chặn npm? Dùng gói offline
+
+Tải **`rea-cline-offline-win32-x64.zip`** ở trang
+[Releases → rea-cline-offline](https://github.com/nguyenhuyhoanganh/claude-learn/releases/tag/rea-cline-offline).
+Gói đã có sẵn REA cùng **toàn bộ thư viện** và **Node.js portable**. Giải nén, double-click `install-offline.cmd`, rồi
+mở lại VS Code là xong: không cần npm, không cần mạng, không cần quyền admin. Hướng dẫn từng bước ở **[OFFLINE.md](OFFLINE.md)**.
+
 ## 1. REA là gì (tóm tắt)
 
 REA là một CLI kiêm MCP server dùng để reverse engineer phần mềm đã phát hành (không cần source code):

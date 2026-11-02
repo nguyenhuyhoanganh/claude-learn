@@ -30,6 +30,21 @@ const MARKER = "rea-cline-kit";
 const HOOK_NAMES = ["PreToolUse", "PostToolUse", "TaskStart", "UserPromptSubmit", "TaskCancel", "TaskComplete"];
 const SERVER_NAME = "rea";
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
+// Offline bundle layout (scripts/build-offline.mjs): <bundle>/runtime/node_modules/rea-agents, optional <bundle>/node/node(.exe)
+const BUNDLE_RUNTIME = join(KIT_ROOT, "runtime");
+const BUNDLE_NODE_DIR = join(KIT_ROOT, "node");
+const NODE_FILE = process.platform === "win32" ? "node.exe" : join("bin", "node");
+// The Node.js binary written into Cline's configuration (MCP command, gateway child, hooks). Replaced by the copied
+// bundled Node when the installer runs from an offline bundle that ships one.
+let NODE_EXE = process.execPath;
+
+export function bundleInfo(root = KIT_ROOT) {
+  const runtimePkg = join(root, "runtime", "node_modules", "rea-agents", "package.json");
+  const version = readJsonSafe(runtimePkg)?.version ?? null;
+  const nodeExe = join(root, "node", NODE_FILE);
+  return { runtime: version ? join(root, "runtime") : null, reaVersion: version, node: existsSync(nodeExe) ? nodeExe : null, manifest: readJsonSafe(join(root, "bundle-manifest.json")) };
+}
+function readJsonSafe(f) { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return null; } }
 
 // ---------------------------------------------------------------------------
 // options
@@ -40,7 +55,7 @@ export function parseArgs(argv) {
     reaVersion: PKG.reaVersion, reaEntry: null, usePath: false, timeout: 450, env: {},
     mcp: true, skill: true, rules: true, workflows: true, hooks: true, envSnapshot: true,
     ghidra: null, javaHome: null, provider: null,
-    dryRun: false, json: false, action: "install", purge: false,
+    dryRun: false, json: false, action: "install", purge: false, offline: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -60,6 +75,8 @@ export function parseArgs(argv) {
       case "--java-home": o.javaHome = resolve(val()); break;
       case "--provider": o.provider = val(); break;
       case "--no-env-snapshot": o.envSnapshot = false; break;
+      case "--offline": o.offline = true; break;
+      case "--online": o.offline = false; break;
       case "--no-mcp": o.mcp = false; break;
       case "--no-skill": o.skill = false; break;
       case "--no-rules": o.rules = false; break;
@@ -287,7 +304,7 @@ export function runNpm(args, { capture = false, quiet = false } = {}) {
 function resolveRea(o, p, plan) {
   if (o.reaEntry) {
     if (!existsSync(o.reaEntry)) throw new Error(`--rea-entry ${o.reaEntry} does not exist`);
-    return { command: process.execPath, args: [o.reaEntry], entry: o.reaEntry, source: "entry" };
+    return { command: NODE_EXE, args: [o.reaEntry], entry: o.reaEntry, source: "entry" };
   }
   if (o.usePath) {
     const win = process.platform === "win32";
@@ -298,7 +315,7 @@ function resolveRea(o, p, plan) {
     // directly: Cline cannot spawn a .cmd shim without a shell.
     for (const hit of hits) {
       const mjs = join(dirname(hit), "node_modules", "rea-agents", "scripts", "rea.mjs");
-      if (existsSync(mjs)) return { command: process.execPath, args: [mjs], entry: mjs, source: "path" };
+      if (existsSync(mjs)) return { command: NODE_EXE, args: [mjs], entry: mjs, source: "path" };
     }
     if (win) throw new Error(`--use-path: found ${hits[0]} but not node_modules\\rea-agents\\scripts\\rea.mjs next to it; use --rea-entry <path to rea.mjs>`);
     return { command: hits[0], args: [], entry: hits[0], source: "path" };
@@ -307,6 +324,17 @@ function resolveRea(o, p, plan) {
   const entry = join(prefix, "node_modules", "rea-agents", "scripts", "rea.mjs");
   const pkgFile = join(prefix, "node_modules", "rea-agents", "package.json");
   const installed = readJson(pkgFile, null)?.version;
+  if (o.offline) {
+    // Offline bundle: copy the prebuilt runtime (all dependencies included). npm is never called.
+    const b = bundleInfo();
+    if (!b.runtime) throw new Error(`--offline: no runtime in ${BUNDLE_RUNTIME}. Use an offline bundle built by scripts/build-offline.mjs.`);
+    o.reaVersion = b.reaVersion;
+    if (installed !== b.reaVersion || o.action === "update" || o.forceRuntime) {
+      plan.note("copy-runtime", prefix, `rea-agents@${b.reaVersion} from offline bundle${installed ? ` (was ${installed})` : ""}`);
+      if (!plan.dryRun) copyTree(b.runtime, prefix, "REA runtime");
+    }
+    return { command: NODE_EXE, args: [entry], entry, source: "runtime", prefix };
+  }
   if (installed !== o.reaVersion || o.action === "update") {
     plan.note("npm-install", prefix, `rea-agents@${o.reaVersion}${installed ? ` (was ${installed})` : ""}`);
     if (!plan.dryRun) {
@@ -322,7 +350,39 @@ function resolveRea(o, p, plan) {
       }
     }
   }
-  return { command: process.execPath, args: [entry], entry, source: "runtime", prefix };
+  return { command: NODE_EXE, args: [entry], entry, source: "runtime", prefix };
+}
+
+/** Replace dst with a copy of src (staged, so a failure leaves the old copy usable). */
+function copyTree(src, dst, what) {
+  const staging = `${dst}.staging-${process.pid}`;
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(dirname(staging), { recursive: true });
+  cpSync(src, staging, { recursive: true });
+  try {
+    rmSync(dst, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    renameSync(staging, dst);
+  } catch (error) {
+    rmSync(staging, { recursive: true, force: true });
+    const hint = process.platform === "win32"
+      ? " A running REA server (Cline in VS Code) keeps node.exe and rea-windows-x64.node locked: close VS Code, then rerun."
+      : "";
+    throw new Error(`Cannot replace ${what} at ${dst}: ${error.message}.${hint}`);
+  }
+}
+
+/** When running from an offline bundle that ships Node.js, copy it to <kitHome>/node and use that copy. */
+function resolveNodeForConfig(o, p, plan) {
+  const b = bundleInfo();
+  if (!o.offline || !b.node) return process.execPath;
+  const dstDir = join(p.kitHome, "node");
+  const dst = join(dstDir, NODE_FILE);
+  const same = existsSync(dst) && statSync(dst).size === statSync(b.node).size;
+  if (!same) {
+    plan.note("copy-node", dstDir, `Node.js ${b.manifest?.node ?? process.versions.node} from offline bundle`);
+    if (!plan.dryRun) copyTree(BUNDLE_NODE_DIR, dstDir, "bundled Node.js");
+  }
+  return dst;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +391,7 @@ function resolveRea(o, p, plan) {
 export function mcpEntry(o, rea, gatewayPath, autoApprove, env = o.env) {
   const reaArgs = [...rea.args, "mcp"];
   const base = o.mode === "gateway"
-    ? { type: "stdio", command: process.execPath, args: [gatewayPath, "--", rea.command, ...reaArgs] }
+    ? { type: "stdio", command: NODE_EXE, args: [gatewayPath, "--", rea.command, ...reaArgs] }
     : { type: "stdio", command: rea.command, args: reaArgs };
   return { ...base, ...(Object.keys(env).length ? { env: { ...env } } : {}), timeout: o.timeout, autoApprove, disabled: false };
 }
@@ -426,6 +486,14 @@ exec "$NODE" "$(dirname "$0")/${MARKER}/rea-hook.mjs" ${name}
 `;
 }
 
+/** Exact bytes written for a hook file. Windows .ps1: UTF-8 with BOM + CRLF, so Windows PowerShell 5.1 reads a
+ * non-ASCII node path (e.g. C:\\Users\\Hoàng) correctly. */
+export function hookFileContent(name, nodePath, platform = process.platform) {
+  return platform === "win32"
+    ? `\uFEFF${hookWrapper(name, nodePath, "win32").replace(/\r?\n/g, "\r\n")}`
+    : hookWrapper(name, nodePath, platform);
+}
+
 function installHooks(dir, plan) {
   const lib = join(dir, MARKER);
   plan.note("hooks-lib", lib);
@@ -444,11 +512,7 @@ function installHooks(dir, plan) {
       plan.warn(`Existing hook ${file} is not managed by ${MARKER}; left unchanged. To chain REA's logic, call: node "${join(lib, "rea-hook.mjs")}" ${name}  (pass the same stdin).`);
       continue;
     }
-    // .ps1: UTF-8 with BOM + CRLF, so Windows PowerShell 5.1 reads a non-ASCII node path (e.g. C:\Users\Hoàng) correctly.
-    const content = process.platform === "win32"
-      ? `\uFEFF${hookWrapper(name, process.execPath).replace(/\r?\n/g, "\r\n")}`
-      : hookWrapper(name, process.execPath);
-    plan.writeFile(file, content, 0o755);
+    plan.writeFile(file, hookFileContent(name, NODE_EXE), 0o755);
     files.push(file);
   }
   return files;
@@ -463,6 +527,8 @@ function recordKey(o) { return o.scope === "global" ? "global" : `project:${o.pr
 export async function install(o, env = process.env) {
   const p = paths(env);
   const plan = new Plan(o.dryRun);
+  if (o.offline === null) o.offline = !!bundleInfo().runtime && !o.reaEntry && !o.usePath; // auto: running from an offline bundle
+  NODE_EXE = resolveNodeForConfig(o, p, plan);
   if (!nodeSatisfiesRea()) plan.warn(`Node.js ${process.versions.node} does not satisfy REA's engines (^22.23.4 || ^24.22.1 || >=26.12.1). Install a supported Node.js and rerun with it.`);
   if (o.scope === "project" && !existsSync(o.project)) throw new Error(`Project ${o.project} does not exist`);
 
@@ -491,7 +557,7 @@ export async function install(o, env = process.env) {
   // 2. REA runtime
   const rea = o.mcp || o.skill ? resolveRea(o, p, plan) : null;
 
-  const record = { key: recordKey(o), scope: o.scope, project: o.scope === "project" ? o.project : null, mode: o.mode, approve: o.approve, reaVersion: o.reaVersion, kitVersion: PKG.version, installedAt: new Date().toISOString(), node: process.execPath, rea, files: [], mcpFiles: [] };
+  const record = { key: recordKey(o), scope: o.scope, project: o.scope === "project" ? o.project : null, mode: o.mode, approve: o.approve, reaVersion: o.reaVersion, kitVersion: PKG.version, installedAt: new Date().toISOString(), offline: !!o.offline, node: NODE_EXE, rea, files: [], mcpFiles: [] };
 
   // 3. MCP settings (Cline MCP settings are global per host)
   if (o.mcp) {
@@ -660,7 +726,9 @@ const HELP = `rea-cline-kit ${PKG.version} — install REA ${PKG.reaVersion} int
 
 Options: --approve none|safe|nondestructive  --targets auto|all|vscode,cursor,windsurf,vscodium,vscode-insiders,trae,kiro,cli,jetbrains
          --rea-version X.Y.Z | --rea-entry /abs/rea.mjs | --use-path   --timeout SECONDS (<=3600)
-         --env KEY=VALUE (REA_* settings, repeatable)   --no-mcp --no-skill --no-rules --no-workflows --no-hooks   --json`;
+         --env KEY=VALUE (REA_* settings, repeatable)   --no-mcp --no-skill --no-rules --no-workflows --no-hooks   --json
+         --ghidra DIR --java-home DIR --provider ID   --no-env-snapshot
+         --offline (use runtime/ and node/ of an offline bundle; never runs npm; automatic inside a bundle) | --online`;
 
 function printPlan(plan, o, extra) {
   if (o.json) { console.log(JSON.stringify({ dryRun: o.dryRun, actions: plan.actions, warnings: plan.warnings, ...extra }, null, 2)); return; }

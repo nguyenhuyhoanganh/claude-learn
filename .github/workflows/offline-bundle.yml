@@ -1,0 +1,82 @@
+name: windows-offline-bundle
+
+# Builds the Windows x64 offline bundle (kit + REA with all dependencies + portable Node.js) on a real Windows
+# runner, tests it there (PowerShell 5.1/7 hooks, offline install without node/npm, Cline-like server start),
+# and publishes it as the GitHub release "rea-cline-offline".
+on:
+  push:
+    branches: [rea]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: offline-bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Versions
+        run: |
+          node -v
+          npm -v
+          $PSVersionTable.PSVersion.ToString()
+          powershell.exe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+
+      - name: Build offline bundle (native Windows install + Node.js)
+        run: node scripts/build-offline.mjs --target win32-x64 --out dist --with-node
+
+      - name: Kit tests on Windows (real REA from the bundle)
+        env:
+          REA_ENTRY: ${{ github.workspace }}\dist\rea-cline-offline-win32-x64\runtime\node_modules\rea-agents\scripts\rea.mjs
+        run: node --test tests/*.test.mjs
+
+      - name: PowerShell hook tests (Windows PowerShell 5.1 + PowerShell 7, invoked like Cline)
+        run: node --test tests/windows/powershell-hooks.test.mjs
+
+      - name: Offline install test (no node/npm on PATH, npm registry unreachable)
+        env:
+          OFFLINE_BUNDLE: ${{ github.workspace }}\dist\rea-cline-offline-win32-x64
+        run: node --test --test-timeout=900000 tests/windows/offline-bundle.test.mjs
+
+      - name: Zip
+        run: |
+          Set-Location dist
+          7z a -tzip -mx=7 rea-cline-offline-win32-x64.zip rea-cline-offline-win32-x64 | Out-Null
+          $hash = (Get-FileHash rea-cline-offline-win32-x64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  rea-cline-offline-win32-x64.zip" | Out-File -Encoding ascii rea-cline-offline-win32-x64.zip.sha256
+          Get-Item rea-cline-offline-win32-x64.zip | Select-Object Name, Length | Format-List
+          node ../scripts/release-notes-offline.mjs rea-cline-offline-win32-x64 rea-cline-offline-win32-x64.zip RELEASE_NOTES.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rea-cline-offline-win32-x64
+          path: |
+            dist/rea-cline-offline-win32-x64.zip
+            dist/rea-cline-offline-win32-x64.zip.sha256
+          retention-days: 30
+          compression-level: 0
+
+      - name: Publish release "rea-cline-offline"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'rea-cline-offline'
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          $global:LASTEXITCODE = 0
+          gh release create $tag `
+            dist/rea-cline-offline-win32-x64.zip `
+            dist/rea-cline-offline-win32-x64.zip.sha256 `
+            --target $env:GITHUB_SHA `
+            --title 'rea-cline-kit offline bundle (Windows x64, no npm needed)' `
+            --notes-file dist/RELEASE_NOTES.md
