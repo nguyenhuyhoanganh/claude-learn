@@ -107,6 +107,8 @@ test("offline bundle installs and runs without npm or network", { skip, timeout:
   assert.equal(d.server.tools, 2);
   const un = spawnSync(node, [kitInstall, "--uninstall", "--purge", "--json"], { env: bare, encoding: "utf8", timeout: 300000 });
   assert.equal(un.status, 0, un.stderr);
-  assert.ok(!existsSync(join(home, ".cline", "rea")));
+  // node.exe that ran the uninstaller is removed by a detached cmd.exe right after it exits
+  for (let i = 0; i < 40 && existsSync(join(home, ".cline", "rea")); i++) await new Promise((r) => setTimeout(r, 500));
+  assert.ok(!existsSync(join(home, ".cline", "rea")), "kit home removed");
   assert.equal(JSON.parse(readFileSync(settingsFile, "utf8")).mcpServers.rea, undefined);
 });

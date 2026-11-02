@@ -14,7 +14,7 @@
 // Everything written is recorded in ~/.cline/rea/install.json; existing files are backed up
 // next to the original with a `.rea-kit-backup-<timestamp>` suffix before they are changed.
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
@@ -658,10 +658,22 @@ export async function uninstall(o, env = process.env) {
   }
   all.installs = others;
   if (!o.dryRun) {
-    if (o.purge && !others.length) plan.remove(p.kitHome);
+    if (o.purge && !others.length) purgeKitHome(p.kitHome, plan);
     else if (existsSync(p.kitHome)) writeFileSync(join(p.kitHome, "install.json"), `${JSON.stringify(all, null, 2)}\n`);
   } else if (o.purge && !others.length) plan.note("remove", p.kitHome);
   return { plan };
+}
+
+/** Remove <kitHome>. On Windows a running node.exe cannot be deleted, so when this process runs from
+ * <kitHome>\node, remove everything else now and let a detached cmd.exe delete the rest after we exit. */
+function purgeKitHome(kitHome, plan) {
+  const inside = (p) => normPath(p).startsWith(`${normPath(kitHome)}/`);
+  if (process.platform !== "win32" || !inside(process.execPath)) { plan.remove(kitHome); return; }
+  for (const e of readdirSync(kitHome)) if (e.toLowerCase() !== "node") plan.remove(join(kitHome, e));
+  plan.note("remove-later", kitHome, "after this process exits (its node.exe is in use)");
+  const cmd = process.env.ComSpec || "cmd.exe";
+  const child = spawn(cmd, ["/d", "/s", "/c", `"ping -n 4 127.0.0.1 >nul & rmdir /s /q "${kitHome}""`], { detached: true, stdio: "ignore", windowsHide: true, windowsVerbatimArguments: true });
+  child.unref();
 }
 
 export async function doctor(o, env = process.env) {
