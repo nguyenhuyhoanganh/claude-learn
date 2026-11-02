@@ -8,12 +8,12 @@
 //   kit/rea-version.json
 //
 // Usage: node scripts/build-kit.mjs [--rea /abs/path/to/rea.mjs] [--version 6.8.0]
-import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectMcp } from "./lib/rea-mcp-client.mjs";
 import { categorize, riskOf } from "../kit/mcp/rea-gateway.mjs";
+import { runNpm } from "./install.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const KIT = join(ROOT, "kit");
@@ -31,7 +31,7 @@ function ensureRea() {
   if (!existsSync(entry)) {
     console.log(`Installing rea-agents@${version} into ${prefix} ...`);
     mkdirSync(prefix, { recursive: true });
-    execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["install", "--prefix", prefix, "--no-fund", "--no-audit", `rea-agents@${version}`], { stdio: "inherit", shell: process.platform === "win32" });
+    runNpm(["install", "--prefix", prefix, "--no-fund", "--no-audit", `rea-agents@${version}`]);
   }
   return entry;
 }

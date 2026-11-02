@@ -7,8 +7,12 @@ Static analysis only: REA reads the files and never runs the application.
 
 ## Step 1 — Locate the input
 1. Take the path from the user's message; ask with `ask_followup_question` if it is missing. It must be absolute.
-2. For a macOS `.app`, look for `Contents/Resources/app.asar` (or an `app/` directory); on Windows/Linux look for
-   `resources/app.asar`. Use `list_files` / `search_files` to find it; pass the ASAR or the extracted tree itself.
+2. Windows Electron apps usually live in `%LOCALAPPDATA%\Programs\<App>\resources\app.asar`
+   (per-user installs, e.g. `C:/Users/<you>/AppData/Local/Programs/Notion/resources/app.asar`) or
+   `C:\Program Files\<App>\resources\app.asar`; Squirrel apps use `%LOCALAPPDATA%\<App>\app-<version>\resources\`.
+   macOS: `<App>.app/Contents/Resources/app.asar`; Linux: `resources/app.asar` next to the executable.
+   Use `list_files` / `search_files` to find it; pass the ASAR or the extracted tree itself. In JSON arguments write
+   Windows paths with forward slashes (`C:/...`) or escaped backslashes.
 
 ## Step 2 — Reconstruct the application graph
 - Gateway mode: `rea_find_tools {"names": ["analyze_javascript_application"]}` once, then

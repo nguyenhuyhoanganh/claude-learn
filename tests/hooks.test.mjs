@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const home = mkdtempSync(join(tmpdir(), "rea-hooks-"));
 process.env.REA_CLINE_HOME = home;
-const { decide, extractReaCall } = await import("../kit/hooks/rea-hook.mjs");
+const { asciiJson, decide, extractReaCall } = await import("../kit/hooks/rea-hook.mjs");
 const risk = JSON.parse(readFileSync(join(ROOT, "kit", "hooks", "tool-risk.json"), "utf8"));
 const cfg = (over = {}) => ({ serverNames: ["rea"], blockTools: [], warnMutating: true, requireCloseBeforeCompletion: true, routingHints: true, logCalls: false, ...over });
 
@@ -58,6 +58,19 @@ test("routing hint fires once for reverse-engineering prompts only", () => {
   assert.match(decide("TaskStart", start("Decompile /tmp/a.exe", "d"), { config: cfg(), risk }).contextModification, /reverse-engineer-anything/);
   assert.equal(decide("UserPromptSubmit", { hookName: "UserPromptSubmit", taskId: "d", userPromptSubmit: { prompt: "now the apk too" } }, { config: cfg(), risk }).contextModification, undefined);
   assert.equal(decide("TaskStart", start("Add a dark mode toggle to settings.tsx", "e"), { config: cfg(), risk }).contextModification, undefined);
+});
+
+test("Windows mode: payload from a temp file (BOM tolerated), ASCII-only JSON out", () => {
+  const file = join(home, "payload.json");
+  const payload = { hookName: "TaskStart", taskId: "w1", taskStart: { taskMetadata: { taskId: "w1", initialTask: "Dịch ngược C:\\Users\\Hoàng\\app.exe giúp tôi (decompile)" } } };
+  writeFileSync(file, `\uFEFF${JSON.stringify(payload)}`);
+  const out = execFileSync(process.execPath, [join(ROOT, "kit", "hooks", "rea-hook.mjs"), "TaskStart", file], { env: { ...process.env, REA_CLINE_HOME: home }, encoding: "utf8" });
+  assert.match(out, /^[\x00-\x7f]*$/, "ASCII only");
+  const parsed = JSON.parse(out);
+  assert.equal(parsed.cancel, false);
+  assert.match(parsed.contextModification, /reverse-engineer-anything/);
+  assert.equal(asciiJson({ s: "Hoàng ✓" }), '{"s":"Ho\\u00e0ng \\u2713"}');
+  assert.equal(JSON.parse(asciiJson({ s: "Hoàng ✓" })).s, "Hoàng ✓");
 });
 
 test("hook process never fails on bad input", () => {

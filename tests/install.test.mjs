@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { hookWrapper, mergeMcpSettings, nodeSatisfiesRea, parseArgs } from "../scripts/install.mjs";
+import { envSnapshot, hookFastPath, hookWrapper, mergeMcpSettings, nodeSatisfiesRea, parseArgs } from "../scripts/install.mjs";
+import { childEnvironment } from "../kit/mcp/rea-gateway.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const INSTALL = join(ROOT, "scripts", "install.mjs");
@@ -51,7 +52,50 @@ test("unix hook wrapper quotes the node path and falls back to PATH", () => {
   writeFileSync(join(dir, "rea-cline-kit", "rea-hook.mjs"), 'process.stdout.write(JSON.stringify({cancel:false, argv: process.argv[2]}))');
   writeFileSync(join(dir, "PreToolUse"), hookWrapper("PreToolUse", "/does/not/exist", "linux"), { mode: 0o755 });
   if (process.platform !== "win32") assert.deepEqual(JSON.parse(execFileSync(join(dir, "PreToolUse"), { input: "{}" })), { cancel: false, argv: "PreToolUse" });
-  assert.match(hookWrapper("TaskStart", "C:\\node\\node.exe", "win32"), /\[Console\]::In\.ReadToEnd\(\)/);
+});
+
+test("Windows PowerShell wrapper: byte-exact stdin, fast path, quoting, never blocks", () => {
+  const ps = hookWrapper("PreToolUse", "C:\\Users\\O'Brien Hoàng\\nodejs\\node.exe", "win32");
+  assert.match(ps, /\[Console\]::OpenStandardInput\(\)/);
+  assert.match(ps, /WriteAllBytes\(\$tmp, \$bytes\)/);
+  assert.match(ps, /\$node = 'C:\\Users\\O''Brien Hoàng\\nodejs\\node.exe'/, "single quotes doubled");
+  assert.match(ps, /& \$node \$hookScript 'PreToolUse' \$tmp/);
+  assert.match(ps, /catch \{\s+Write-Output \$allow/);
+  assert.match(ps, /exit 0\s*$/);
+  // PowerShell 5.1 compatible: no ternary / null-coalescing / pipeline-chain operators
+  assert.doesNotMatch(ps, /\?\?|\s\?\s.*\s:\s|&&|\|\|/);
+  // TaskStart has no fast path (Node decides from the prompt text)
+  assert.doesNotMatch(hookWrapper("TaskStart", "C:\\n\\node.exe", "win32"), /-notmatch/);
+});
+
+test("hook fast path matches REA calls only (VS Code and CLI payloads)", () => {
+  const pre = new RegExp(hookFastPath("PreToolUse"));
+  const post = new RegExp(hookFastPath("PostToolUse"));
+  const vscode = JSON.stringify({ hookName: "PreToolUse", preToolUse: { toolName: "use_mcp_tool", parameters: { server_name: "rea", tool_name: "rea_call", arguments: "{}" } } });
+  const other = JSON.stringify({ hookName: "PreToolUse", preToolUse: { toolName: "use_mcp_tool", parameters: { server_name: "github", tool_name: "x" } } });
+  const write = JSON.stringify({ hookName: "PreToolUse", preToolUse: { toolName: "write_to_file", parameters: { path: "rea.txt", content: "server_name rea" } } });
+  const done = JSON.stringify({ hookName: "PreToolUse", preToolUse: { toolName: "attempt_completion", parameters: { result: "x" } } });
+  const cli = JSON.stringify({ hookName: "tool_result", postToolUse: { toolName: "rea__open_binary", parameters: {} } });
+  assert.ok(pre.test(vscode) && pre.test(done) && post.test(vscode) && post.test(cli));
+  assert.ok(!pre.test(other) && !pre.test(write) && !post.test(done));
+  assert.match(hookFastPath("PreToolUse", ["rea", "rea-full"]), /\(rea\|rea-full\)/);
+});
+
+test("environment snapshot restores what Cline drops (Windows, case-insensitive keys)", () => {
+  const win = envSnapshot({ Path: "C:\\x", ComSpec: "C:\\Windows\\system32\\cmd.exe", PATHEXT: ".EXE;.BAT", windir: "C:\\Windows", TMP: "C:\\t", GHIDRA_INSTALL_DIR: "C:\\g", java_home: "C:\\j", REA_ENTRY: "x", REA_CLINE_HOME: "y", REA_MCP_INPUT_SCHEMA_PROFILE: "compact", SECRET_TOKEN: "s" }, "win32");
+  assert.deepEqual(win, { COMSPEC: "C:\\Windows\\system32\\cmd.exe", PATHEXT: ".EXE;.BAT", WINDIR: "C:\\Windows", TMP: "C:\\t", GHIDRA_INSTALL_DIR: "C:\\g", JAVA_HOME: "C:\\j", REA_MCP_INPUT_SCHEMA_PROFILE: "compact" });
+  assert.deepEqual(envSnapshot({ HOME: "/h", TMPDIR: "/t", GHIDRA_INSTALL_DIR: "/g", AWS_SECRET: "x" }, "linux"), { TMPDIR: "/t", GHIDRA_INSTALL_DIR: "/g" });
+});
+
+test("gateway fills standard Windows variables when Cline's whitelist dropped them", () => {
+  const e = childEnvironment({ SystemRoot: "C:\\Windows", SYSTEMDRIVE: "C:", TEMP: "C:\\Users\\a\\AppData\\Local\\Temp", PATH: "C:\\x" }, "win32");
+  assert.equal(e.COMSPEC, "C:\\Windows\\System32\\cmd.exe");
+  assert.equal(e.PATHEXT.split(";")[1], ".EXE");
+  assert.equal(e.WINDIR, "C:\\Windows");
+  assert.equal(e.TMP, "C:\\Users\\a\\AppData\\Local\\Temp");
+  assert.equal(e.PROGRAMDATA, "C:\\ProgramData");
+  assert.equal(e.SYSTEMROOT, undefined, "existing SystemRoot (any case) is kept, not duplicated");
+  assert.equal(childEnvironment({ ComSpec: "D:\\cmd.exe", SystemRoot: "C:\\Windows" }, "win32").COMSPEC, undefined);
 });
 
 test("install + uninstall in an isolated home (fake REA entry)", () => {
@@ -91,7 +135,7 @@ test("every REA tool named in rules and workflows exists in the catalog", () => 
   const notTools = new Set(["ask_followup_question", "use_mcp_tool", "list_files", "search_files", "attempt_completion", "read_file", "rea_call", "rea_find_tools",
     "input_path", "source_paths", "output_directory", "snapshot_path", "evidence_id", "target_path", "left_target_path", "right_target_path", "left_manifest_id", "right_manifest_id",
     "focus_occurrence_id", "provider_id", "reconstruction_goal", "comparison_evidence_id", "crash_signal", "capture_evidence_id", "audit_scope", "unknown_id", "behavior_question",
-    "working_directory", "prior_capture_evidence_id", "cline_mcp_settings", "tool_name", "server_name", "provider_timeout", "untrusted_content", "analysis_timeout_ms", "tool_timeout_sec",
+    "working_directory", "prior_capture_evidence_id", "cline_mcp_settings", "tool_name", "server_name", "provider_timeout", "untrusted_content", "analysis_timeout_ms", "tool_timeout_sec", "windows_native_failure",
     // REA MCP prompt names (generated workflow headers)
     "investigate_feature", "verify_reconstruction", "trace_crash", "audit_residual_unknowns", "prepare_bounded_process_capture"]);
   const files = [join(ROOT, "kit", "rules", "rea-reverse-engineering.md"), ...readdirSync(join(ROOT, "kit", "workflows")).map((f) => join(ROOT, "kit", "workflows", f))];

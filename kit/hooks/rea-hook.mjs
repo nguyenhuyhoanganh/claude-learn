@@ -14,7 +14,7 @@
 
 import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -211,10 +211,16 @@ async function readStdin(timeoutMs = 5000) {
   });
 }
 
-export async function main(hookName) {
+/** JSON with every non-ASCII character escaped, so console code pages (Windows PowerShell 5.1) cannot mangle it. */
+export function asciiJson(value) {
+  return JSON.stringify(value).replace(/[\u007f-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+export async function main(hookName, inputFile) {
   let output = { cancel: false };
   try {
-    const raw = await readStdin();
+    // The Windows wrapper copies stdin bytes into a temp file and passes its path (no re-encoding).
+    const raw = inputFile ? readFileSync(inputFile, "utf8").replace(/^﻿/, "") : await readStdin();
     const payload = raw.trim() ? JSON.parse(raw) : {};
     output = decide(hookName, payload);
   } catch (error) {
@@ -224,9 +230,13 @@ export async function main(hookName) {
       appendFileSync(join(dirname(LOG_FILE), "hook-errors.log"), `${new Date().toISOString()} ${hookName}: ${error?.stack ?? error}\n`);
     } catch { /* ignore */ }
   }
-  process.stdout.write(`${JSON.stringify(output)}\n`);
+  process.stdout.write(`${asciiJson(output)}\n`);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1] && process.argv[2]) {
-  main(process.argv[2]).then(() => process.exit(0));
+const samePath = (a, b) => {
+  const norm = (p) => resolve(p).replace(/\\/g, "/");
+  return process.platform === "win32" ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
+};
+if (process.argv[1] && process.argv[2] && samePath(fileURLToPath(import.meta.url), process.argv[1])) {
+  main(process.argv[2], process.argv[3]).then(() => process.exit(0));
 }

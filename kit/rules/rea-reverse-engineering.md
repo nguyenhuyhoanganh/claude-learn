@@ -19,7 +19,9 @@ firmware, websites and runtimes locally and returns results with inline Evidence
   get its exact schema with `rea_find_tools {"names": ["<name>"]}`; search with
   `rea_find_tools {"query": "..."}`. Never guess argument names.
 - Otherwise (full mode) call the REA tools directly with `use_mcp_tool` on server `rea`.
-- Target paths must be absolute. Start from the target the user supplied:
+- Target paths must be absolute. On Windows use a drive path such as `C:/Users/me/app.exe` (forward slashes
+  are accepted) or escape backslashes in JSON (`"C:\\Users\\me\\app.exe"`); never pass relative paths.
+  Start from the target the user supplied:
   ASAR/extracted JS or Electron tree → `analyze_javascript_application`;
   native binary/archive/app bundle → `open_binary`; APK code → `inspect_android_package`;
   .NET assembly → `inspect_managed_artifact`; saved HAR/SAZ → `inspect_web_network_capture`.

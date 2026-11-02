@@ -38,7 +38,8 @@ export function parseArgs(argv) {
   const o = {
     scope: "global", project: process.cwd(), mode: "gateway", approve: "safe", targets: "auto",
     reaVersion: PKG.reaVersion, reaEntry: null, usePath: false, timeout: 450, env: {},
-    mcp: true, skill: true, rules: true, workflows: true, hooks: true,
+    mcp: true, skill: true, rules: true, workflows: true, hooks: true, envSnapshot: true,
+    ghidra: null, javaHome: null, provider: null,
     dryRun: false, json: false, action: "install", purge: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -55,6 +56,10 @@ export function parseArgs(argv) {
       case "--use-path": o.usePath = true; break;
       case "--timeout": o.timeout = Number(val()); break;
       case "--env": { const kv = val(); const j = kv.indexOf("="); if (j < 1) throw new Error(`--env expects KEY=VALUE, got ${kv}`); o.env[kv.slice(0, j)] = kv.slice(j + 1); break; }
+      case "--ghidra": o.ghidra = resolve(val()); break;
+      case "--java-home": o.javaHome = resolve(val()); break;
+      case "--provider": o.provider = val(); break;
+      case "--no-env-snapshot": o.envSnapshot = false; break;
       case "--no-mcp": o.mcp = false; break;
       case "--no-skill": o.skill = false; break;
       case "--no-rules": o.rules = false; break;
@@ -88,12 +93,23 @@ export function paths(env = process.env, platform = process.platform) {
   return { home, kitHome, clineDir, clineData, documents: documentsDir(home, env, platform) };
 }
 
+const documentsCache = new Map();
 function documentsDir(home, env, platform) {
   if (env.REA_CLINE_DOCUMENTS) return env.REA_CLINE_DOCUMENTS;
   if (env.REA_CLINE_TEST_HOME) return join(home, "Documents");
+  const key = `${platform}:${home}`;
+  if (!documentsCache.has(key)) documentsCache.set(key, lookupDocumentsDir(home, platform));
+  return documentsCache.get(key);
+}
+
+// Same lookup as Cline's getDocumentsPath(): on Windows this follows OneDrive "Documents" redirection.
+function lookupDocumentsDir(home, platform) {
   try {
     if (platform === "win32") {
-      const out = execFileSync("powershell", ["-NoProfile", "-Command", "[System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::MyDocuments)"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      // base64 of UTF-8 bytes: console code pages would otherwise mangle a non-ASCII path (e.g. "OneDrive - Công ty").
+      const script = "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)))";
+      const b64 = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+      const out = Buffer.from(b64, "base64").toString("utf8").trim();
       if (out) return out;
     } else if (platform === "linux") {
       const out = execFileSync("xdg-user-dir", ["DOCUMENTS"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -215,7 +231,58 @@ export function nodeSatisfiesRea(version = process.versions.node) {
   return maj > 26;
 }
 
-function npmCmd() { return process.platform === "win32" ? "npm.cmd" : "npm"; }
+// Cline starts stdio MCP servers with the MCP SDK's getDefaultEnvironment(), which keeps only a small whitelist
+// (Windows: APPDATA HOMEDRIVE HOMEPATH LOCALAPPDATA PATH PROCESSOR_ARCHITECTURE SYSTEMDRIVE SYSTEMROOT TEMP USERNAME
+// USERPROFILE PROGRAMFILES; Unix: HOME LOGNAME PATH SHELL TERM USER) plus the entry's `env`. REA and the tools it
+// launches (Ghidra .bat launchers, Java, JADX, PowerShell) need more, so copy those values into `env` at install time.
+const WINDOWS_ENV_GAPS = [
+  "COMSPEC", "PATHEXT", "WINDIR", "PROGRAMDATA", "PROGRAMFILES(X86)", "PROGRAMW6432", "COMMONPROGRAMFILES",
+  "ALLUSERSPROFILE", "PUBLIC", "TMP", "NUMBER_OF_PROCESSORS", "OS", "PROCESSOR_IDENTIFIER",
+];
+const UNIX_ENV_GAPS = ["TMPDIR", "LANG", "LC_ALL"];
+const PROVIDER_ENV = /^(REA_(?!CLINE_|ENTRY$|GATEWAY_)|GHIDRA_|HOPPER_|IDA_|IDADIR$|JAVA_HOME$|JDK_HOME$|ANDROID_HOME$|ANDROID_SDK_ROOT$|KUNA_)/i;
+
+export function envSnapshot(sourceEnv = process.env, platform = process.platform) {
+  const keys = Object.keys(sourceEnv);
+  const find = (name) => keys.find((k) => (platform === "win32" ? k.toUpperCase() === name : k === name));
+  const out = {};
+  for (const name of platform === "win32" ? WINDOWS_ENV_GAPS : UNIX_ENV_GAPS) {
+    const k = find(name);
+    if (k && sourceEnv[k]) out[platform === "win32" ? name : k] = sourceEnv[k];
+  }
+  for (const k of keys) if (PROVIDER_ENV.test(k) && sourceEnv[k]) out[platform === "win32" ? k.toUpperCase() : k] = sourceEnv[k];
+  return out;
+}
+
+function providerEnv(o, plan) {
+  const env = {};
+  const win = process.platform === "win32";
+  if (o.ghidra) {
+    const launcher = join(o.ghidra, "support", win ? "analyzeHeadless.bat" : "analyzeHeadless");
+    if (!existsSync(launcher)) plan.warn(`--ghidra ${o.ghidra}: ${launcher} not found (expected an extracted Ghidra 12.1.x release directory).`);
+    env.GHIDRA_INSTALL_DIR = o.ghidra;
+  }
+  if (o.javaHome) {
+    const java = join(o.javaHome, "bin", win ? "java.exe" : "java");
+    if (!existsSync(java)) plan.warn(`--java-home ${o.javaHome}: ${java} not found (Ghidra needs a full 64-bit JDK 21+).`);
+    env.JAVA_HOME = o.javaHome;
+  }
+  if (o.provider) env.REA_ANALYSIS_PROVIDER = o.provider;
+  return env;
+}
+
+/** Run npm with the npm that belongs to this Node.js. On Windows, call npm-cli.js through node.exe:
+ * spawning npm.cmd needs a shell (CVE-2024-27980) and breaks on paths with spaces. */
+export function runNpm(args, { capture = false, quiet = false } = {}) {
+  const stdio = capture ? ["ignore", "pipe", "inherit"] : quiet ? "ignore" : "inherit";
+  if (process.platform === "win32") {
+    const cli = join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+    if (existsSync(cli)) return execFileSync(process.execPath, [cli, ...args], { stdio, encoding: "utf8", windowsHide: true });
+    const quoted = args.map((a) => `"${String(a).replace(/"/g, '""')}"`);
+    return execFileSync("npm.cmd", quoted, { stdio, encoding: "utf8", shell: true, windowsHide: true });
+  }
+  return execFileSync("npm", args, { stdio, encoding: "utf8" });
+}
 
 function resolveRea(o, p, plan) {
   if (o.reaEntry) {
@@ -223,10 +290,18 @@ function resolveRea(o, p, plan) {
     return { command: process.execPath, args: [o.reaEntry], entry: o.reaEntry, source: "entry" };
   }
   if (o.usePath) {
-    const which = spawnSync(process.platform === "win32" ? "where" : "which", ["rea"], { encoding: "utf8" });
-    const found = which.status === 0 ? which.stdout.split(/\r?\n/)[0].trim() : "";
-    if (!found) throw new Error("--use-path: `rea` is not on PATH (npm install --global rea-agents)");
-    return { command: found, args: [], entry: found, source: "path" };
+    const win = process.platform === "win32";
+    const which = spawnSync(win ? "where" : "which", ["rea"], { encoding: "utf8", windowsHide: true });
+    const hits = which.status === 0 ? which.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [];
+    if (!hits.length) throw new Error("--use-path: `rea` is not on PATH (npm install --global rea-agents)");
+    // npm's global shim (rea / rea.cmd / rea.ps1) sits next to node_modules\rea-agents. Register node + rea.mjs
+    // directly: Cline cannot spawn a .cmd shim without a shell.
+    for (const hit of hits) {
+      const mjs = join(dirname(hit), "node_modules", "rea-agents", "scripts", "rea.mjs");
+      if (existsSync(mjs)) return { command: process.execPath, args: [mjs], entry: mjs, source: "path" };
+    }
+    if (win) throw new Error(`--use-path: found ${hits[0]} but not node_modules\\rea-agents\\scripts\\rea.mjs next to it; use --rea-entry <path to rea.mjs>`);
+    return { command: hits[0], args: [], entry: hits[0], source: "path" };
   }
   const prefix = join(p.kitHome, "runtime");
   const entry = join(prefix, "node_modules", "rea-agents", "scripts", "rea.mjs");
@@ -237,7 +312,14 @@ function resolveRea(o, p, plan) {
     if (!plan.dryRun) {
       mkdirSync(prefix, { recursive: true });
       if (!existsSync(join(prefix, "package.json"))) writeFileSync(join(prefix, "package.json"), `${JSON.stringify({ name: "rea-cline-runtime", private: true }, null, 2)}\n`);
-      execFileSync(npmCmd(), ["install", "--prefix", prefix, "--no-fund", "--no-audit", "--save-exact", `rea-agents@${o.reaVersion}`], { stdio: o.json ? "ignore" : "inherit", shell: process.platform === "win32" });
+      try {
+        runNpm(["install", "--prefix", prefix, "--no-fund", "--no-audit", "--save-exact", `rea-agents@${o.reaVersion}`], { quiet: o.json });
+      } catch (error) {
+        const hint = process.platform === "win32"
+          ? " On Windows a running REA server keeps its native addon (rea-windows-x64.node) locked: close VS Code (or disable the rea server in Cline) and rerun. Antivirus scanning node_modules can also cause EPERM/EBUSY."
+          : "";
+        throw new Error(`npm install rea-agents@${o.reaVersion} failed: ${error.message}${hint}`);
+      }
     }
   }
   return { command: process.execPath, args: [entry], entry, source: "runtime", prefix };
@@ -246,12 +328,12 @@ function resolveRea(o, p, plan) {
 // ---------------------------------------------------------------------------
 // MCP settings
 // ---------------------------------------------------------------------------
-export function mcpEntry(o, rea, gatewayPath, autoApprove) {
+export function mcpEntry(o, rea, gatewayPath, autoApprove, env = o.env) {
   const reaArgs = [...rea.args, "mcp"];
   const base = o.mode === "gateway"
     ? { type: "stdio", command: process.execPath, args: [gatewayPath, "--", rea.command, ...reaArgs] }
     : { type: "stdio", command: rea.command, args: reaArgs };
-  return { ...base, ...(Object.keys(o.env).length ? { env: { ...o.env } } : {}), timeout: o.timeout, autoApprove, disabled: false };
+  return { ...base, ...(Object.keys(env).length ? { env: { ...env } } : {}), timeout: o.timeout, autoApprove, disabled: false };
 }
 
 function autoApproveList(o) {
@@ -283,17 +365,54 @@ export function mergeMcpSettings(text, entry) {
 // ---------------------------------------------------------------------------
 // hooks
 // ---------------------------------------------------------------------------
-export function hookWrapper(name, nodePath, platform = process.platform) {
+/** Regex (as source text) that a hook payload must match before Node is started; null = always run. */
+export function hookFastPath(name, serverNames = [SERVER_NAME]) {
+  const servers = serverNames.map((s) => s.replace(/[^A-Za-z0-9_-]/g, "")).filter(Boolean).join("|");
+  const mcp = `"server_name"\\s*:\\s*"(${servers})"|"toolName"\\s*:\\s*"(${servers})__`;
+  if (name === "PreToolUse") return `${mcp}|"toolName"\\s*:\\s*"attempt_completion"`;
+  if (name === "PostToolUse") return mcp;
+  return null;
+}
+
+export function hookWrapper(name, nodePath, platform = process.platform, serverNames = [SERVER_NAME]) {
   if (platform === "win32") {
+    // Cline (VS Code, Windows) runs: <pwsh|powershell> -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <Hook>.ps1
+    // with the JSON payload on stdin. Works on Windows PowerShell 5.1 and PowerShell 7:
+    //  - stdin bytes are copied to a temp file untouched (no code-page re-encoding),
+    //  - non-REA tool calls are answered without starting Node (each PowerShell start already costs time),
+    //  - rea-hook.mjs prints ASCII-only JSON, so the console encoding cannot corrupt it,
+    //  - any failure answers {"cancel":false}, so a broken hook never blocks Cline.
+    const psq = (s) => `'${String(s).replace(/'/g, "''")}'`;
+    const fast = hookFastPath(name, serverNames);
     return `# ${MARKER} hook wrapper (${name}). Safe to delete; reinstall with rea-cline-kit.
-$ErrorActionPreference = "Stop"
-[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$node = if ($env:REA_CLINE_NODE) { $env:REA_CLINE_NODE } elseif (Test-Path "${nodePath.replace(/"/g, '`"')}") { "${nodePath.replace(/"/g, '`"')}" } else { "node" }
-$payload = [Console]::In.ReadToEnd()
-$payload | & $node (Join-Path $PSScriptRoot "${MARKER}\\rea-hook.mjs") ${name}
-exit $LASTEXITCODE
+$ErrorActionPreference = 'Continue'
+$allow = '{"cancel":false}'
+$tmp = $null
+try {
+  $stdin = [Console]::OpenStandardInput()
+  $buffer = New-Object System.IO.MemoryStream
+  $stdin.CopyTo($buffer)
+  $bytes = $buffer.ToArray()
+${fast ? `  $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+  if ($text -notmatch ${psq(fast)}) { Write-Output $allow; exit 0 }
+` : ""}  $node = $env:REA_CLINE_NODE
+  if (-not $node -or -not (Test-Path -LiteralPath $node)) { $node = ${psq(nodePath)} }
+  if (-not (Test-Path -LiteralPath $node)) {
+    $cmd = Get-Command node.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $cmd) { Write-Output $allow; exit 0 }
+    $node = $cmd.Source
+  }
+  $tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), 'rea-hook-' + [guid]::NewGuid().ToString('N') + '.json')
+  [System.IO.File]::WriteAllBytes($tmp, $bytes)
+  $hookScript = Join-Path $PSScriptRoot '${MARKER}\\rea-hook.mjs'
+  $out = & $node $hookScript '${name}' $tmp
+  if ($LASTEXITCODE -eq 0 -and $out) { Write-Output $out } else { Write-Output $allow }
+} catch {
+  Write-Output $allow
+} finally {
+  if ($tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+}
+exit 0
 `;
   }
   const q = nodePath.replace(/'/g, "'\\''");
@@ -325,7 +444,11 @@ function installHooks(dir, plan) {
       plan.warn(`Existing hook ${file} is not managed by ${MARKER}; left unchanged. To chain REA's logic, call: node "${join(lib, "rea-hook.mjs")}" ${name}  (pass the same stdin).`);
       continue;
     }
-    plan.writeFile(file, hookWrapper(name, process.execPath), 0o755);
+    // .ps1: UTF-8 with BOM + CRLF, so Windows PowerShell 5.1 reads a non-ASCII node path (e.g. C:\Users\Hoàng) correctly.
+    const content = process.platform === "win32"
+      ? `\uFEFF${hookWrapper(name, process.execPath).replace(/\r?\n/g, "\r\n")}`
+      : hookWrapper(name, process.execPath);
+    plan.writeFile(file, content, 0o755);
     files.push(file);
   }
   return files;
@@ -354,8 +477,13 @@ export async function install(o, env = process.env) {
       for (const entry of ["kit", "scripts", "package.json", "README.md", "install.sh", "install.ps1"]) {
         if (existsSync(join(KIT_ROOT, entry))) cpSync(join(KIT_ROOT, entry), join(staging, entry), { recursive: true });
       }
-      rmSync(kitCopy, { recursive: true, force: true });
-      renameSync(staging, kitCopy);
+      try {
+        rmSync(kitCopy, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+        renameSync(staging, kitCopy);
+      } catch (error) {
+        rmSync(staging, { recursive: true, force: true });
+        throw new Error(`Cannot replace ${kitCopy}: ${error.message}. Close VS Code (it may be running the rea gateway or a terminal inside that folder) and rerun.`);
+      }
     }
   }
   const gatewayPath = join(kitCopy, "kit", "mcp", "rea-gateway.mjs");
@@ -368,7 +496,10 @@ export async function install(o, env = process.env) {
   // 3. MCP settings (Cline MCP settings are global per host)
   if (o.mcp) {
     const autoApprove = autoApproveList(o);
-    const entry = mcpEntry(o, rea, gatewayPath, autoApprove);
+    // precedence: explicit --env > --ghidra/--java-home/--provider > snapshot of the installer's environment
+    const serverEnv = { ...(o.envSnapshot ? envSnapshot(env) : {}), ...providerEnv(o, plan), ...o.env };
+    const entry = mcpEntry(o, rea, gatewayPath, autoApprove, serverEnv);
+    if (Object.keys(serverEnv).length) plan.note("env", SERVER_NAME, `${Object.keys(serverEnv).join(", ")} (Cline passes only a minimal environment to MCP servers)`);
     const targets = selectTargets(mcpTargets(p, env), o.targets);
     if (!targets.length) plan.warn("No Cline installation detected for MCP registration; use --targets to name one.");
     for (const t of targets) {
@@ -559,7 +690,7 @@ async function cli() {
     const prev = loadInstallRecord(paths()).installs.find((r) => r.key === recordKey(o));
     if (prev) { o.mode = prev.mode ?? o.mode; o.approve = prev.approve ?? o.approve; }
     if (o.reaVersion === "latest") {
-      o.reaVersion = execFileSync(npmCmd(), ["view", "rea-agents", "version"], { encoding: "utf8", shell: process.platform === "win32" }).trim();
+      o.reaVersion = String(runNpm(["view", "rea-agents", "version"], { capture: true })).trim();
     }
   }
   const { plan, record, dirs } = await install(o);
@@ -567,13 +698,14 @@ async function cli() {
   if (!o.json && !o.dryRun) {
     console.log(`
 Done. Next steps:
-  1. Restart Cline (or MCP Servers > rea > Restart). Mode: ${o.mode}${o.mode === "gateway" ? " (2 tools: rea_find_tools, rea_call)" : " (all REA tools)"}.
-  2. Hooks: enable "Hooks" in Cline Settings > Features (VS Code/JetBrains). Hooks dir: ${dirs.hooks}
-  3. Skills: check the Skills tab (scale icon under the chat box) lists reverse-engineer-anything.
-  4. Try: /rea-javascript-app.md /absolute/path/to/app   or   /rea-investigate-feature.md feature="..." target_path=/abs/target
-  5. Check anytime: node ${join(paths().kitHome, "kit", "scripts", "install.mjs")} --doctor`);
+  1. Restart VS Code (or in Cline: MCP Servers > rea > Restart). Mode: ${o.mode}${o.mode === "gateway" ? " (2 tools: rea_find_tools, rea_call)" : " (all REA tools)"}.
+  2. Hooks are on by default; if you turned them off, re-enable "Hooks" in Cline Settings > Features. Hooks dir: ${dirs.hooks}
+  3. Skills: the Skills tab (scale icon under the chat box) should list reverse-engineer-anything.
+  4. Try: /rea-javascript-app.md ${process.platform === "win32" ? "C:\\path\\to\\app" : "/absolute/path/to/app"}   or   /rea-investigate-feature.md feature="..." target_path=${process.platform === "win32" ? "C:\\abs\\target.exe" : "/abs/target"}
+  5. Check anytime: node "${join(paths().kitHome, "kit", "scripts", "install.mjs")}" --doctor`);
   }
 }
 
-const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const normPath = (p) => { const r = resolve(p).replace(/\\/g, "/"); return process.platform === "win32" ? r.toLowerCase() : r; };
+const invokedDirectly = process.argv[1] && normPath(process.argv[1]) === normPath(fileURLToPath(import.meta.url));
 if (invokedDirectly) cli().catch((error) => { console.error(`rea-cline-kit: ${error.message}`); process.exit(1); });

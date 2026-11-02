@@ -17,6 +17,7 @@
 
 import { spawn } from "node:child_process";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 const GATEWAY_VERSION = "1.0.0";
 const SUPPORTED_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -38,6 +39,35 @@ function resolveChildCommand(argv, env) {
     return { command: env.REA_GATEWAY_COMMAND, args };
   }
   return { command: "rea", args: ["mcp"] };
+}
+
+/**
+ * Cline starts MCP servers with only a minimal whitelisted environment. On Windows that drops COMSPEC, PATHEXT,
+ * WINDIR, TMP, PROGRAMDATA..., which REA and the tools it launches (.bat launchers, java, powershell) rely on.
+ * Restore the standard values when they are missing; values supplied through the MCP entry's `env` win.
+ */
+export function childEnvironment(env = process.env, platform = process.platform) {
+  const out = { ...env };
+  if (platform !== "win32") {
+    if (!out.TMPDIR && !out.TMP && !out.TEMP) out.TMPDIR = "/tmp";
+    return out;
+  }
+  const has = (name) => Object.keys(out).some((k) => k.toUpperCase() === name && out[k]);
+  const get = (name) => out[Object.keys(out).find((k) => k.toUpperCase() === name)];
+  const root = get("SYSTEMROOT") || `${get("SYSTEMDRIVE") || "C:"}\\Windows`;
+  const drive = get("SYSTEMDRIVE") || root.slice(0, 2);
+  const defaults = {
+    SYSTEMROOT: root,
+    WINDIR: root,
+    COMSPEC: `${root}\\System32\\cmd.exe`,
+    PATHEXT: ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC",
+    PROGRAMDATA: `${drive}\\ProgramData`,
+    ALLUSERSPROFILE: `${drive}\\ProgramData`,
+    TMP: get("TEMP") || (get("LOCALAPPDATA") ? `${get("LOCALAPPDATA")}\\Temp` : `${root}\\Temp`),
+    TEMP: get("TMP") || (get("LOCALAPPDATA") ? `${get("LOCALAPPDATA")}\\Temp` : `${root}\\Temp`),
+  };
+  for (const [k, v] of Object.entries(defaults)) if (!has(k)) out[k] = v;
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +152,7 @@ export class Gateway {
     const { command, args, env } = this.childSpec;
     let child;
     try {
-      child = spawn(command, args, { stdio: ["pipe", "pipe", "inherit"], env, windowsHide: true });
+      child = spawn(command, args, { stdio: ["pipe", "pipe", "inherit"], env: childEnvironment(env), windowsHide: true });
     } catch (error) {
       this.childReady = Promise.reject(error);
       this.childReady.catch(() => {});
@@ -418,7 +448,12 @@ export class Gateway {
 }
 
 const isMain = (() => {
-  try { return import.meta.url === new URL(`file://${process.argv[1]}`).href || process.argv[1]?.endsWith("rea-gateway.mjs"); } catch { return false; }
+  try {
+    const a = process.argv[1];
+    if (!a) return false;
+    if (pathToFileURL(a).href === import.meta.url) return true;
+    return /[\\/]rea-gateway\.mjs$/i.test(a) || a.toLowerCase() === "rea-gateway.mjs";
+  } catch { return false; }
 })();
 if (isMain) {
   let spec;
