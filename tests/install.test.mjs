@@ -60,7 +60,7 @@ test("Windows PowerShell wrapper: byte-exact stdin, fast path, quoting, never bl
   assert.match(ps, /WriteAllBytes\(\$tmp, \$bytes\)/);
   assert.match(ps, /\$node = 'C:\\Users\\O''Brien Hoàng\\nodejs\\node.exe'/, "single quotes doubled");
   assert.match(ps, /& \$node \$hookScript 'PreToolUse' \$tmp/);
-  assert.match(ps, /catch \{\s+Write-Output \$allow/);
+  assert.match(ps, /catch \{\s+\[Console\]::Error\.WriteLine\([^\n]*\)\s+Write-Output \$allow/);
   assert.match(ps, /exit 0\s*$/);
   // PowerShell 5.1 compatible: no ternary / null-coalescing / pipeline-chain operators
   assert.doesNotMatch(ps, /\?\?|\s\?\s.*\s:\s|&&|\|\|/);

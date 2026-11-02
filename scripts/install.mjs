@@ -466,8 +466,12 @@ ${fast ? `  $text = [System.Text.Encoding]::UTF8.GetString($bytes)
   [System.IO.File]::WriteAllBytes($tmp, $bytes)
   $hookScript = Join-Path $PSScriptRoot '${MARKER}\\rea-hook.mjs'
   $out = & $node $hookScript '${name}' $tmp
-  if ($LASTEXITCODE -eq 0 -and $out) { Write-Output $out } else { Write-Output $allow }
+  if ($LASTEXITCODE -eq 0 -and $out) { Write-Output $out } else {
+    [Console]::Error.WriteLine("rea-cline-kit ${name}: node exited with code $LASTEXITCODE ($node); allowing")
+    Write-Output $allow
+  }
 } catch {
+  [Console]::Error.WriteLine("rea-cline-kit ${name}: " + $_.Exception.Message + "; allowing")
   Write-Output $allow
 } finally {
   if ($tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }

@@ -80,13 +80,23 @@ test("offline bundle installs and runs without npm or network", { skip, timeout:
   // Installed hooks, run like Cline (powershell -File, JSON on stdin), PATH without node
   const hook = join(home, "Documents", "Cline", "Hooks", "PreToolUse.ps1");
   assert.ok(existsSync(hook));
-  const runHook = (payload) => {
-    const h = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", hook], { input: JSON.stringify(payload), env: { ...clineEnv, REA_CLINE_HOME: bare.REA_CLINE_HOME }, encoding: "utf8", windowsHide: true });
+  // Cline spawns hooks without an env option, i.e. with VS Code's full environment. Keep that, minus node on PATH.
+  const hookEnv = { ...process.env, PATH: bare.PATH, REA_CLINE_HOME: bare.REA_CLINE_HOME };
+  const runHook = (payload, env = hookEnv) => {
+    const h = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", hook], { input: JSON.stringify(payload), env, encoding: "utf8", windowsHide: true });
     assert.equal(h.status, 0, h.stderr);
+    if (h.stderr) t.diagnostic(`hook stderr: ${h.stderr}`);
     return JSON.parse(h.stdout.trim());
   };
+  const mutating = { hookName: "PreToolUse", taskId: "x", preToolUse: { toolName: "use_mcp_tool", parameters: { server_name: "rea", tool_name: "rea_call", arguments: '{"tool":"uninstall_adb_package","arguments":{}}' } } };
   assert.deepEqual(runHook({ hookName: "PreToolUse", taskId: "x", preToolUse: { toolName: "read_file", parameters: { path: "a" } } }), { cancel: false });
-  assert.match(runHook({ hookName: "PreToolUse", taskId: "x", preToolUse: { toolName: "use_mcp_tool", parameters: { server_name: "rea", tool_name: "rea_call", arguments: '{"tool":"uninstall_adb_package","arguments":{}}' } } }).contextModification, /uninstall_adb_package/);
+  const res = runHook(mutating);
+  const errLog = join(bare.REA_CLINE_HOME, "logs", "hook-errors.log");
+  assert.match(res.contextModification ?? "", /uninstall_adb_package/, existsSync(errLog) ? readFileSync(errLog, "utf8") : JSON.stringify(res));
+  // Same hook with only MCP's minimal whitelist (not what Cline does for hooks): must still never block
+  const minimal = runHook(mutating, { ...clineEnv, REA_CLINE_HOME: bare.REA_CLINE_HOME });
+  t.diagnostic(`minimal-env hook result: ${JSON.stringify(minimal)}`);
+  assert.equal(minimal.cancel, false);
 
   // Doctor with the copied node, then uninstall (proves nothing stays locked)
   const kitInstall = join(home, ".cline", "rea", "kit", "scripts", "install.mjs");
