@@ -366,7 +366,7 @@ def document_checks(text, hits):
             (first, f"{pron} lần \"bạn\"/\"chúng tôi\"/\"chúng ta\" trong {para_words} chữ"))
     # Chữ đệm của văn dịch: tiếng Anh buộc có mạo từ, số nhiều, thì, bị động, sở hữu, còn tiếng Việt
     # thì lược được. Đo trên bộ thử 10 đoạn dịch / 10 đoạn giọng người cùng nội dung: đoạn dịch
-    # 120-188 trên 1.000 chữ, đoạn người viết 30-90, README 30.
+    # 120-188 trên 1.000 chữ, đoạn người viết 30-90.
     filler = sum(len(re.findall(p_, low_all)) for p_ in FILLER_WORDS)
     filler += len(re.findall(r"\bcủa (bạn|tôi|chúng tôi|chúng ta|họ|anh ấy|cô ấy|nó)\b", low_all))
     if para_words >= 60 and filler * 1000 / para_words >= 110:
@@ -375,10 +375,10 @@ def document_checks(text, hits):
     if sents_all >= 20 and colons >= 6 and colons / sents_all >= 0.15:
         hits.setdefault("hai chấm dồn dập", []).append((first, f"{colons}/{sents_all} câu có dấu hai chấm"))
     # Dấu chấm chặt ý thành câu vụn: từ 30% số câu chỉ dài tối đa 10 chữ (không tính câu dẫn
-    # vào danh sách hay khối lệnh). Ngưỡng sát: bản README bị chê vụn là 32%, bản đã sửa 28%.
+    # vào danh sách hay khối lệnh).
     if dense >= 20 and short / dense >= 0.3:
         hits.setdefault("câu vụn", []).append((first, f"{short}/{dense} câu dài không quá 10 chữ"))
-    # Tài liệu có tiêu đề Markdown (README, hướng dẫn) vốn nhiều đoạn dẫn ngắn, không tính
+    # Tài liệu có tiêu đề Markdown (hướng dẫn) vốn nhiều đoạn dẫn ngắn, không tính
     if md_heads < 3 and len(counts) >= 12 and max(counts) <= 4 and sum(1 for c in counts if c <= 3) / len(counts) >= 0.9:
         few = sum(1 for c in counts if c <= 3)
         hits.setdefault("đoạn ngắn đều nhau", []).append(
