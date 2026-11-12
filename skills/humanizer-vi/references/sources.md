@@ -5,7 +5,7 @@ Skill học từ các nguồn dưới đây, kèm vài thứ nên đọc thêm. 
 Ngày 07-11-2026 đã kiểm, link nào cũng còn mở được. Mỗi mục ghi rõ mức dùng:
 
 - **Dùng trực tiếp:** đã đọc và có quy tắc hoặc dấu hiệu trong skill dựa vào nguồn này.
-- **Đọc thêm:** nguồn mà dự án khác đã đọc và dẫn lại (ghi tên dự án). Người làm skill này chưa đọc toàn văn, chỉ đưa vào để người muốn tìm hiểu sâu có chỗ bắt đầu.
+- **Đọc thêm:** nguồn mà dự án khác đã đọc và dẫn lại (ghi tên dự án). Chưa đọc toàn văn, chỉ đưa vào để người muốn tìm hiểu sâu có chỗ bắt đầu.
 
 ## Danh mục dấu hiệu văn AI
 
@@ -38,7 +38,7 @@ Ngày 07-11-2026 đã kiểm, link nào cũng còn mở được. Mỗi mục gh
 
 ## Nghiên cứu ngôn ngữ và độ tin cậy của máy dò
 
-- Liang và cộng sự, [GPT detectors are biased against non-native English writers](https://arxiv.org/abs/2304.02819), 2023. **Dùng trực tiếp.** Lý do skill và README nói rõ điểm số không phải phán quyết, không dùng để kết luận ai dùng AI.
+- Liang và cộng sự, [GPT detectors are biased against non-native English writers](https://arxiv.org/abs/2304.02819), 2023. **Dùng trực tiếp.** Lý do skill nói rõ điểm số không phải phán quyết, không dùng để kết luận ai dùng AI.
 - Huang và Tsai, [Evaluating Pragmatic Appropriateness in English–Vietnamese Machine Translation with Dyadic Profiles](https://aclanthology.org/2026.wmt-main.16/), WMT 2026. **Đọc thêm** (longhang2004). Câu đúng ngữ pháp chưa chắc hợp quan hệ người gửi và người nhận; liên quan tới mục 36 (xưng hô).
 - Nguyen và Nguyen, [A Large-Scale Benchmark for Vietnamese Sentence Paraphrases](https://aclanthology.org/2025.findings-naacl.59/), Findings of NAACL 2025. **Đọc thêm** (longhang2004). Cách đánh giá nhiều cách diễn đạt cùng một ý trong tiếng Việt.
 - [ViLexNorm: A Lexical Normalization Corpus for Vietnamese Social Media Text](https://aclanthology.org/2024.eacl-long.85/), EACL 2024. **Đọc thêm** (cuongducle). Văn mạng xã hội khác văn chuẩn; lý do skill không ép mọi cuộc trò chuyện về giọng chuẩn.
@@ -75,4 +75,4 @@ Skill tiếng Việt, đều MIT. Dùng để đối chiếu danh mục; quy t�
 
 ## Giới hạn
 
-Ví dụ trước/sau trong skill do người làm skill tự viết, chưa có nhóm người Việt nào đọc và chấm độc lập. Ngưỡng điểm của `scan.py` mới chỉnh theo vài văn bản mẫu, chưa đo trên một tập lớn. Phải có thêm phản hồi theo vùng miền, ngành, kênh thì mới dám nói skill cải thiện được bao nhiêu. Thấy nguồn nào bị dẫn sai ý thì mở issue giúp.
+Ví dụ trước/sau trong skill chưa có nhóm người Việt nào đọc và chấm độc lập. Ngưỡng điểm của `scan.py` mới chỉnh theo vài văn bản mẫu, chưa đo trên một tập lớn. Phải có thêm phản hồi theo vùng miền, ngành, kênh thì mới dám nói skill cải thiện được bao nhiêu.
