@@ -1,9 +1,9 @@
 ---
-name: viet-nhu-nguoi
+name: humanizer-vi
 description: |
   Viết như người (human voice, Vietnamese humanizer): chống giọng văn AI cho tiếng Việt và tiếng
   Anh. Viết hoặc sửa văn bản cho giống người viết, bỏ các dấu hiệu văn AI. Dùng khi người dùng gọi
-  /viet-nhu-nguoi, hoặc nhờ "viết như người", "viết cho giống người", "human voice", "humanize",
+  /humanizer-vi, hoặc nhờ "viết như người", "viết cho giống người", "human voice", "humanize",
   "chống giọng văn AI", "bớt giọng AI", "bớt giọng ChatGPT", "viết tự nhiên hơn", "sửa văn AI",
   "soi giọng AI", hoặc khi soạn tin nhắn, email, bài viết, PR, commit, slide, lời thuyết trình mà
   người dùng sẽ gửi hoặc trình bày dưới tên mình. Có phần riêng cho tiếng Việt (văn dịch từ tiếng
